@@ -1,10 +1,10 @@
 message DataFrame {
-        required string origin = 2;
-        required string source = 3;
-        required uint64 epoch = 1;
+        required string origin = 1;
+        required string source = 2;
+        required uint64 epoch = 3;
 
         required uint64 timestamp = 4;
-        optional fixed32 nanoseconds = 9;
+        optional fixed32 nanoseconds = 5;
 
         enum Type {
                 EMPTY = 0;
@@ -12,9 +12,9 @@ message DataFrame {
                 TEXT = 2;
                 REAL = 3;
         }
-        required Type   type = 5 [default = NUMBER];
+        required Type   type = 6;
 
-        optional int64  value_numeric = 6;
-        optional string value_textual = 7;
-        optional double value_measurement = 8;
+        optional int64  value_numeric = 7;
+        optional string value_textual = 8;
+        optional double value_measurement = 9;
 }
