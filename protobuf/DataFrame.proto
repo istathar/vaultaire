@@ -1,18 +1,18 @@
 message DataFrame {
-	required uint64 epoch = 1;
+        required uint64 epoch = 1;
         required uint64 origin = 2;
-	required string source = 3;
+        required string source = 3;
 
-	required uint64 timestamp = 4;
-	optional fixed32 nanoseconds = 9;
+        required uint64 timestamp = 4;
+        optional fixed32 nanoseconds = 9;
 
         enum Type {
-		EMPTY = 0;
-		NUMBER = 1;
-		TEXT = 2;
-		REAL = 3;
-	}
-	required Type	type = 5 [default = NUMBER];
+                EMPTY = 0;
+                NUMBER = 1;
+                TEXT = 2;
+                REAL = 3;
+        }
+        required Type   type = 5 [default = NUMBER];
 
         optional int64  value_numeric = 6;
         optional string value_textual = 7;
