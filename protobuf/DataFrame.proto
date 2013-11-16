@@ -4,6 +4,7 @@ message DataFrame {
 	required string source = 3;
 
 	required uint64 timestamp = 4;
+	optional fixed32 nanoseconds = 9;
 
         enum Type {
 		EMPTY = 0;
