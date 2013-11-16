@@ -6,14 +6,14 @@ message DataFrame {
 	required uint64 timestamp = 4;
 
         enum Type {
-		UNKNOWN = 0;
+		EMPTY = 0;
 		NUMBER = 1;
 		TEXT = 2;
-		FLOAT = 3;
+		REAL = 3;
 	}
 	required Type	type = 5 [default = NUMBER];
 
-        optional int64  number = 6;
-        optional string text = 7;
-        optional double measurement = 8;
+        optional int64  value_numeric = 6;
+        optional string value_textual = 7;
+        optional double value_measurement = 8;
 }
