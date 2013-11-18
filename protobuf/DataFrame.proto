@@ -1,7 +1,7 @@
 message DataFrame {
-        required string origin = 1;
-        required string source = 2;
-        required uint64 epoch = 3;
+        required string  origin = 1;
+        required string  source = 2;
+        required uint64  epoch = 3;
 
         required fixed64 timestamp = 4;
 
@@ -11,9 +11,9 @@ message DataFrame {
                 TEXT = 2;
                 REAL = 3;
         }
-        required Type   type = 6;
+        required Type    type = 5;
 
-        optional int64  value_numeric = 7;
-        optional string value_textual = 8;
-        optional double value_measurement = 9;
+        optional int64   value_numeric = 6;
+        optional string  value_textual = 7;
+        optional double  value_measurement = 8;
 }
