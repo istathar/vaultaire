@@ -1,7 +1,7 @@
 message DataFrame {
         required string  origin = 1;
         required string  source = 2;
-        required uint64  epoch = 3;
+        required uint32  epoch = 3;
 
         required fixed64 timestamp = 4;
 
