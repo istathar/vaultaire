@@ -3,8 +3,7 @@ message DataFrame {
         required string source = 2;
         required uint64 epoch = 3;
 
-        required uint64 timestamp = 4;
-        optional fixed32 nanoseconds = 5;
+        required fixed64 timestamp = 4;
 
         enum Type {
                 EMPTY = 0;
