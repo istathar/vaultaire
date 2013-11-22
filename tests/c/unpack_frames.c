@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 		size_t packed_size = data_frame__get_packed_size(frame);
 		if (b > packed_size) {
 			/* have some of a different frame in the read */
-			memmove(buf, buf+packed_size, packed_size);
+			memmove(buf, buf+packed_size, b-packed_size);
 		}
 	}
 
