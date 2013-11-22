@@ -26,22 +26,54 @@ void data_frame_init_numeric(DataFrame *frame,
 	frame->has_value_measurement = 0;
 	frame->has_value_blob = 0;
 }
+void data_frame_init_real(DataFrame *frame,
+		char *source, uint64_t timestamp, double value_measurement) {
+	data_frame__init(frame);
+	frame->source = source;
+	frame->timestamp = timestamp;
+	frame->payload = DATA_FRAME__TYPE__REAL;
+	frame->value_measurement = value_measurement;
+	frame->has_value_numeric = 0;
+	frame->has_value_measurement = 1;
+	frame->has_value_blob = 0;
+}
+void data_frame_init_text(DataFrame *frame,
+		char *source, uint64_t timestamp, char * value_textual) {
+	data_frame__init(frame);
+	frame->source = source;
+	frame->timestamp = timestamp;
+	frame->payload = DATA_FRAME__TYPE__TEXT;
+	frame->value_textual = value_textual;
+	frame->has_value_numeric = 0;
+	frame->has_value_measurement = 0;
+	frame->has_value_blob = 0;
+}
 
 uint8_t buf[BUFSIZ];
 
+void write_frame(FILE *fp, DataFrame *frame) {
+	size_t packed_size;
+
+	packed_size = data_frame__get_packed_size(frame);
+	if (packed_size > BUFSIZ) { perror("BUFSIZ"); exit(3); }
+	data_frame__pack(frame, buf);
+
+	fwrite(buf, packed_size, 1, fp);
+	fflush(fp);
+}
+
 int main(int argc, char **argv) {
 	DataFrame *frame;
-	size_t packed_size;
 
 	if ((frame = malloc(sizeof(DataFrame))) == NULL) { perror("malloc"); return 1; }
 	
-	data_frame_init_numeric(frame, "test source for testing ftw.", timestamp_now(), 424242 );
+	data_frame_init_numeric(frame, "test source for testing ftw. / numeric", timestamp_now(), 424242 );
+	write_frame(stdout, frame);
+	data_frame_init_real(frame, "test source for testing ftw. / real", timestamp_now(), 3.141592);
+	write_frame(stdout, frame);
+	data_frame_init_text(frame, "test source for testing ftw. / text", timestamp_now(), "It's big. It's heavy. It's wood.");
+	write_frame(stdout, frame);
 
-	packed_size = data_frame__get_packed_size(frame);
-	if (packed_size > BUFSIZ) { perror("BUFSIZ"); return 3; }
-	data_frame__pack(frame, buf);
-
-	fwrite(buf, packed_size, 1, stdout);
 
 	free(frame);
 	return 0;

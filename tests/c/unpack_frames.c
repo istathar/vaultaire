@@ -49,6 +49,7 @@ int main(int argc, char **argv) {
 	size_t b;
 
 	while ((b = read(STDIN_FILENO, buf, BUFSIZ))) {
+		printf("read %lu bytes off the wire this time\n", b);
 		frame = data_frame__unpack(NULL,b,buf);
 		if (frame == NULL) { perror("data_frame__unpack"); return 1; }
 
