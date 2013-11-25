@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
-#include <time.h>
+#include <arpa/inet.h>
 
 #include "DataFrame.pb-c.h"
 
@@ -48,20 +48,30 @@ int main(int argc, char **argv) {
 	DataFrame *frame;
 	size_t b;
 
-	while ((b = read(STDIN_FILENO, buf, BUFSIZ))) {
-		printf("read %lu bytes off the wire this time\n", b);
-		frame = data_frame__unpack(NULL,b,buf);
+	while (1) {
+		/* network ordered uint32_t leads saying how many bytes to read
+		 * for the next frame
+		 */
+		uint32_t prelude;
+		b = fread(&prelude, sizeof(prelude), 1, stdin);
+		if (b < 1) break;
+
+		prelude = ntohl(prelude);
+
+		if (prelude > BUFSIZ) {
+			fprintf(stderr, "Prelude said frame was %u bytes, but our buffer is only %u bytes. Bailing\n",prelude, BUFSIZ);
+			return 1;
+		}
+		printf("Prelude said frame is %u bytes on the wire\n", prelude);
+		b = fread(&buf, prelude, 1, stdin);
+		if (b < 1) { perror("fread didn't return frame"); return 1;}
+
+		frame = data_frame__unpack(NULL,prelude,buf);
 		if (frame == NULL) { perror("data_frame__unpack"); return 1; }
 
 		if (check_frame_bounds(frame)) { perror("frame string overflow"); return 1; }
 
 		dump_frame(frame);
-
-		size_t packed_size = data_frame__get_packed_size(frame);
-		if (b > packed_size) {
-			/* have some of a different frame in the read */
-			memmove(buf, buf+packed_size, b-packed_size);
-		}
 	}
 
 	return 0;

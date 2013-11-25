@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <time.h>
+#include <arpa/inet.h>
 
 #include "DataFrame.pb-c.h"
 
@@ -58,21 +59,34 @@ void write_frame(FILE *fp, DataFrame *frame) {
 	if (packed_size > BUFSIZ) { perror("BUFSIZ"); exit(3); }
 	data_frame__pack(frame, buf);
 
+	fprintf(stderr, "generator: writing %lu byte frame plus 4 byte length header\n", packed_size);
+
+	/* Protobufs doesn't delineate messages. Write out the size
+	 * as a uint32 first.  Guess our tests better not send any
+	 * frames bigger than 4 gig :)
+	 */
+	uint32_t prelude;
+	prelude = htonl((uint32_t)(packed_size & 0xffffffff));
+	fwrite(&prelude,sizeof(prelude), 1, fp);
 	fwrite(buf, packed_size, 1, fp);
 	fflush(fp);
 }
 
 int main(int argc, char **argv) {
 	DataFrame *frame;
+	int i;
 
 	if ((frame = malloc(sizeof(DataFrame))) == NULL) { perror("malloc"); return 1; }
 	
 	data_frame_init_numeric(frame, "test source for testing ftw. / numeric", timestamp_now(), 424242 );
-	write_frame(stdout, frame);
+	for (i=0; i<55; ++i) 
+		write_frame(stdout, frame);
 	data_frame_init_real(frame, "test source for testing ftw. / real", timestamp_now(), 3.141592);
-	write_frame(stdout, frame);
+	for (i=0; i<55; ++i) 
+		write_frame(stdout, frame);
 	data_frame_init_text(frame, "test source for testing ftw. / text", timestamp_now(), "It's big. It's heavy. It's wood.");
-	write_frame(stdout, frame);
+	for (i=0; i<55; ++i) 
+		write_frame(stdout, frame);
 
 
 	free(frame);
