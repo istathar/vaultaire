@@ -14,3 +14,12 @@ generate_frames: DataFrame.pb-c.o generate_frames.o
 	${CC}  ${CFLAGS} ${LDFLAGS} -o $@ $^
 
 unpack_frames: DataFrame.pb-c.o
+
+clean:
+	rm -f DataFrame*.o generate_frames.o DataFrame.pb-c.[coh] tags
+
+tags:
+	ctags .
+
+test: all
+	./generate_frames | ./unpack_frames
