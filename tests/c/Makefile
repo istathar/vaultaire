@@ -21,7 +21,7 @@ tags:
 
 .PHONY: clean
 clean:
-	rm -f unpack_frames.o generate_frames.o DataFrame.pb-c.[coh]
+	rm -f unpack_frames.o generate_frames.o DataFrame.pb-c.[coh] generate_frames unpack_frames
 
 .PHONY: all
 all: generate_frames unpack_frames
