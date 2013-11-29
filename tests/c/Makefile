@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-O2 -g -Wall
-LDFLAGS=-lprotobuf-c
+LDFLAGS=-lprotobuf-c -lrt
 PROTOCC=protoc-c
 PROTO_PATH=../../protobuf/
 PROTO_SRC=${PROTO_PATH}DataFrame.proto
