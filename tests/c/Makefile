@@ -16,16 +16,19 @@ generate_frames: DataFrame.pb-c.o generate_frames.o
 
 unpack_frames: DataFrame.pb-c.o unpack_frames.o
 
+framecat: DataFrame.pb-c.o framecat.o
+
 tags:
 	ctags .
 
 .PHONY: clean
 clean:
-	rm -f unpack_frames.o generate_frames.o DataFrame.pb-c.[coh] generate_frames unpack_frames
+	rm -f unpack_frames.o generate_frames.o framecat.o DataFrame.pb-c.[coh] generate_frames unpack_frames framecat
 
 .PHONY: all
-all: generate_frames unpack_frames
+all: generate_frames unpack_frames framecat
 
 .PHONY: test
 test: all
-	./generate_frames | ./unpack_frames
+	./generate_frames 2>/dev/null | ./unpack_frames | tail -15
+	./generate_frames 2>/dev/null | ./framecat | tail

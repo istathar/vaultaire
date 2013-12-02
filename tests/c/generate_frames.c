@@ -78,15 +78,14 @@ int main(int argc, char **argv) {
 
 	if ((frame = malloc(sizeof(DataFrame))) == NULL) { perror("malloc"); return 1; }
 	
-	data_frame_init_numeric(frame, "test source for testing ftw. / numeric", timestamp_now(), 424242 );
-	for (i=0; i<55; ++i) 
+	for (i=0; i<55; ++i)  {
+		data_frame_init_numeric(frame, "test_source", timestamp_now(), 424242 );
 		write_frame(stdout, frame);
-	data_frame_init_real(frame, "test source for testing ftw. / real", timestamp_now(), 3.141592);
-	for (i=0; i<55; ++i) 
+		data_frame_init_real(frame, "test_source", timestamp_now(), 3.141592);
 		write_frame(stdout, frame);
-	data_frame_init_text(frame, "test source for testing ftw. / text", timestamp_now(), "It's big. It's heavy. It's wood.");
-	for (i=0; i<55; ++i) 
+		data_frame_init_text(frame, "test_source", timestamp_now(), "It's big. It's heavy. It's wood.");
 		write_frame(stdout, frame);
+	}
 
 
 	free(frame);
