@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
 		if (check_frame_bounds(frame)) { perror("frame string overflow"); return 1; }
 
 		dump_frame(frame);
+		data_frame__free_unpacked(frame, NULL);
 	}
 
 	free(buf);
