@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-O2 -g -Wall
-LDFLAGS=-lprotobuf-c
+LDFLAGS=-lprotobuf-c -lrt
 PROTOCC=protoc-c
 PROTO_PATH=../../protobuf/
 PROTO_SRC=${PROTO_PATH}DataFrame.proto
@@ -21,7 +21,7 @@ tags:
 
 .PHONY: clean
 clean:
-	rm -f unpack_frames.o generate_frames.o DataFrame.pb-c.[coh]
+	rm -f unpack_frames.o generate_frames.o DataFrame.pb-c.[coh] generate_frames unpack_frames
 
 .PHONY: all
 all: generate_frames unpack_frames
