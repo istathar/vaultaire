@@ -1,8 +1,8 @@
-tests/C/*.pb-c.[cho]
-tests/C/*.o
-tests/C/generate_frames
-tests/C/unpack_frames
-tests/C/framecat
-tests/C/framegrep
-tests/Python/*_pb2.*
-tests/Python/*.pyc
+examples/C/*.pb-c.[cho]
+examples/C/*.o
+examples/C/generate_frames
+examples/C/unpack_frames
+examples/C/framecat
+examples/C/framegrep
+examples/Python/*_pb2.*
+examples/Python/*.pyc
