@@ -1,8 +1,0 @@
-examples/C/*.pb-c.[cho]
-examples/C/*.o
-examples/C/generate_frames
-examples/C/unpack_frames
-examples/C/framecat
-examples/C/framegrep
-examples/Python/*_pb2.*
-examples/Python/*.pyc

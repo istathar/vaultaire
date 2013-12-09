@@ -33,7 +33,6 @@ import Data.Hex
 import Data.Int (Int64)
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers
-import Data.ProtocolBuffers.Internal
 import Data.Serialize
 import Data.Text (Text)
 import Data.Typeable (Typeable)
@@ -42,7 +41,7 @@ import Data.Word (Word32, Word64)
 import GHC.Generics (Generic)
 
 data DataFrame = DataFrame {
-    source           :: Repeated D1 (Message SourceTag),
+    source           :: Repeated D1 (Message Tag),
     timestamp        :: Required D2 (Value Word64),
     payload          :: Required D3 (Enumeration ValueType),
     valueNumeric     :: Optional D4 (Value Int64),
@@ -55,13 +54,13 @@ instance Encode DataFrame
 instance Decode DataFrame
 
 
-data SourceTag = SourceTag {
+data Tag = Tag {
     key             :: Required D1 (Value Text),
     value           :: Required D2 (Value Text)
 } deriving (Generic, Show, Eq)
 
-instance Encode SourceTag
-instance Decode SourceTag
+instance Encode Tag
+instance Decode Tag
 
 
 data ValueType
@@ -77,23 +76,23 @@ instance Decode ValueType
 
 main = do
     let tags =
-           [SourceTag {
-                    key = putField "hostname",
-                    value = putField "secure.example.org"
+           [Tag {
+                key = putField "hostname",
+                value = putField "secure.example.org"
             },
-            SourceTag {
-                    key = putField "metric",
-                    value = putField "eth0-tx-bytes"
+            Tag {
+                key = putField "metric",
+                value = putField "eth0-tx-bytes"
             },
-            SourceTag {
-                    key = putField "metric",
-                    value = putField "eth0-rx-bytes"
+            Tag {
+                key = putField "datacenter",
+                value = putField "lhr1"
             },
-            SourceTag {
-                    key = putField "epoch",
-                    value = putField "1"
+            Tag {
+                key = putField "epoch",
+                value = putField "1"
             }]
-    
+
     let msg = DataFrame {
         source = putField tags,
         timestamp = putField 1384727136,
