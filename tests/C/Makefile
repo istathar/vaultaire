@@ -26,7 +26,7 @@ tags:
 
 .PHONY: clean
 clean:
-	rm -f unpack_frames.o generate_frames.o framecat.o DataFrame.pb-c.[coh] generate_frames unpack_frames framecat
+	rm -f unpack_frames.o generate_frames.o framecat.o DataFrame.pb-c.[coh] generate_frames unpack_frames framecat framegrep
 
 .PHONY: all
 all: generate_frames unpack_frames framecat framegrep
