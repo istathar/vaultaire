@@ -1,5 +1,9 @@
 message DataFrame {
-        required string  source = 1;
+        message Tag {
+                required string field = 1;
+                required string value = 2;
+        }
+        repeated Tag     source = 1;
 
         required fixed64 timestamp = 2;
 
