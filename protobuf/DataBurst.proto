@@ -1,13 +1,7 @@
 import "DataFrame.proto";
 
 message DataBurst {
-        required uint32 count = 1;
-
-	message Pair {
-		required uint32		size = 1;
-		required DataFrame	point = 2;
-	}
-        repeated Pair body = 2;
+        repeated DataFrame frames = 1;
 }
 
 // vim: set expandtab tabstop=8:

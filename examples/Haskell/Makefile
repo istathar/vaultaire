@@ -135,7 +135,7 @@ format: $(CORE_SOURCES) $(TEST_SOURCES)
 
 config: config.h
 
-config.h: experiment.cabal # Setup.hs
+config.h: example.cabal # Setup.hs
 	@/bin/echo -e "CABAL\tconfigure"
 	cabal configure --enable-tests
 	touch config.h	# bit of a no-op, but a useful placeholder

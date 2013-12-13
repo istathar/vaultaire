@@ -1,4 +1,5 @@
 config.h
 dist
 sizeof
+collection
 .stylish-haskell.yaml

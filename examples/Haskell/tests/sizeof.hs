@@ -32,10 +32,10 @@ import Debug.Trace
 import Data.Hex
 import Data.Int (Int64)
 import Data.List (intercalate)
+import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Typeable (Typeable)

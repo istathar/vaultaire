@@ -107,21 +107,12 @@ instance Decode ValueType
 
 
 data DataBurst = DataBurst {
-    count  :: Required D1 (Value Word32),
-    body :: Repeated D2 (Message Pair)
+    frames :: Repeated D1 (Message DataFrame)
 } deriving (Generic, Eq, Show)
 
 instance Encode DataBurst
 instance Decode DataBurst
 
-
-data Pair = Pair {
-    size  :: Required D1 (Value Word32),
-    frame :: Required D2 (Message DataFrame)
-} deriving (Generic, Eq, Show)
-
-instance Encode Pair
-instance Decode Pair
 
 main = do
     let tags =
@@ -152,23 +143,10 @@ main = do
         valueBlob = mempty
     }
 
-    let msgs =
-           [Pair {
-                size = putField 105,
-                frame = putField msg
-            },
-            Pair {
-                size = putField 105,
-                frame = putField msg
-            },
-            Pair {
-                size = putField 105,
-                frame = putField msg
-            }]
+    let msgs = [msg, msg, msg]
 
     let burst = DataBurst {
-        count = putField 3,
-        body = putField msgs
+        frames = putField msgs
     }
 
 
