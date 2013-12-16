@@ -1,7 +1,7 @@
 cabal-version:       >= 1.10
-name:                vaultaire-protobuf-experiment
-version:             0.0.0.1
-synopsis:            Experimental snippets
+name:                vaultaire
+version:             0.1.0.1
+synopsis:            Data vault for metrics
 license:             BSD3
 author:              Andrew Cowie <andrew@operationaldynamics.com>
 maintainer:          Andrew Cowie <andrew@operationaldynamics.com>
@@ -12,13 +12,14 @@ stability:           experimental
 
 build-type:          Simple
 
-executable           snippet
+executable           ingestd
   default-language:  Haskell2010
 
   build-depends:     base,
-                     bytestring
+                     bytestring,
+                     rados-haskell
 
-  main-is:           snippet.hs
+  main-is:           ingestd.hs
   hs-source-dirs:    src
   include-dirs:      .
 
@@ -34,6 +35,10 @@ executable           snippet
 
   ghc-prof-options:  -prof -fprof-auto-top
 
+
+source-repository    head
+  type:              git
+  location:          git@github.com:anchor/vaultaire.git
 
 
 -- vim: set tabstop=21 expandtab:
