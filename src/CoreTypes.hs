@@ -14,43 +14,27 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 
-module CoreTypes 
+module CoreTypes
 (
     Point(..),
     Value(..)
 )
 where
 
---
--- Otherwise redundent imports, but useful for testing in GHCi.
---
-
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy as L
-import Debug.Trace
-
---
--- What we're using
---
-
-import Data.Hex
 import Data.Int (Int64)
-import Data.List (intercalate)
-import Data.Maybe (fromMaybe)
-import Data.Monoid (Monoid, mempty)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Word (Word32, Word64)
 
 
 data Point = Point {
-    source           :: Map Text Text,
-    timestamp        :: Word64,     -- ?
-    payload          :: Value
+    source    :: Map Text Text,
+    timestamp :: Word64,     -- ?
+    payload   :: Value
 } deriving (Eq, Show)
+
 
 data Value
     = Empty
