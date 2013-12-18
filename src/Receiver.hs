@@ -45,36 +45,76 @@ import qualified CoreTypes as Core
 import WireFormat
 
 convertToProtobuf :: Core.Point -> DataFrame
-convertToProtobuf _ =
+convertToProtobuf x =
  let
    tags =
-           [Tag {
+           [SourceTag {
                 field = putField "hostname",
                 value = putField "secure.example.org"
             },
-            Tag {
+            SourceTag {
                 field = putField "metric",
                 value = putField "eth0-tx-bytes"
             },
-            Tag {
+            SourceTag {
                 field = putField "datacenter",
                 value = putField "lhr1"
             },
-            Tag {
+            SourceTag {
                 field = putField "epoch",
                 value = putField "1"
             }]
   in
-    DataFrame {
-        source = putField tags,
-        timestamp = putField 1386931666289843586,
-        payload = putField NUMBER,
-        valueNumeric = putField (Just 45000),
-        valueMeasurement = mempty,
-        valueTextual = mempty,
-        valueBlob = mempty
-    }
-
-
+    case Core.payload x of
+        Core.Empty       ->
+            DataFrame {
+                source = putField tags,
+                timestamp = putField $ Core.timestamp x,
+                payload = putField EMPTY,
+                valueNumeric = mempty,
+                valueMeasurement = mempty,
+                valueTextual = mempty,
+                valueBlob = mempty
+            }
+        Core.Numeric n   ->
+            DataFrame {
+                source = putField tags,
+                timestamp = putField $ Core.timestamp x,
+                payload = putField NUMBER,
+                valueNumeric = putField (Just n),
+                valueMeasurement = mempty,
+                valueTextual = mempty,
+                valueBlob = mempty
+            }
+        Core.Measurement r ->
+            DataFrame {
+                source = putField tags,
+                timestamp = putField $ Core.timestamp x,
+                payload = putField REAL,
+                valueNumeric = mempty,
+                valueMeasurement = putField (Just r),
+                valueTextual = mempty,
+                valueBlob = mempty
+            }
+        Core.Textual t   ->
+            DataFrame {
+                source = putField tags,
+                timestamp = putField $ Core.timestamp x,
+                payload = putField TEXT,
+                valueNumeric = mempty,
+                valueMeasurement = mempty,
+                valueTextual = putField (Just t),
+                valueBlob = mempty
+            }
+        Core.Blob b'     ->
+            DataFrame {
+                source = putField tags,
+                timestamp = putField $ Core.timestamp x,
+                payload = putField BINARY,
+                valueNumeric = mempty,
+                valueMeasurement = mempty,
+                valueTextual = mempty,
+                valueBlob = putField (Just b')
+            }
 
 

@@ -16,7 +16,7 @@
 
 module WireFormat
 (
-    DataFrame(..), Tag(..), ValueType(..)
+    DataFrame(..), SourceTag(..), ValueType(..)
 ) where
 
 --
@@ -48,7 +48,7 @@ import GHC.Generics (Generic)
 
 
 data DataFrame = DataFrame {
-    source           :: Repeated D1 (Message Tag),
+    source           :: Repeated D1 (Message SourceTag),
     timestamp        :: Required D2 (Value Word64),
     payload          :: Required D3 (Enumeration ValueType),
     valueNumeric     :: Optional D4 (Value Int64),
@@ -80,15 +80,15 @@ instance Show DataFrame where
                 BINARY  ->  show $ fromMaybe S.empty $ getField $ valueBlob x
 
 
-data Tag = Tag {
+data SourceTag = SourceTag {
     field :: Required D1 (Value Text),
     value :: Required D2 (Value Text)
 } deriving (Generic, Eq)
 
-instance Encode Tag
-instance Decode Tag
+instance Encode SourceTag
+instance Decode SourceTag
 
-instance Show Tag where
+instance Show SourceTag where
     show x =
         k ++ ":" ++ v
       where
