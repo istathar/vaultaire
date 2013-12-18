@@ -62,12 +62,12 @@ CORE_SOURCES=$(shell find src -name '*.hs' -type f)
 TEST_SOURCES=$(shell find tests -name '*.hs' -type f)
 
 
-%: $(BUILDDIR)/%.bin
+%: $(BUILDDIR)/%.bin tags
 	@/bin/echo -e "STRIP\t$@"
 	strip -s $<
 	mv $< $@
 
-$(BUILDDIR)/%.bin: config.h src/%.hs $(CORE_SOURCES) tags
+$(BUILDDIR)/%.bin: config.h src/%.hs $(CORE_SOURCES)
 	@if [ ! -d $(BUILDDIR) ] ; then /bin/echo -e "MKDIR\t$(BUILDDIR)" ; mkdir -p $(BUILDDIR) ; fi
 	@/bin/echo -e "GHC\t$@"
 	$(GHC) --make \
