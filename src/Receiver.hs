@@ -38,6 +38,7 @@ import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Map.Strict as Map
 import Data.Typeable (Typeable)
 import Data.Word (Word32, Word64)
 
@@ -48,22 +49,7 @@ convertToProtobuf :: Core.Point -> DataFrame
 convertToProtobuf x =
  let
    tags =
-           [SourceTag {
-                field = putField "hostname",
-                value = putField "secure.example.org"
-            },
-            SourceTag {
-                field = putField "metric",
-                value = putField "eth0-tx-bytes"
-            },
-            SourceTag {
-                field = putField "datacenter",
-                value = putField "lhr1"
-            },
-            SourceTag {
-                field = putField "epoch",
-                value = putField "1"
-            }]
+           Map.elems $ Map.mapWithKey createSourceTag (Core.source x)
   in
     case Core.payload x of
         Core.Empty       ->
@@ -117,4 +103,11 @@ convertToProtobuf x =
                 valueBlob = putField (Just b')
             }
 
+
+createSourceTag :: Text -> Text -> SourceTag
+createSourceTag k v =
+    SourceTag {
+        field = putField k,
+        value = putField v
+    }
 
