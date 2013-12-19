@@ -47,8 +47,8 @@ import WireFormat
 
 convertToProtobuf :: Core.Point -> DataFrame
 convertToProtobuf x =
- let
-   tags =
+  let
+    tags =
            Map.elems $ Map.mapWithKey createSourceTag (Core.source x)
   in
     case Core.payload x of
@@ -111,3 +111,31 @@ createSourceTag k v =
         value = putField v
     }
 
+
+
+convertToPoint :: DataFrame -> Core.Point
+convertToPoint y =
+  let
+    v = case (getField $ payload y) of
+        EMPTY   -> Core.Empty
+        NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ valueNumeric y)
+        REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ valueMeasurement y)
+        TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ valueTextual y)
+        BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ valueBlob y)
+    ss = getField $ source y        :: [SourceTag]
+    as = map createMapEntry ss      :: [(Text,Text)]
+  in
+    Core.Point {
+        Core.source = Map.fromList as,
+        Core.timestamp = getField (timestamp y),
+        Core.payload = v
+    }
+
+
+createMapEntry :: SourceTag -> (Text,Text)
+createMapEntry tag =
+  let
+    k = getField $ field tag
+    v = getField $ value tag
+  in
+    (k,v)
