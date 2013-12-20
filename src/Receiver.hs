@@ -14,7 +14,9 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 
-module Receiver where
+module Receiver (
+    convertToProtobuf, convertToPoint
+) where
 
 --
 -- Otherwise redundent imports, but useful for testing in GHCi.
@@ -32,20 +34,25 @@ import Debug.Trace
 import Data.Hex
 import Data.Int (Int64)
 import Data.List (intercalate)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Map.Strict as Map
 import Data.Typeable (Typeable)
 import Data.Word (Word32, Word64)
 
 import qualified CoreTypes as Core
-import WireFormat
+import qualified WireFormat as Protobuf
 
-convertToProtobuf :: Core.Point -> DataFrame
+
+--
+-- Conversion from our internal types to a the Data.Protobuf representation,
+-- suitable for subsequent encoding.
+--
+convertToProtobuf :: Core.Point -> Protobuf.DataFrame
 convertToProtobuf x =
   let
     tags =
@@ -53,89 +60,94 @@ convertToProtobuf x =
   in
     case Core.payload x of
         Core.Empty       ->
-            DataFrame {
-                source = putField tags,
-                timestamp = putField $ Core.timestamp x,
-                payload = putField EMPTY,
-                valueNumeric = mempty,
-                valueMeasurement = mempty,
-                valueTextual = mempty,
-                valueBlob = mempty
+            Protobuf.DataFrame {
+                Protobuf.source = putField tags,
+                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.payload = putField Protobuf.EMPTY,
+                Protobuf.valueNumeric = mempty,
+                Protobuf.valueMeasurement = mempty,
+                Protobuf.valueTextual = mempty,
+                Protobuf.valueBlob = mempty
             }
         Core.Numeric n   ->
-            DataFrame {
-                source = putField tags,
-                timestamp = putField $ Core.timestamp x,
-                payload = putField NUMBER,
-                valueNumeric = putField (Just n),
-                valueMeasurement = mempty,
-                valueTextual = mempty,
-                valueBlob = mempty
+            Protobuf.DataFrame {
+                Protobuf.source = putField tags,
+                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.payload = putField Protobuf.NUMBER,
+                Protobuf.valueNumeric = putField (Just n),
+                Protobuf.valueMeasurement = mempty,
+                Protobuf.valueTextual = mempty,
+                Protobuf.valueBlob = mempty
             }
         Core.Measurement r ->
-            DataFrame {
-                source = putField tags,
-                timestamp = putField $ Core.timestamp x,
-                payload = putField REAL,
-                valueNumeric = mempty,
-                valueMeasurement = putField (Just r),
-                valueTextual = mempty,
-                valueBlob = mempty
+            Protobuf.DataFrame {
+                Protobuf.source = putField tags,
+                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.payload = putField Protobuf.REAL,
+                Protobuf.valueNumeric = mempty,
+                Protobuf.valueMeasurement = putField (Just r),
+                Protobuf.valueTextual = mempty,
+                Protobuf.valueBlob = mempty
             }
         Core.Textual t   ->
-            DataFrame {
-                source = putField tags,
-                timestamp = putField $ Core.timestamp x,
-                payload = putField TEXT,
-                valueNumeric = mempty,
-                valueMeasurement = mempty,
-                valueTextual = putField (Just t),
-                valueBlob = mempty
+            Protobuf.DataFrame {
+                Protobuf.source = putField tags,
+                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.payload = putField Protobuf.TEXT,
+                Protobuf.valueNumeric = mempty,
+                Protobuf.valueMeasurement = mempty,
+                Protobuf.valueTextual = putField (Just t),
+                Protobuf.valueBlob = mempty
             }
         Core.Blob b'     ->
-            DataFrame {
-                source = putField tags,
-                timestamp = putField $ Core.timestamp x,
-                payload = putField BINARY,
-                valueNumeric = mempty,
-                valueMeasurement = mempty,
-                valueTextual = mempty,
-                valueBlob = putField (Just b')
+            Protobuf.DataFrame {
+                Protobuf.source = putField tags,
+                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.payload = putField Protobuf.BINARY,
+                Protobuf.valueNumeric = mempty,
+                Protobuf.valueMeasurement = mempty,
+                Protobuf.valueTextual = mempty,
+                Protobuf.valueBlob = putField (Just b')
             }
 
 
-createSourceTag :: Text -> Text -> SourceTag
+createSourceTag :: Text -> Text -> Protobuf.SourceTag
 createSourceTag k v =
-    SourceTag {
-        field = putField k,
-        value = putField v
+    Protobuf.SourceTag {
+        Protobuf.field = putField k,
+        Protobuf.value = putField v
     }
 
 
-
-convertToPoint :: DataFrame -> Core.Point
+--
+-- | Given an protobuf, convert it to our internal Point representation. This
+-- completes use of the Data.Protobuf library; from here we're in normal
+-- Haskell types.
+--
+convertToPoint :: Protobuf.DataFrame -> Core.Point
 convertToPoint y =
   let
-    v = case (getField $ payload y) of
-        EMPTY   -> Core.Empty
-        NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ valueNumeric y)
-        REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ valueMeasurement y)
-        TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ valueTextual y)
-        BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ valueBlob y)
-    ss = getField $ source y        :: [SourceTag]
+    v = case (getField $ Protobuf.payload y) of
+        Protobuf.EMPTY   -> Core.Empty
+        Protobuf.NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ Protobuf.valueNumeric y)
+        Protobuf.REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ Protobuf.valueMeasurement y)
+        Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual y)
+        Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob y)
+    ss = getField $ Protobuf.source y        :: [Protobuf.SourceTag]
     as = map createMapEntry ss      :: [(Text,Text)]
   in
     Core.Point {
         Core.source = Map.fromList as,
-        Core.timestamp = getField (timestamp y),
+        Core.timestamp = getField (Protobuf.timestamp y),
         Core.payload = v
     }
 
 
-createMapEntry :: SourceTag -> (Text,Text)
+createMapEntry :: Protobuf.SourceTag -> (Text,Text)
 createMapEntry tag =
   let
-    k = getField $ field tag
-    v = getField $ value tag
+    k = getField $ Protobuf.field tag
+    v = getField $ Protobuf.value tag
   in
     (k,v)
+
