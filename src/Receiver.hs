@@ -15,25 +15,27 @@
 {-# OPTIONS -fno-warn-unused-imports #-}
 
 module Receiver (
-    convertToProtobuf, convertToPoint
+    convertToProtobuf,
+    convertToPoint,
+    decodeBurst,
+    encodePoints,
 ) where
 
 --
 -- Otherwise redundent imports, but useful for testing in GHCi.
 --
 
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy as L
-import Debug.Trace
 
 --
 -- Code begins
 --
 
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S
 import Data.Hex
 import Data.Int (Int64)
 import Data.List (intercalate)
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid, mempty)
@@ -53,16 +55,16 @@ import qualified WireFormat as Protobuf
 -- suitable for subsequent encoding.
 --
 convertToProtobuf :: Core.Point -> Protobuf.DataFrame
-convertToProtobuf x =
+convertToProtobuf p =
   let
     tags =
-           Map.elems $ Map.mapWithKey createSourceTag (Core.source x)
+           Map.elems $ Map.mapWithKey createSourceTag (Core.source p)
   in
-    case Core.payload x of
+    case Core.payload p of
         Core.Empty       ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.timestamp = putField $ Core.timestamp p,
                 Protobuf.payload = putField Protobuf.EMPTY,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
@@ -72,7 +74,7 @@ convertToProtobuf x =
         Core.Numeric n   ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.timestamp = putField $ Core.timestamp p,
                 Protobuf.payload = putField Protobuf.NUMBER,
                 Protobuf.valueNumeric = putField (Just n),
                 Protobuf.valueMeasurement = mempty,
@@ -82,7 +84,7 @@ convertToProtobuf x =
         Core.Measurement r ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.timestamp = putField $ Core.timestamp p,
                 Protobuf.payload = putField Protobuf.REAL,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = putField (Just r),
@@ -92,7 +94,7 @@ convertToProtobuf x =
         Core.Textual t   ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.timestamp = putField $ Core.timestamp p,
                 Protobuf.payload = putField Protobuf.TEXT,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
@@ -102,7 +104,7 @@ convertToProtobuf x =
         Core.Blob b'     ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp x,
+                Protobuf.timestamp = putField $ Core.timestamp p,
                 Protobuf.payload = putField Protobuf.BINARY,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
@@ -120,25 +122,25 @@ createSourceTag k v =
 
 
 --
--- | Given an protobuf, convert it to our internal Point representation. This
+-- Given an protobuf, convert it to our internal Point representation. This
 -- completes use of the Data.Protobuf library; from here we're in normal
 -- Haskell types.
 --
 convertToPoint :: Protobuf.DataFrame -> Core.Point
-convertToPoint y =
+convertToPoint x =
   let
-    v = case (getField $ Protobuf.payload y) of
+    v = case (getField $ Protobuf.payload x) of
         Protobuf.EMPTY   -> Core.Empty
-        Protobuf.NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ Protobuf.valueNumeric y)
-        Protobuf.REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ Protobuf.valueMeasurement y)
-        Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual y)
-        Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob y)
-    ss = getField $ Protobuf.source y        :: [Protobuf.SourceTag]
-    as = map createMapEntry ss      :: [(Text,Text)]
+        Protobuf.NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ Protobuf.valueNumeric x)
+        Protobuf.REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ Protobuf.valueMeasurement x)
+        Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual x)
+        Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob x)
+    ss = getField $ Protobuf.source x       :: [Protobuf.SourceTag]
+    as = map createMapEntry ss              :: [(Text,Text)]
   in
     Core.Point {
         Core.source = Map.fromList as,
-        Core.timestamp = getField (Protobuf.timestamp y),
+        Core.timestamp = getField (Protobuf.timestamp x),
         Core.payload = v
     }
 
@@ -150,4 +152,50 @@ createMapEntry tag =
     v = getField $ Protobuf.value tag
   in
     (k,v)
+
+{-
+    Encoding and decoding. This is phrased in terms of lists at the moment,
+    which will likely be horribly inefficient at any kind of scale. If so we
+    can switch to Vectors (if allocation is the problem) and/or io-streams (if
+    we need streaming).
+-}
+
+encodeFrame :: Protobuf.DataFrame -> S.ByteString
+encodeFrame x = runPut $ encodeMessage x
+
+
+decodeFrame :: S.ByteString -> Either String Protobuf.DataFrame
+decodeFrame x' = runGet decodeMessage x'
+
+
+
+decodeBurst :: S.ByteString -> Either String [Core.Point]
+decodeBurst y' =
+  let
+    ey = runGet decodeMessage y' :: Either String Protobuf.DataBurst
+  in
+    case ey of
+        Left err    -> Left err
+        Right y     -> Right $ convertToPoints y
+
+
+
+convertToPoints :: Protobuf.DataBurst -> [Core.Point]
+convertToPoints y =
+  let
+    xs = getField $ Protobuf.frames y
+    ps = List.map convertToPoint xs
+  in
+    ps
+
+
+encodePoints :: [Core.Point] -> S.ByteString
+encodePoints ps =
+  let
+    xs = List.map convertToProtobuf ps
+    y  = Protobuf.DataBurst {
+            Protobuf.frames = putField xs
+         }
+  in
+    runPut $ encodeMessage y
 

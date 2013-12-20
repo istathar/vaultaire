@@ -16,7 +16,8 @@
 
 module WireFormat
 (
-    DataFrame(..), SourceTag(..), ValueType(..)
+    DataFrame(..), SourceTag(..), ValueType(..),
+    DataBurst(..)
 ) where
 
 --
