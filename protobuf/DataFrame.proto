@@ -20,6 +20,8 @@ message DataFrame {
         optional double  value_measurement = 5;
         optional string  value_textual = 6;
         optional bytes   value_blob = 7;
+
+        optional bytes   origin = 8
 }
 
 // vim: set expandtab tabstop=8:
