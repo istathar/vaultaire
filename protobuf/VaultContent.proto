@@ -1,11 +1,11 @@
 message VaultContent {
-        required bytes      origin = 1;
+        required bytes      origin = 8;
 
         message SourceTag {
                 required string field = 1;
                 required string value = 2;
         }
-        repeated SourceTag  source = 2;
+        repeated SourceTag  source = 1;
 
         enum Type {
                 EMPTY = 0;
@@ -14,7 +14,7 @@ message VaultContent {
                 TEXT = 3;
                 BINARY = 4;
         }
-        required Type       payload = 3;
+        required Type    payload = 3;
 }
 
 // vim: set expandtab tabstop=4:

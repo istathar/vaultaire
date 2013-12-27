@@ -14,7 +14,7 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 
-module CoreTypes
+module Vaultaire.Internal.CoreTypes
 (
     Point(..),
     Value(..)

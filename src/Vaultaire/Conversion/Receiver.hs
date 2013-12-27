@@ -14,9 +14,11 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 
-module Receiver (
-    convertToProtobuf,
+module Vaultaire.Conversion.Receiver (
+    createDataFrame,
     convertToPoint,
+    encodeFrame,
+    decodeFrame,
     decodeBurst,
     encodePoints,
 ) where
@@ -46,16 +48,16 @@ import qualified Data.Text as T
 import Data.Typeable (Typeable)
 import Data.Word (Word32, Word64)
 
-import qualified CoreTypes as Core
-import qualified WireFormat as Protobuf
+import qualified Vaultaire.Internal.CoreTypes as Core
+import qualified Vaultaire.Serialize.WireFormat as Protobuf
 
 
 --
 -- Conversion from our internal types to a the Data.Protobuf representation,
 -- suitable for subsequent encoding.
 --
-convertToProtobuf :: Core.Point -> Protobuf.DataFrame
-convertToProtobuf p =
+createDataFrame :: Core.Point -> Protobuf.DataFrame
+createDataFrame p =
   let
     tags =
            Map.elems $ Map.mapWithKey createSourceTag (Core.source p)
@@ -192,7 +194,7 @@ convertToPoints y =
 encodePoints :: [Core.Point] -> S.ByteString
 encodePoints ps =
   let
-    xs = List.map convertToProtobuf ps
+    xs = List.map createDataFrame ps
     y  = Protobuf.DataBurst {
             Protobuf.frames = putField xs
          }
