@@ -11,12 +11,18 @@
 
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE ScopedTypeVariables      #-}
+{-# LANGUAGE StandaloneDeriving      #-}
+{-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
 module Vaultaire.Conversion.Writer (
-    createDiskHeader,
+    DiskHeader(..),
+    Compression(..),
+    Quantity(..),
     createDiskContent,
-    createDiskPoint
+    createDiskPoint,
+    encodePoint
 ) where
 
 --
@@ -28,11 +34,14 @@ import qualified Data.ByteString.Char8 as S
 import qualified Data.Map.Strict as Map
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
+import Data.Serialize
 import Data.Text (Text)
-import Data.Word (Word32)
+import Data.Word
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Serialize.DiskFormat as Protobuf
+
+import Debug.Trace
 
 
 {-
@@ -41,26 +50,79 @@ DataFrame; as that represents the entire data schema and was written first,
 see there for more cohesive comments.
 -}
 
-type Compression = Bool
+data Compression = Normal | Compressed
+data Quantity = Single | Multiple
+
+data DiskHeader = DiskHeader {
+    version     :: Word8,
+    compression :: Compression,
+    quantity    :: Quantity,
+    size        :: Word64
+} 
+
+deriving instance Show Quantity
+deriving instance Show Compression
+deriving instance Show DiskHeader
+
+--
+-- e v v v c m s s
+-- 0 0 0 1 0 0 0 1  version 1, uncompressed, single item, 1 byte size
+--
+
+instance Serialize DiskHeader where
+
+    get :: Get DiskHeader
+    get = do
+        b <- getWord8
+
+        let w = b .&. 0x03       -- number of size bytes, 2^w
+        s <- case w of
+                    0x00    -> do
+                                x <- getWord8
+                                return $ fromIntegral x
+                    0x01    -> do
+                                x <- getWord16le
+                                return $ fromIntegral x
+                    0x02    -> do
+                                x <- getWord32le
+                                return $ fromIntegral x
+                    0x03    -> do
+                                x <- getWord64le
+                                return x
+                    _       -> error "FIXME"
+
+        let c = b .&. 0x08                  -- compression bit
+
+        let m = b .&. 0x04                  -- quantity bit
+
+        let v = (b .&. 0x70) `shiftR` 4     -- version bits
+
+        let e = b .&. 0x80                  -- extension bit
+
+        let h = DiskHeader {
+                    version = v,
+                    compression = case c of
+                                    0x0 -> Normal
+                                    0x8 -> Compressed
+                                    _   -> error "Undefined compression",
+                    quantity    = case m of
+                                    0x0 -> Single
+                                    0x4 -> Multiple
+                                    _   -> error "Undefined quantity",
+                    size = s
+                }
+        return h
+
+
+
+    put :: Putter DiskHeader
+    put = undefined
+
 
 --
 -- Conversion from our internal types to a the Data.Protobuf representation,
 -- suitable for subsequent encoding.
 --
-createDiskHeader :: Compression -> Int -> Protobuf.VaultHeader
-createDiskHeader c n =
-  let
-    flags = if c
-                then 1
-                else 0
-    size  = if n > 16777215
-                then error "Size too large"
-                else fromIntegral n :: Word32
-    bits  = (flags `shiftL` 24) .|. size
-  in
-    Protobuf.VaultHeader {
-        Protobuf.header = putField $ Fixed bits
-    }
 
 
 createDiskContent :: Core.Point -> Protobuf.VaultContent
@@ -154,4 +216,8 @@ createSourceTag k v =
         Protobuf.value = putField v
     }
 
+
+
+encodePoint :: Protobuf.VaultPoint -> S.ByteString
+encodePoint x = runPut $ encodeMessage x
 
