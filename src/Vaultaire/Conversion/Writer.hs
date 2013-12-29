@@ -9,12 +9,13 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE ScopedTypeVariables      #-}
-{-# LANGUAGE StandaloneDeriving      #-}
-{-# LANGUAGE InstanceSigs      #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE DoAndIfThenElse     #-}
+{-# LANGUAGE InstanceSigs        #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 
 module Vaultaire.Conversion.Writer (
     DiskHeader(..),
@@ -41,8 +42,6 @@ import Data.Word
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Serialize.DiskFormat as Protobuf
 
-import Debug.Trace
-
 
 {-
 The code here is a direct adaptation of what was originally prototyped for
@@ -58,7 +57,7 @@ data DiskHeader = DiskHeader {
     compression :: Compression,
     quantity    :: Quantity,
     size        :: Word64
-} 
+}
 
 deriving instance Show Quantity
 deriving instance Show Compression
@@ -71,7 +70,7 @@ deriving instance Show DiskHeader
 
 instance Serialize DiskHeader where
 
-    get :: Get DiskHeader
+--  get :: Get DiskHeader
     get = do
         b <- getWord8
 
@@ -93,30 +92,57 @@ instance Serialize DiskHeader where
 
         let c = b .&. 0x08                  -- compression bit
 
-        let m = b .&. 0x04                  -- quantity bit
+        let q = b .&. 0x04                  -- quantity bit
 
         let v = (b .&. 0x70) `shiftR` 4     -- version bits
 
         let e = b .&. 0x80                  -- extension bit
 
-        let h = DiskHeader {
+        return $ DiskHeader {
                     version = v,
                     compression = case c of
                                     0x0 -> Normal
                                     0x8 -> Compressed
-                                    _   -> error "Undefined compression",
-                    quantity    = case m of
+                                    _   -> error "Illegal compression",
+                    quantity    = case q of
                                     0x0 -> Single
                                     0x4 -> Multiple
-                                    _   -> error "Undefined quantity",
+                                    _   -> error "Illegal quantity",
                     size = s
                 }
-        return h
 
 
+--  put :: Putter DiskHeader
+    put x = do
+        let e = if version x > 7
+            then error "Unimplemented for version > 7"
+            else 0x00
 
-    put :: Putter DiskHeader
-    put = undefined
+        let v = (version x) `shiftL` 4
+
+        let c = case compression x of
+                    Normal      -> 0x00
+                    Compressed  -> 0x08
+
+        let q = case quantity x of
+                    Single      -> 0x00
+                    Multiple    -> 0x04
+
+        let w   | size x < 256        = 0x00
+                | size x < 65536      = 0x01
+                | size x < 4294967296 = 0x02
+                | otherwise           = 0x03
+
+        let b = e .|. v .|. c .|. q .|. w
+
+        putWord8 b
+
+        case w of
+            0x00    -> putWord8 (fromIntegral $ size x)
+            0x01    -> putWord16le (fromIntegral $ size x)
+            0x02    -> putWord32le (fromIntegral $ size x)
+            0x03    -> putWord64le (fromIntegral $ size x)
+            _       -> error "Illegal width"
 
 
 --
