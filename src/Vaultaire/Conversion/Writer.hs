@@ -82,9 +82,15 @@ instance Serialize DiskHeader where
                     0x03    -> getWord64le
                     _       -> error "Illegal width"
 
-        let c = b .&. 0x08                  -- compression bit
+        let c = case (b .&. 0x08) of
+                    0x0     -> Normal
+                    0x8     -> Compressed
+                    _       -> error "Illegal compression"
 
-        let q = b .&. 0x04                  -- quantity bit
+        let q = case (b .&. 0x04) of
+                    0x0     -> Single
+                    0x4     -> Multiple
+                    _       -> error "Illegal quantity"
 
         let v = (b .&. 0x70) `shiftR` 4     -- version bits
 
@@ -92,14 +98,8 @@ instance Serialize DiskHeader where
 
         return $ DiskHeader {
                     version = v,
-                    compression = case c of
-                                    0x0 -> Normal
-                                    0x8 -> Compressed
-                                    _   -> error "Illegal compression",
-                    quantity    = case q of
-                                    0x0 -> Single
-                                    0x4 -> Multiple
-                                    _   -> error "Illegal quantity",
+                    compression = c,
+                    quantity    = q,
                     size = s
                 }
 
@@ -120,10 +120,10 @@ instance Serialize DiskHeader where
                     Single      -> 0x00
                     Multiple    -> 0x04
 
-        let w   | size x < 256        = 0x00
-                | size x < 65536      = 0x01
-                | size x < 4294967296 = 0x02
-                | otherwise           = 0x03
+        let w | size x < 256        = 0x00
+              | size x < 65536      = 0x01
+              | size x < 4294967296 = 0x02
+              | otherwise           = 0x03
 
         let b = e .|. v .|. c .|. q .|. w
 
