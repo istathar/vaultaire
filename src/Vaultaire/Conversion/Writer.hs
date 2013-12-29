@@ -65,7 +65,7 @@ deriving instance Show DiskHeader
 
 --
 -- e v v v c m s s
--- 0 0 0 1 0 0 0 1  version 1, uncompressed, single item, 1 byte size
+-- 0 0 0 1 0 0 0 1  version 1, uncompressed, single item, 2 bytes size
 --
 
 instance Serialize DiskHeader where
@@ -76,19 +76,11 @@ instance Serialize DiskHeader where
 
         let w = b .&. 0x03       -- number of size bytes, 2^w
         s <- case w of
-                    0x00    -> do
-                                x <- getWord8
-                                return $ fromIntegral x
-                    0x01    -> do
-                                x <- getWord16le
-                                return $ fromIntegral x
-                    0x02    -> do
-                                x <- getWord32le
-                                return $ fromIntegral x
-                    0x03    -> do
-                                x <- getWord64le
-                                return x
-                    _       -> error "FIXME"
+                    0x00    -> getWord8    >>= (return . fromIntegral)
+                    0x01    -> getWord16le >>= (return . fromIntegral)
+                    0x02    -> getWord32le >>= (return . fromIntegral)
+                    0x03    -> getWord64le
+                    _       -> error "Illegal width"
 
         let c = b .&. 0x08                  -- compression bit
 
