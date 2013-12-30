@@ -12,6 +12,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
+{-# OPTIONS -fno-warn-orphans #-}
 
 module TestSuite where
 
@@ -125,6 +126,7 @@ testConvertPoint =
 testSerializeVaultHeader =
   let
     h1 = Disk.VaultPrefix {
+                Disk.extended = False,
                 Disk.version = 7,
                 Disk.compression = Disk.Compressed,
                 Disk.quantity = Disk.Multiple,
@@ -146,6 +148,9 @@ testSerializeVaultHeader =
             Left err    -> assertFailure err
             Right h2    -> assertEqual "Incorrect deserialization" h1 h2
 
+instance Arbitrary Disk.Word3 where
+    arbitrary = elements [0..7]
+
 instance Arbitrary Disk.Compression where
     arbitrary = elements [Disk.Normal, Disk.Compressed]
 
@@ -153,7 +158,7 @@ instance Arbitrary Disk.Quantity where
     arbitrary = elements [Disk.Single, Disk.Multiple]
 
 instance Arbitrary Disk.VaultPrefix where
-    arbitrary = liftM4 Disk.VaultPrefix arbitrary arbitrary arbitrary arbitrary
+    arbitrary = liftM5 Disk.VaultPrefix arbitrary arbitrary arbitrary arbitrary arbitrary
 
 testRoundTripVaultHeader =
     it "round-trips correctly at boundaries"

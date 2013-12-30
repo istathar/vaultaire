@@ -35,7 +35,6 @@ executable           ingestd
                      -fwarn-tabs
                      -funbox-strict-fields
                      -fno-warn-missing-signatures
-                     -fno-warn-unused-binds
                      -fno-warn-unused-do-bind
 
   ghc-prof-options:  -prof -fprof-auto-top
@@ -69,7 +68,6 @@ test-suite           check
                      -fwarn-tabs
                      -funbox-strict-fields
                      -fno-warn-missing-signatures
-                     -fno-warn-unused-binds
                      -fno-warn-unused-do-bind
 
   include-dirs:      .

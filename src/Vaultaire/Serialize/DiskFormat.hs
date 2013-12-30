@@ -14,9 +14,11 @@
 {-# LANGUAGE DoAndIfThenElse    #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Vaultaire.Serialize.DiskFormat
 (
+    Word3(..),
     Compression(..),
     Quantity(..),
     VaultPrefix(..),
@@ -55,6 +57,15 @@ or  = (.|.)
 -- that it is *not* a Protobuf; we use cereal directly.
 --
 
+newtype Word3 = Word3 {
+    runWord3 :: Word8
+} deriving (Bits, Eq, Show, Num, Integral, Real, Enum, Ord)
+
+instance Bounded Word3 where
+    minBound = 0
+    maxBound = 7
+
+
 data Compression = Normal | Compressed
   deriving (Show, Eq)
 
@@ -62,7 +73,8 @@ data Quantity = Single | Multiple
   deriving (Show, Eq)
 
 data VaultPrefix = VaultPrefix {
-    version     :: Word8,
+    extended    :: Bool,
+    version     :: Word3,
     compression :: Compression,
     quantity    :: Quantity,
     size        :: Word64
@@ -100,10 +112,15 @@ instance Serialize VaultPrefix where
 
         let v = (b `and` 0x70) `shiftR` 4     -- version bits
 
-        let e = b `and` 0x80                  -- extension bit
+        let e = case (b `and` 0x80) of        -- extended bit
+                    0x80    -> True
+                    0x00    -> False
+                    _       -> error "Illegal extension bit found"
+
 
         return $ VaultPrefix {
-                    version = v,
+                    extended = e,
+                    version = Word3 v,
                     compression = c,
                     quantity    = q,
                     size = s
@@ -112,8 +129,8 @@ instance Serialize VaultPrefix where
 
 --  put :: Putter VaultPrefix
     put x = do
-        let e = if version x > 7
-            then error "Unimplemented for version > 7"
+        let e = if extended x
+            then 0x80
             else 0x00
 
         let v = (version x) `shiftL` 4
@@ -131,7 +148,7 @@ instance Serialize VaultPrefix where
               | size x <= 4294967295 = 0x02     -- maxBound :: Word32
               | otherwise            = 0x03
 
-        let b = e `or` v `or` c `or` q `or` w
+        let b = e `or` (fromIntegral v) `or` c `or` q `or` w
 
         putWord8 b
 

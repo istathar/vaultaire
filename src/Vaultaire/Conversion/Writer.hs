@@ -41,6 +41,7 @@ import qualified Vaultaire.Serialize.DiskFormat as Disk
 createDiskPrefix :: Int64 -> Disk.VaultPrefix
 createDiskPrefix n =
     Disk.VaultPrefix {
+        Disk.extended = False,
         Disk.version = 0,
         Disk.compression = Disk.Normal,
         Disk.quantity = Disk.Single,
