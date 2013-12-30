@@ -45,53 +45,25 @@ import GHC.Generics (Generic)
 
 data DataFrame = DataFrame {
     source           :: Repeated D1 (Message Tag),
-    timestamp        :: Required D2 (Value Word64),
+    timestamp        :: Required D2 (Value (Fixed Word64)),
     payload          :: Required D3 (Enumeration ValueType),
     valueNumeric     :: Optional D4 (Value Int64),
     valueMeasurement :: Optional D5 (Value Double),
     valueTextual     :: Optional D6 (Value Text),
     valueBlob        :: Optional D7 (Value ByteString)
-} deriving (Generic, Eq)
+} deriving (Generic, Eq, Show)
 
 instance Encode DataFrame
 instance Decode DataFrame
-
-instance Show DataFrame where
-    show x =
-        "sources:\n\t" ++ s ++ "\n" ++
-        "timestamp:\n\t" ++ t ++ "\n" ++
-        "payload:\n\t" ++ p ++ "\n" ++
-        "value:\n\t" ++ v
-      where
-        s = intercalate ";\n\t" $ map show (getField $ source x)
-        t = show $ getField $ timestamp x
-        p = show $ getField $ payload x
-        e = getField $ payload x
-
-        v = case e of
-                EMPTY   -> "EMPTY"
-                NUMBER  ->  show $ fromMaybe 0 $ getField $ valueNumeric x
-                TEXT    ->  T.unpack $ fromMaybe "" $ getField $ valueTextual x
-                REAL    ->  show $ fromMaybe 0.0 $ getField $ valueMeasurement x
-                BINARY  ->  show $ fromMaybe S.empty $ getField $ valueBlob x
-
-
 
 
 data Tag = Tag {
     field :: Required D1 (Value Text),
     value :: Required D2 (Value Text)
-} deriving (Generic, Eq)
+} deriving (Generic, Eq, Show)
 
 instance Encode Tag
 instance Decode Tag
-
-instance Show Tag where
-    show x =
-        k ++ "," ++ v
-      where
-        k = T.unpack $ getField $ field x
-        v = T.unpack $ getField $ value x
 
 
 data ValueType
@@ -127,9 +99,9 @@ main = do
 
     let msg = DataFrame {
         source = putField tags,
-        timestamp = putField 1384727136000000000,
+        timestamp = putField 1386931666289201468,
         payload = putField NUMBER,
-        valueNumeric = putField (Just 45000),
+        valueNumeric = putField (Just 201468),
         valueMeasurement = mempty,
         valueTextual = mempty,
         valueBlob = mempty

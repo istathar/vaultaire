@@ -119,16 +119,12 @@ testConvertPoint =
             Core.payload = Core.Numeric 201468
         }
 
-        let x = undefined
-        pending
+        let y' = encodePoints [msg]
+        pendingWith "Waiting for sample protobuf"
+        assertEqual "Incorrect message content" B.empty y'
+        
+        -- 0x0A1E0A08686F73746E616D6512127365637572652E6578616D706C652E6F72670A170A066D6574726963120D657468302D74782D62797465730A120A0A6461746163656E74657212046C6872310A0A0A0565706F6368120131113C91E890005F3F13180120FCA50C
 
-{-
-    let msgs = [msg, msg, msg]
-
-    let burst = DataBurst {
-        frames = putField msgs
-    }
--}
 
 
 testSerializeVaultHeader =
@@ -249,7 +245,8 @@ testFormBucketLabel =
   in do
     it "correctly forms an object label" $ do
         let l1 = formBucketLabel p1
-        assertEqual "Incorrect label" (S.pack "v01_arithmetic_ABCD_1387900000") l1
+        assertEqual "Incorrect label"
+            (S.pack "v01_arithmetic_ABCD_1387900000") l1
 
     it "two labels in same mark match" $ do
         let l1 = formBucketLabel p1
