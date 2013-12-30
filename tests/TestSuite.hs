@@ -48,16 +48,17 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
-import Vaultaire.Persistence.Buckets
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
+import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 
 suite :: Spec
 suite = do
     describe "a DataFrame protobuf" $ do
         testSerializeDataFrame
         testConvertPoint
+        testReadFrame
 
     describe "on-disk VaultPrefix" $ do
         testSerializeVaultHeader
@@ -125,6 +126,31 @@ testConvertPoint =
         
         -- 0x0A1E0A08686F73746E616D6512127365637572652E6578616D706C652E6F72670A170A066D6574726963120D657468302D74782D62797465730A120A0A6461746163656E74657212046C6872310A0A0A0565706F6368120131113C91E890005F3F13180120FCA50C
 
+testReadFrame =
+  let
+    tags = Map.fromList
+           [("origin", "bletchley/testframe"),
+            ("hostname", "hut4"),
+            ("service_name", "bombe"),
+            ("metric", "runtime")]
+
+    msg = Core.Point {
+        Core.origin = "",
+        Core.source = tags,
+        Core.timestamp = 1388482381430911607,
+        Core.payload = Core.Measurement 8.461049696649084
+    }
+  in
+    it "deserializes an externally supplied DataFrame" $ do
+        x' <- S.readFile "tests/data/oneframe.pb"
+
+        let ex = runGet decodeMessage x' :: Either String Protobuf.DataFrame
+        case ex of
+            Left err -> assertFailure err
+            Right x  -> let
+                            p = convertToPoint x
+                        in
+                            assertEqual "Decoded protobuf not as expected" msg p
 
 
 testSerializeVaultHeader =
@@ -244,11 +270,11 @@ testFormBucketLabel =
 
   in do
     it "correctly forms an object label" $ do
-        let l1 = formBucketLabel p1
+        let l1 = Bucket.formObjectLabel p1
         assertEqual "Incorrect label"
-            (S.pack "v01_arithmetic_ABCD_1387900000") l1
+            (S.pack "arithmetic_ABCD_1387900000") l1
 
     it "two labels in same mark match" $ do
-        let l1 = formBucketLabel p1
-        let l2 = formBucketLabel p2
+        let l1 = Bucket.formObjectLabel p1
+        let l2 = Bucket.formObjectLabel p2
         assertEqual "Map should be sorted, time mark div 10^6" l1 l2

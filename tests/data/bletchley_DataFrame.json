@@ -1,0 +1,1 @@
+{"metric":[{"tag_field":"origin","tag_value":"bletchley/testframe"},{"tag_field":"hostname","tag_value":"hut4"},{"tag_field":"service_name","tag_value":"bombe"},{"tag_field":"metric","tag_value":"runtime"}],"value":"8.461049696649084","timestamp":1388482381430911607,"value_type":"REAL"}

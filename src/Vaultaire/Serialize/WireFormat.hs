@@ -57,7 +57,8 @@ instance Show DataFrame where
         v
       where
         s = intercalate ",\n" $ map show (getField $ source x)
-        t = show $ getField $ timestamp x
+        (Fixed m) = getField $ timestamp x
+        t = show m
         p = show $ getField $ payload x
         e = getField $ payload x
 
