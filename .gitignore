@@ -2,3 +2,8 @@ tags
 config.h
 ingestd
 dist/
+
+# test binaries
+check
+convert
+snippet
