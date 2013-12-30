@@ -9,12 +9,12 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DoAndIfThenElse    #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DoAndIfThenElse            #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
 module Vaultaire.Serialize.DiskFormat
 (
@@ -216,3 +216,4 @@ instance Show VaultPoint where
         vb = case getField $ valueBlob x of
                 Nothing -> ""
                 Just b' -> (S.unpack b') ++ "\n"
+

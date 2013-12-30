@@ -105,7 +105,7 @@ createDiskPoint p =
     case Core.payload p of
         Core.Empty       ->
             Protobuf.VaultPoint {
-                Protobuf.timestamp = putField $ Fixed $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = mempty,
@@ -113,7 +113,7 @@ createDiskPoint p =
             }
         Core.Numeric n   ->
             Protobuf.VaultPoint {
-                Protobuf.timestamp = putField $ Fixed $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.valueNumeric = putField (Just n),
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = mempty,
@@ -121,7 +121,7 @@ createDiskPoint p =
             }
         Core.Measurement r ->
             Protobuf.VaultPoint {
-                Protobuf.timestamp = putField $ Fixed $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = putField (Just r),
                 Protobuf.valueTextual = mempty,
@@ -129,7 +129,7 @@ createDiskPoint p =
             }
         Core.Textual t   ->
             Protobuf.VaultPoint {
-                Protobuf.timestamp = putField $ Fixed $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = putField (Just t),
@@ -137,7 +137,7 @@ createDiskPoint p =
             }
         Core.Blob b'     ->
             Protobuf.VaultPoint {
-                Protobuf.timestamp = putField $ Fixed $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = mempty,

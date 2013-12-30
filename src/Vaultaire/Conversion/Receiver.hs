@@ -50,11 +50,13 @@ convertToPoint x =
         Protobuf.REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ Protobuf.valueMeasurement x)
         Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual x)
         Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob x)
-    ss = getField $ Protobuf.source x       :: [Protobuf.SourceTag]
+    ss = getField $ Protobuf.source x          :: [Protobuf.SourceTag]
     as = map convertToMapEntry ss              :: [(Text,Text)]
     (Fixed m) = getField (Protobuf.timestamp x)
+    o = fromMaybe "" $ getField (Protobuf.origin x)
   in
     Core.Point {
+        Core.origin = o,
         Core.source = Map.fromList as,
         Core.timestamp = m,
         Core.payload = v

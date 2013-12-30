@@ -30,6 +30,7 @@ import Data.Word (Word32, Word64)
 
 
 data Point = Point {
+    origin    :: ByteString,
     source    :: Map Text Text,
     timestamp :: Word64,     -- ?
     payload   :: Value
@@ -59,5 +60,3 @@ instance Show Point where
 
 
 -}
-
-

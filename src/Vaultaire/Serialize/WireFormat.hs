@@ -29,13 +29,14 @@ import Data.Maybe (fromMaybe)
 import Data.ProtocolBuffers hiding (field)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.TypeLevel (D1, D2, D3, D4, D5, D6, D7)
+import Data.TypeLevel (D1, D2, D3, D4, D5, D6, D7, D8)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
 import Vaultaire.Serialize.Common
 
 data DataFrame = DataFrame {
+    origin           :: Optional D8 (Value ByteString),
     source           :: Repeated D1 (Message SourceTag),
     timestamp        :: Required D2 (Value (Fixed Word64)),
     payload          :: Required D3 (Enumeration ValueType),

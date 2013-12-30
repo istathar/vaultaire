@@ -52,6 +52,7 @@ createDataFrame p =
     case Core.payload p of
         Core.Empty       ->
             Protobuf.DataFrame {
+                Protobuf.origin = putField (Just $ Core.origin p),
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.EMPTY,
@@ -62,6 +63,7 @@ createDataFrame p =
             }
         Core.Numeric n   ->
             Protobuf.DataFrame {
+                Protobuf.origin = putField (Just $ Core.origin p),
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.NUMBER,
@@ -72,6 +74,7 @@ createDataFrame p =
             }
         Core.Measurement r ->
             Protobuf.DataFrame {
+                Protobuf.origin = putField (Just $ Core.origin p),
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.REAL,
@@ -82,6 +85,7 @@ createDataFrame p =
             }
         Core.Textual t   ->
             Protobuf.DataFrame {
+                Protobuf.origin = putField (Just $ Core.origin p),
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.TEXT,
@@ -92,6 +96,7 @@ createDataFrame p =
             }
         Core.Blob b'     ->
             Protobuf.DataFrame {
+                Protobuf.origin = putField (Just $ Core.origin p),
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.BINARY,
