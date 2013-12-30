@@ -69,31 +69,31 @@ createDiskContent p =
     case Core.payload p of
         Core.Empty       ->
             Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "0001",
+                Protobuf.origin = putField $ S.pack "FIXME",
                 Protobuf.source = putField tags,
                 Protobuf.payload = putField Protobuf.EMPTY
             }
         Core.Numeric _   ->
             Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "0001",
+                Protobuf.origin = putField $ S.pack "FIXME",
                 Protobuf.source = putField tags,
                 Protobuf.payload = putField Protobuf.NUMBER
             }
         Core.Measurement _ ->
             Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "0001",
+                Protobuf.origin = putField $ S.pack "FIXME",
                 Protobuf.source = putField tags,
                 Protobuf.payload = putField Protobuf.REAL
             }
         Core.Textual _   ->
             Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "0001",
+                Protobuf.origin = putField $ S.pack "FIXME",
                 Protobuf.source = putField tags,
                 Protobuf.payload = putField Protobuf.TEXT
             }
         Core.Blob _      ->
             Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "0001",
+                Protobuf.origin = putField $ S.pack "FIXME",
                 Protobuf.source = putField tags,
                 Protobuf.payload = putField Protobuf.BINARY
             }

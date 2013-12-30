@@ -37,6 +37,7 @@ import Debug.Trace
 --
 
 import Vaultaire.Conversion.Receiver
+import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Serialize.DiskFormat (Quantity(..),Compression(..))
@@ -183,6 +184,7 @@ testSerializeVaultPoint =
                 assertEqual "Incorrect de-serialization" pb1 pb2
 
                 let p2 = undefined
+                pendingWith "Implement Disk.VaultPoint -> Core.Point"
 
                 assertEqual "Point object converted not equal to original object" p1 p2
 
