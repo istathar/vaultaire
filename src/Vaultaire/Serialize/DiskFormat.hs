@@ -29,7 +29,6 @@ module Vaultaire.Serialize.DiskFormat
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import Data.Char (intToDigit)
 import Data.Int (Int64)
 import Data.List (intercalate)
 import Data.ProtocolBuffers hiding (field)
@@ -38,9 +37,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.TypeLevel (D1, D2, D3, D4, D5, D6, D7, D8)
 import Data.Word
-import Data.Word (Word32, Word64)
 import GHC.Generics (Generic)
-import Numeric (showIntAtBase)
 import Prelude hiding (and, or)
 
 import Vaultaire.Serialize.Common
@@ -81,7 +78,7 @@ instance Serialize VaultPrefix where
     get = do
         b <- getWord8
 
-        let w = b .&. 0x03       -- number of size bytes, 2^w
+        let w = b `and` 0x03       -- number of size bytes, 2^w
         s <- case w of
                     0x00    -> getWord8    >>= (return . fromIntegral)
                     0x01    -> getWord16le >>= (return . fromIntegral)
@@ -89,19 +86,19 @@ instance Serialize VaultPrefix where
                     0x03    -> getWord64le
                     _       -> error "Illegal width"
 
-        let c = case (b .&. 0x08) of
+        let c = case (b `and` 0x08) of
                     0x0     -> Normal
                     0x8     -> Compressed
                     _       -> error "Illegal compression"
 
-        let q = case (b .&. 0x04) of
+        let q = case (b `and` 0x04) of
                     0x0     -> Single
                     0x4     -> Multiple
                     _       -> error "Illegal quantity"
 
-        let v = (b .&. 0x70) `shiftR` 4     -- version bits
+        let v = (b `and` 0x70) `shiftR` 4     -- version bits
 
-        let e = b .&. 0x80                  -- extension bit
+        let e = b `and` 0x80                  -- extension bit
 
         return $ VaultPrefix {
                     version = v,
@@ -127,12 +124,12 @@ instance Serialize VaultPrefix where
                     Single      -> 0x00
                     Multiple    -> 0x04
 
-        let w | size x < 256        = 0x00
-              | size x < 65536      = 0x01
-              | size x < 4294967296 = 0x02
-              | otherwise           = 0x03
+        let w | size x <= 255        = 0x00     -- maxBound :: Word8
+              | size x <= 65535      = 0x01     -- maxBound :: Word16
+              | size x <= 4294967295 = 0x02     -- maxBound :: Word32
+              | otherwise            = 0x03
 
-        let b = e .|. v .|. c .|. q .|. w
+        let b = e `or` v `or` c `or` q `or` w
 
         putWord8 b
 
