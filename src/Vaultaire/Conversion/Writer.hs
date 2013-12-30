@@ -11,16 +11,12 @@
 
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE DoAndIfThenElse     #-}
 {-# LANGUAGE InstanceSigs        #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving  #-}
 
 module Vaultaire.Conversion.Writer (
-    DiskHeader(..),
-    Compression(..),
-    Quantity(..),
+    createDiskPrefix,
     createDiskContent,
     createDiskPoint,
     encodePoint
@@ -30,17 +26,26 @@ module Vaultaire.Conversion.Writer (
 -- Code begins
 --
 
-import Data.Bits
 import qualified Data.ByteString.Char8 as S
+import Data.Int (Int64)
 import qualified Data.Map.Strict as Map
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import Data.Text (Text)
-import Data.Word
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Serialize.DiskFormat as Protobuf
+import qualified Vaultaire.Serialize.DiskFormat as Disk
+
+createDiskPrefix :: Int64 -> Disk.VaultPrefix
+createDiskPrefix n =
+    Disk.VaultPrefix {
+        Disk.version = 0,
+        Disk.compression = Disk.Normal,
+        Disk.quantity = Disk.Single,
+        Disk.size = fromIntegral n
+    }
 
 
 {-
@@ -48,94 +53,6 @@ The code here is a direct adaptation of what was originally prototyped for
 DataFrame; as that represents the entire data schema and was written first,
 see there for more cohesive comments.
 -}
-
-data Compression = Normal | Compressed
-data Quantity = Single | Multiple
-
-data DiskHeader = DiskHeader {
-    version     :: Word8,
-    compression :: Compression,
-    quantity    :: Quantity,
-    size        :: Word64
-}
-
-deriving instance Show Quantity
-deriving instance Show Compression
-deriving instance Show DiskHeader
-
---
--- e v v v c m s s
--- 0 0 0 1 0 0 0 1  version 1, uncompressed, single item, 2 bytes size
---
-
-instance Serialize DiskHeader where
-
---  get :: Get DiskHeader
-    get = do
-        b <- getWord8
-
-        let w = b .&. 0x03       -- number of size bytes, 2^w
-        s <- case w of
-                    0x00    -> getWord8    >>= (return . fromIntegral)
-                    0x01    -> getWord16le >>= (return . fromIntegral)
-                    0x02    -> getWord32le >>= (return . fromIntegral)
-                    0x03    -> getWord64le
-                    _       -> error "Illegal width"
-
-        let c = case (b .&. 0x08) of
-                    0x0     -> Normal
-                    0x8     -> Compressed
-                    _       -> error "Illegal compression"
-
-        let q = case (b .&. 0x04) of
-                    0x0     -> Single
-                    0x4     -> Multiple
-                    _       -> error "Illegal quantity"
-
-        let v = (b .&. 0x70) `shiftR` 4     -- version bits
-
-        let e = b .&. 0x80                  -- extension bit
-
-        return $ DiskHeader {
-                    version = v,
-                    compression = c,
-                    quantity    = q,
-                    size = s
-                }
-
-
---  put :: Putter DiskHeader
-    put x = do
-        let e = if version x > 7
-            then error "Unimplemented for version > 7"
-            else 0x00
-
-        let v = (version x) `shiftL` 4
-
-        let c = case compression x of
-                    Normal      -> 0x00
-                    Compressed  -> 0x08
-
-        let q = case quantity x of
-                    Single      -> 0x00
-                    Multiple    -> 0x04
-
-        let w | size x < 256        = 0x00
-              | size x < 65536      = 0x01
-              | size x < 4294967296 = 0x02
-              | otherwise           = 0x03
-
-        let b = e .|. v .|. c .|. q .|. w
-
-        putWord8 b
-
-        case w of
-            0x00    -> putWord8 (fromIntegral $ size x)
-            0x01    -> putWord16le (fromIntegral $ size x)
-            0x02    -> putWord32le (fromIntegral $ size x)
-            0x03    -> putWord64le (fromIntegral $ size x)
-            _       -> error "Illegal width"
-
 
 --
 -- Conversion from our internal types to a the Data.Protobuf representation,
