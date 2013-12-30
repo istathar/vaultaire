@@ -17,6 +17,11 @@ module TestSuite where
 
 import Test.Hspec
 import Test.HUnit
+import Test.QuickCheck.Arbitrary (Arbitrary, arbitrary)
+import Test.QuickCheck (elements, property)
+
+import Control.Monad
+import Data.Word
 
 --
 -- Otherwise redundent imports, but useful for testing in GHCi.
@@ -141,19 +146,20 @@ testSerializeVaultHeader =
             Left err    -> assertFailure err
             Right h2    -> assertEqual "Incorrect deserialization" h1 h2
 
+instance Arbitrary Disk.Compression where
+    arbitrary = elements [Disk.Normal, Disk.Compressed]
+
+instance Arbitrary Disk.Quantity where
+    arbitrary = elements [Disk.Single, Disk.Multiple]
+
+instance Arbitrary Disk.VaultPrefix where
+    arbitrary = liftM4 Disk.VaultPrefix arbitrary arbitrary arbitrary arbitrary
 
 testRoundTripVaultHeader =
-  let
-    h1  = Disk.VaultPrefix 7 Compressed Multiple 42
-    h1' = S.pack [0x7a,0x2a]
-
-    h2  = Disk.VaultPrefix 0 Normal Single 65535
-    h2' = S.pack [0x01,0xff,0xff]
-  in do
-    it "round-trips correctly at boundaries" $ do
-        pendingWith "Waiting on QuickCheck"
-
-
+    it "round-trips correctly at boundaries"
+        (property $ \prefix ->
+            let decoded = either error id $ decode (encode prefix)
+                in decoded == (prefix :: Disk.VaultPrefix) )
 
 testSerializeVaultPoint =
   let

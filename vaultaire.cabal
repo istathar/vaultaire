@@ -50,6 +50,7 @@ test-suite           check
                      HUnit,
                      hspec,
                      hspec-expectations,
+                     QuickCheck,
                      bytestring,
                      text,
                      containers,
