@@ -37,7 +37,7 @@ import Vaultaire.Serialize.Common
 
 data DataFrame = DataFrame {
     source           :: Repeated D1 (Message SourceTag),
-    timestamp        :: Required D2 (Value Word64),
+    timestamp        :: Required D2 (Value (Fixed Word64)),
     payload          :: Required D3 (Enumeration ValueType),
     valueNumeric     :: Optional D4 (Value Int64),
     valueMeasurement :: Optional D5 (Value Double),

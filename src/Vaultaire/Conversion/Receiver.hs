@@ -52,10 +52,11 @@ convertToPoint x =
         Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob x)
     ss = getField $ Protobuf.source x       :: [Protobuf.SourceTag]
     as = map convertToMapEntry ss              :: [(Text,Text)]
+    (Fixed m) = getField (Protobuf.timestamp x)
   in
     Core.Point {
         Core.source = Map.fromList as,
-        Core.timestamp = getField (Protobuf.timestamp x),
+        Core.timestamp = m,
         Core.payload = v
     }
 

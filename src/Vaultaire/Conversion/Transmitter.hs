@@ -62,7 +62,7 @@ createDataFrame p =
         Core.Empty       ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.EMPTY,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
@@ -72,7 +72,7 @@ createDataFrame p =
         Core.Numeric n   ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.NUMBER,
                 Protobuf.valueNumeric = putField (Just n),
                 Protobuf.valueMeasurement = mempty,
@@ -82,7 +82,7 @@ createDataFrame p =
         Core.Measurement r ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.REAL,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = putField (Just r),
@@ -92,7 +92,7 @@ createDataFrame p =
         Core.Textual t   ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.TEXT,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
@@ -102,7 +102,7 @@ createDataFrame p =
         Core.Blob b'     ->
             Protobuf.DataFrame {
                 Protobuf.source = putField tags,
-                Protobuf.timestamp = putField $ Core.timestamp p,
+                Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.BINARY,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
