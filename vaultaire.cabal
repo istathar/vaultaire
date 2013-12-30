@@ -17,6 +17,11 @@ executable           ingestd
 
   build-depends:     base,
                      bytestring,
+                     text,
+                     containers,
+                     cereal,
+                     type-level,
+                     protobuf,
                      rados-haskell
 
   main-is:           ingestd.hs
@@ -32,6 +37,41 @@ executable           ingestd
                      -fno-warn-missing-signatures
                      -fno-warn-unused-binds
                      -fno-warn-unused-do-bind
+
+  ghc-prof-options:  -prof -fprof-auto-top
+
+
+test-suite           check
+  type:              exitcode-stdio-1.0
+
+  default-language:  Haskell2010
+
+  build-depends:     base,
+                     HUnit,
+                     hspec,
+                     hspec-expectations,
+                     bytestring,
+                     text,
+                     containers,
+                     cereal,
+                     type-level,
+                     protobuf,
+                     rados-haskell
+
+  hs-source-dirs:    src,tests
+  main-is:           check.hs
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -funbox-strict-fields
+                     -fno-warn-missing-signatures
+                     -fno-warn-unused-binds
+                     -fno-warn-unused-do-bind
+
+  include-dirs:      .
 
   ghc-prof-options:  -prof -fprof-auto-top
 

@@ -12,7 +12,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# OPTIONS -fno-warn-unused-imports #-}
 
 module Vaultaire.Conversion.Transmitter (
     createDataFrame,
@@ -28,21 +27,13 @@ module Vaultaire.Conversion.Transmitter (
 -- Code begins
 --
 
-import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import Data.Hex
-import Data.Int (Int64)
-import Data.List (intercalate)
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Typeable (Typeable)
-import Data.Word (Word32, Word64)
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
