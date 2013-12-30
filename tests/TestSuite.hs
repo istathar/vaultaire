@@ -17,6 +17,7 @@
 module TestSuite where
 
 import Test.Hspec
+import Test.Hspec.QuickCheck
 import Test.HUnit
 import Test.QuickCheck.Arbitrary (Arbitrary, arbitrary)
 import Test.QuickCheck (elements, property)
@@ -161,10 +162,14 @@ instance Arbitrary Disk.VaultPrefix where
     arbitrary = liftM5 Disk.VaultPrefix arbitrary arbitrary arbitrary arbitrary arbitrary
 
 testRoundTripVaultHeader =
-    it "round-trips correctly at boundaries"
-        (property $ \prefix ->
-            let decoded = either error id $ decode (encode prefix)
-                in decoded == (prefix :: Disk.VaultPrefix) )
+    prop "round-trips correctly at boundaries" prop_RoundTrip
+
+prop_RoundTrip :: Disk.VaultPrefix -> Bool
+prop_RoundTrip prefix =
+  let
+    decoded = either error id $ decode (encode prefix)
+  in
+    prefix == decoded
 
 testSerializeVaultPoint =
   let
