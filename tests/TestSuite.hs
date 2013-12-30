@@ -19,8 +19,8 @@ module TestSuite where
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.HUnit
-import Test.QuickCheck.Arbitrary (Arbitrary, arbitrary)
 import Test.QuickCheck (elements, property)
+import Test.QuickCheck.Arbitrary (Arbitrary, arbitrary)
 
 import Control.Monad
 import Data.Word
@@ -30,7 +30,8 @@ import Data.Word
 --
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as S
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as S
 import qualified Data.Map.Strict as Map
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (decode, encode)
@@ -47,7 +48,8 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
-import Vaultaire.Serialize.DiskFormat (Quantity(..),Compression(..))
+import Vaultaire.Persistence.Buckets
+import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
 
@@ -63,6 +65,9 @@ suite = do
 
     describe "a VaultPoint protobuf" $ do
         testSerializeVaultPoint
+
+    describe "objects in vault" $ do
+        testFormBucketLabel
 
 
 
@@ -84,6 +89,7 @@ testSerializeDataFrame =
 
         let x =
                 Protobuf.DataFrame {
+                    Protobuf.origin = putField (Just "perf_data"),
                     Protobuf.source = putField gs,
                     Protobuf.timestamp = putField 1387524524342329774,
                     Protobuf.payload = putField Protobuf.NUMBER,
@@ -107,6 +113,7 @@ testConvertPoint =
                 ("epoch", "1")]
 
         let msg = Core.Point {
+            Core.origin = "perf_data",
             Core.source = tags,
             Core.timestamp = 1386931666289201468,
             Core.payload = Core.Numeric 201468
@@ -137,11 +144,11 @@ testSerializeVaultHeader =
     it "serializes to the correct bytes" $ do
         let h' = encode h1
 
-        assertEqual "Incorrect number of bytes" 2 (S.length h')
-        assertEqual "Incorrect serialization" [0x7c,0x2a] (S.unpack h')
+        assertEqual "Incorrect number of bytes" 2 (B.length h')
+        assertEqual "Incorrect serialization" [0x7c,0x2a] (B.unpack h')
 
     it "deserializes to the correct object" $ do
-        let h' = S.pack [0x7c,0x2a]
+        let h' = B.pack [0x7c,0x2a]
 
         let eh2 = decode h'
 
@@ -180,6 +187,7 @@ testSerializeVaultPoint =
             ("epoch", "1")]
 
     p1 = Core.Point {
+        Core.origin = "perf_data",
         Core.source = tags,
         Core.timestamp = 1386931666289201468,
         Core.payload = Core.Numeric 201468
@@ -205,3 +213,45 @@ testSerializeVaultPoint =
                 assertEqual "Point object converted not equal to original object" p1 p2
 
 
+testFormBucketLabel =
+  let
+{-
+    b1 = Core.Bucket {
+        Core.origin = "perf_data",
+        Core.source2 = tags,
+        Core.timemark = 1388400000
+    }
+-}
+    t1 = Map.fromList
+           [("hostname", "web01.example.com"),
+            ("metric", "math-constants"),
+            ("datacenter", "lhr1")]
+
+    p1 = Core.Point {
+        Core.origin = "arithmetic",
+        Core.source = t1,
+        Core.timestamp = 1387929601271828182,       -- 25 Dec + e
+        Core.payload = Core.Measurement 2.718281    -- e
+    }
+
+    t2 = Map.fromList
+           [("metric", "math-constants"),
+            ("datacenter", "lhr1"),
+            ("hostname", "web01.example.com")]
+
+    p2 = Core.Point {
+        Core.origin = "arithmetic",
+        Core.source = t2,
+        Core.timestamp = 1387929601314159265,       -- 25 Dec + pi
+        Core.payload = Core.Measurement 3.141592        -- pi
+    }
+
+  in do
+    it "correctly forms an object label" $ do
+        let l1 = formBucketLabel p1
+        assertEqual "Incorrect label" (S.pack "v01_arithmetic_ABCD_1387900000") l1
+
+    it "two labels in same mark match" $ do
+        let l1 = formBucketLabel p1
+        let l2 = formBucketLabel p2
+        assertEqual "Map should be sorted, time mark div 10^6" l1 l2
