@@ -44,9 +44,11 @@ import Vaultaire.Serialize.Common
 
 and :: Bits a => a -> a -> a
 and = (.&.)
+{-# INLINE and #-}
 
 or :: Bits a => a -> a -> a
 or  = (.|.)
+{-# INLINE or #-}
 
 --
 -- Framing used to indicate size of disk blocks of data is VaultPrefix. Note
