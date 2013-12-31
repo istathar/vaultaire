@@ -1,6 +1,15 @@
 message VaultPoint {
         required fixed64 timestamp = 2;
 
+        enum Type {
+                EMPTY = 0;
+                NUMBER = 1;
+                REAL = 2;
+                TEXT = 3;
+                BINARY = 4;
+        }
+        required Type    payload = 3;
+
         optional int64   value_numeric = 4;
         optional double  value_measurement = 5;
         optional string  value_textual = 6;

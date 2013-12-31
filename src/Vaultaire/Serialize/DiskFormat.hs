@@ -163,8 +163,7 @@ instance Serialize VaultPrefix where
 
 data VaultContent = VaultContent {
     origin  :: Required D8 (Value ByteString),
-    source  :: Repeated D1 (Message SourceTag),
-    payload :: Required D3 (Enumeration ValueType)
+    source  :: Repeated D1 (Message SourceTag)
 } deriving (Generic, Eq)
 
 instance Encode VaultContent
@@ -174,16 +173,15 @@ instance Decode VaultContent
 instance Show VaultContent where
     show x =
         o ++ "\n" ++
-        s ++ "\n" ++
-        p
+        s
       where
         o = S.unpack $ (getField $ origin x)
         s = intercalate ",\n" $ map show (getField $ source x)
-        p = show $ getField $ payload x
 
 
 data VaultPoint = VaultPoint {
     timestamp        :: Required D2 (Value (Fixed Word64)),
+    payload          :: Required D3 (Enumeration ValueType),
     valueNumeric     :: Optional D4 (Value Int64),
     valueMeasurement :: Optional D5 (Value Double),
     valueTextual     :: Optional D6 (Value Text),

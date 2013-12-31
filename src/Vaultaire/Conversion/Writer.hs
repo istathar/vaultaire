@@ -67,37 +67,10 @@ createDiskContent p =
     tags =
            Map.elems $ Map.mapWithKey createSourceTag (Core.source p)
   in
-    case Core.payload p of
-        Core.Empty       ->
-            Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "FIXME",
-                Protobuf.source = putField tags,
-                Protobuf.payload = putField Protobuf.EMPTY
-            }
-        Core.Numeric _   ->
-            Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "FIXME",
-                Protobuf.source = putField tags,
-                Protobuf.payload = putField Protobuf.NUMBER
-            }
-        Core.Measurement _ ->
-            Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "FIXME",
-                Protobuf.source = putField tags,
-                Protobuf.payload = putField Protobuf.REAL
-            }
-        Core.Textual _   ->
-            Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "FIXME",
-                Protobuf.source = putField tags,
-                Protobuf.payload = putField Protobuf.TEXT
-            }
-        Core.Blob _      ->
-            Protobuf.VaultContent {
-                Protobuf.origin = putField $ S.pack "FIXME",
-                Protobuf.source = putField tags,
-                Protobuf.payload = putField Protobuf.BINARY
-            }
+    Protobuf.VaultContent {
+        Protobuf.origin = putField $ S.pack "FIXME",
+        Protobuf.source = putField tags
+    }
 
 
 createDiskPoint :: Core.Point -> Protobuf.VaultPoint
@@ -106,6 +79,7 @@ createDiskPoint p =
         Core.Empty       ->
             Protobuf.VaultPoint {
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
+                Protobuf.payload = putField Protobuf.EMPTY,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = mempty,
@@ -114,6 +88,7 @@ createDiskPoint p =
         Core.Numeric n   ->
             Protobuf.VaultPoint {
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
+                Protobuf.payload = putField Protobuf.NUMBER,
                 Protobuf.valueNumeric = putField (Just n),
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = mempty,
@@ -122,6 +97,7 @@ createDiskPoint p =
         Core.Measurement r ->
             Protobuf.VaultPoint {
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
+                Protobuf.payload = putField Protobuf.REAL,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = putField (Just r),
                 Protobuf.valueTextual = mempty,
@@ -130,6 +106,7 @@ createDiskPoint p =
         Core.Textual t   ->
             Protobuf.VaultPoint {
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
+                Protobuf.payload = putField Protobuf.TEXT,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = putField (Just t),
@@ -138,6 +115,7 @@ createDiskPoint p =
         Core.Blob b'     ->
             Protobuf.VaultPoint {
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
+                Protobuf.payload = putField Protobuf.BINARY,
                 Protobuf.valueNumeric = mempty,
                 Protobuf.valueMeasurement = mempty,
                 Protobuf.valueTextual = mempty,

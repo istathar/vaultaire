@@ -7,14 +7,6 @@ message VaultContent {
         }
         repeated SourceTag  source = 1;
 
-        enum Type {
-                EMPTY = 0;
-                NUMBER = 1;
-                REAL = 2;
-                TEXT = 3;
-                BINARY = 4;
-        }
-        required Type    payload = 3;
 }
 
 // vim: set expandtab tabstop=4:

@@ -47,6 +47,7 @@ import Debug.Trace
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
+import Vaultaire.Conversion.Reader
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
@@ -223,17 +224,20 @@ testSerializeVaultPoint =
         let pb1 = createDiskPoint p1
         let p1' = runPut $ encodeMessage pb1
 
-        assertEqual "Incorrect length" 13 (S.length p1')
+        assertEqual "Incorrect length" 15 (S.length p1')
 
-        let epb2 = runGet decodeMessage p1'
+        let p2' = p1'
+        let epb2 = runGet decodeMessage p2'
         case epb2 of
             Left err    -> assertFailure err
             Right pb2   -> do
                 assertEqual "Incorrect de-serialization" pb1 pb2
+                
+                let cb2 = undefined
 
-                let p2 = undefined
-                pendingWith "Implement Disk.VaultPoint -> Core.Point"
+                let p2 = convertVaultToPoint cb2 pb2
 
+                pendingWith "Define VaultContents conversion code"
                 assertEqual "Point object converted not equal to original object" p1 p2
 
 
