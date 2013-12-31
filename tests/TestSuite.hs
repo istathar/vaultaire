@@ -48,10 +48,10 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
+import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
-import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 
 suite :: Spec
 suite = do
@@ -106,25 +106,27 @@ testSerializeDataFrame =
 
 
 testConvertPoint =
-    it "serializes a Core.Point to a Protobuf.DataFrame" $ do
-        let tags = Map.fromList
-               [("hostname", "secure.example.org"),
-                ("metric", "eth0-tx-bytes"),
-                ("datacenter", "lhr1"),
-                ("epoch", "1")]
+  let
+    tags = Map.fromList
+           [("origin", "bletchley/testframe"),
+            ("hostname", "hut4"),
+            ("service_name", "bombe"),
+            ("metric", "runtime")]
 
-        let msg = Core.Point {
-            Core.origin = "perf_data",
-            Core.source = tags,
-            Core.timestamp = 1386931666289201468,
-            Core.payload = Core.Numeric 201468
-        }
+    msg = Core.Point {
+        Core.origin = S.empty,
+        Core.source = tags,
+        Core.timestamp = 1388482381430911607,
+        Core.payload = Core.Measurement 8.461049696649084
+    }
+  in
+    it "serializes a Core.Point to correct protobuf" $ do
+        let x1 = createDataFrame msg
+        let x1' = runPut $ encodeMessage x1
 
-        let y' = encodePoints [msg]
-        pendingWith "Waiting for sample protobuf"
-        assertEqual "Incorrect message content" B.empty y'
-        
-        -- 0x0A1E0A08686F73746E616D6512127365637572652E6578616D706C652E6F72670A170A066D6574726963120D657468302D74782D62797465730A120A0A6461746163656E74657212046C6872310A0A0A0565706F6368120131113C91E890005F3F13180120FCA50C
+        x0' <- S.readFile "tests/data/output_DataFrame.pb"
+        assertEqual "Incorrect message content" x0' x1'
+
 
 testReadFrame =
   let
@@ -135,14 +137,14 @@ testReadFrame =
             ("metric", "runtime")]
 
     msg = Core.Point {
-        Core.origin = "",
+        Core.origin = S.empty,
         Core.source = tags,
         Core.timestamp = 1388482381430911607,
         Core.payload = Core.Measurement 8.461049696649084
     }
   in
     it "deserializes an externally supplied DataFrame" $ do
-        x' <- S.readFile "tests/data/oneframe.pb"
+        x' <- S.readFile "tests/data/bletchley_DataFrame.pb"
 
         let ex = runGet decodeMessage x' :: Either String Protobuf.DataFrame
         case ex of
