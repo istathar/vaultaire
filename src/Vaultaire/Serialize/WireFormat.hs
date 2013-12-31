@@ -22,6 +22,7 @@ module Vaultaire.Serialize.WireFormat
 ) where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.Int (Int64)
 import Data.List (intercalate)
@@ -32,6 +33,7 @@ import qualified Data.Text as T
 import Data.TypeLevel (D1, D2, D3, D4, D5, D6, D7, D8)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
+import Text.Printf
 
 import Vaultaire.Serialize.Common
 
@@ -51,11 +53,13 @@ instance Decode DataFrame
 
 instance Show DataFrame where
     show x =
+        o ++ "\n" ++
         s ++ "\n" ++
         t ++ "\n" ++
         p ++ "\n" ++
         v
       where
+        o = S.unpack $ fromMaybe S.empty $ getField $ origin x
         s = intercalate ",\n" $ map show (getField $ source x)
         (Fixed m) = getField $ timestamp x
         t = show m
@@ -64,10 +68,13 @@ instance Show DataFrame where
 
         v = case e of
                 EMPTY   -> ""
-                NUMBER  ->  show $ fromMaybe 0 $ getField $ valueNumeric x
-                TEXT    ->  T.unpack $ fromMaybe "" $ getField $ valueTextual x
-                REAL    ->  show $ fromMaybe 0.0 $ getField $ valueMeasurement x
-                BINARY  ->  show $ fromMaybe S.empty $ getField $ valueBlob x
+                NUMBER  -> show $ fromMaybe 0 $ getField $ valueNumeric x
+                TEXT    -> T.unpack $ fromMaybe "" $ getField $ valueTextual x
+                REAL    -> show $ fromMaybe 0.0 $ getField $ valueMeasurement x
+                BINARY  -> "0x" ++ (toHex $ fromMaybe S.empty $ getField $ valueBlob x)
+
+        toHex :: ByteString -> String
+        toHex = concat . map (printf "%02x") . B.unpack
 
 
 data DataBurst = DataBurst {

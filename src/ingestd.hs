@@ -24,6 +24,7 @@ import Data.List.NonEmpty (fromList)
 import Data.Maybe (fromJust)
 import System.Environment (getArgs, getProgName)
 import System.ZMQ3.Monadic
+import Text.Groom
 
 import Vaultaire.Conversion.Receiver
 
@@ -49,8 +50,8 @@ main = do
             let eps = decodeBurst burst'
 
             liftIO $ case eps of
-                Left err    -> print err
-                Right ps    -> print ps
+                Left err    -> putStrLn err
+                Right ps    -> putStrLn $ groom ps
 
             liftIO $ putStrLn "----"
 
