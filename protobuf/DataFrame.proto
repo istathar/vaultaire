@@ -21,7 +21,7 @@ message DataFrame {
         optional string  value_textual = 6;
         optional bytes   value_blob = 7;
 
-        optional bytes   origin = 8
+        optional bytes   origin = 8;
 }
 
 // vim: set expandtab tabstop=8:
