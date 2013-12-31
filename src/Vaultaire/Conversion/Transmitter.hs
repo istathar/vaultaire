@@ -52,7 +52,7 @@ createDataFrame p =
     case Core.payload p of
         Core.Empty       ->
             Protobuf.DataFrame {
-                Protobuf.origin = putField (Just $ Core.origin p),
+                Protobuf.origin = originToField p,
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.EMPTY,
@@ -63,7 +63,7 @@ createDataFrame p =
             }
         Core.Numeric n   ->
             Protobuf.DataFrame {
-                Protobuf.origin = putField (Just $ Core.origin p),
+                Protobuf.origin = originToField p,
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.NUMBER,
@@ -74,7 +74,7 @@ createDataFrame p =
             }
         Core.Measurement r ->
             Protobuf.DataFrame {
-                Protobuf.origin = putField (Just $ Core.origin p),
+                Protobuf.origin = originToField p,
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.REAL,
@@ -85,7 +85,7 @@ createDataFrame p =
             }
         Core.Textual t   ->
             Protobuf.DataFrame {
-                Protobuf.origin = putField (Just $ Core.origin p),
+                Protobuf.origin = originToField p,
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.TEXT,
@@ -96,7 +96,7 @@ createDataFrame p =
             }
         Core.Blob b'     ->
             Protobuf.DataFrame {
-                Protobuf.origin = putField (Just $ Core.origin p),
+                Protobuf.origin = originToField p,
                 Protobuf.source = putField tags,
                 Protobuf.timestamp = putField (Fixed $ Core.timestamp p),
                 Protobuf.payload = putField Protobuf.BINARY,
@@ -105,6 +105,19 @@ createDataFrame p =
                 Protobuf.valueTextual = mempty,
                 Protobuf.valueBlob = putField (Just b')
             }
+
+--
+-- Only write the optional origin field if we have data for it. Otherwise you
+-- spend a couple bytes transmitting a field identifier and wire type followed
+-- by empty. Presumably putField Nothing would have worked too.
+--
+originToField p =
+  let
+    o' = Core.origin p
+  in
+    if S.null o'
+        then mempty
+        else putField (Just o')
 
 
 createSourceTag :: Text -> Text -> Protobuf.SourceTag
