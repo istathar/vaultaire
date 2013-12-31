@@ -16,23 +16,41 @@
 
 module Main where
 
+import Codec.Compression.LZ4
+import Control.Applicative
+import Control.Monad (forever)
+import qualified Data.ByteString as S
+import Data.List.NonEmpty (fromList)
+import Data.Maybe (fromJust)
+import System.ZMQ3.Monadic
+
+import Vaultaire.Conversion.Receiver
+
+main = runZMQ $ do
+    pull <- socket Pull
+    connect pull "tcp://10.42.149.3:5561"
+
+    acks <- socket Push
+    connect acks "tcp://10.42.149.3:5560"
+
+    forever $ do
+        [envelope', delimiter', message'] <- receiveMulti pull
+
+        let burst' = fromJust $ decompress message'
+
+        let eps = decodeBurst burst'
+
+        liftIO $ case eps of
+            Left err    -> print err
+            Right ps    -> print ps
+
+        liftIO $ putStrLn "----"
+
 --
--- Otherwise redundent imports, but useful for testing in GHCi.
+-- this works because we are manually following the rules of DEALER/ROUTER sockets
+-- which sends along (one or more) "envelope" messages in a multipart so that the
+-- downstream knows where to send acknowledgements to.
 --
 
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy as L
-import Data.Int (Int64)
-import Data.Map (Map)
-import qualified Data.Map.Strict as Map
-import Data.Serialize
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Text.Encoding
-import Data.Word (Word32, Word64)
-import Debug.Trace
+        sendMulti acks (fromList [envelope', delimiter', S.empty])
 
-
-main = do
-    putStrLn "Hello World"
