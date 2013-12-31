@@ -22,35 +22,44 @@ import Control.Monad (forever)
 import qualified Data.ByteString as S
 import Data.List.NonEmpty (fromList)
 import Data.Maybe (fromJust)
+import System.Environment (getArgs, getProgName)
 import System.ZMQ3.Monadic
 
 import Vaultaire.Conversion.Receiver
 
-main = runZMQ $ do
-    pull <- socket Pull
-    connect pull "tcp://10.42.149.3:5561"
+main = do
+    args <- getArgs
 
-    acks <- socket Push
-    connect acks "tcp://10.42.149.3:5560"
+    let broker = if length args == 1
+                    then head args
+                    else error "Specify broker hostname or IP address on command line"
 
-    forever $ do
-        [envelope', delimiter', message'] <- receiveMulti pull
+    runZMQ $ do
+        pull <- socket Pull
+        connect pull ("tcp://" ++ broker ++ ":5561")
 
-        let burst' = fromJust $ decompress message'
+        ack  <- socket Push
+        connect ack  ("tcp://" ++ broker ++ ":5560")
 
-        let eps = decodeBurst burst'
+        forever $ do
+            [envelope', delimiter', message'] <- receiveMulti pull
 
-        liftIO $ case eps of
-            Left err    -> print err
-            Right ps    -> print ps
+            let burst' = fromJust $ decompress message'
 
-        liftIO $ putStrLn "----"
+            let eps = decodeBurst burst'
+
+            liftIO $ case eps of
+                Left err    -> print err
+                Right ps    -> print ps
+
+            liftIO $ putStrLn "----"
 
 --
--- this works because we are manually following the rules of DEALER/ROUTER sockets
--- which sends along (one or more) "envelope" messages in a multipart so that the
--- downstream knows where to send acknowledgements to.
+-- We have to use sendMulti because we are manually following the rules of
+-- DEALER/ROUTER sockets which send along (one or more) "envelope" messages in
+-- a multipart so that the downstream knows where to send acknowledgements to; you
+-- return the
 --
 
-        sendMulti acks (fromList [envelope', delimiter', S.empty])
+            sendMulti ack (fromList [envelope', delimiter', S.empty])
 
