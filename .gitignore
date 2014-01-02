@@ -2,6 +2,7 @@ tags
 config.h
 ingestd
 dist/
+junk/
 
 # test binaries
 check
