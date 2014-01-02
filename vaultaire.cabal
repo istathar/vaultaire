@@ -18,8 +18,12 @@ executable           ingestd
   build-depends:     base,
                      bytestring,
                      text,
-                     containers,
+                     containers >= 0.5,
                      cereal,
+                     groom,
+                     lz4,
+                     semigroups,
+                     zeromq3-haskell,
                      type-level,
                      protobuf,
                      rados-haskell
