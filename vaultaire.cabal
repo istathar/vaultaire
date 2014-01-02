@@ -23,7 +23,7 @@ executable           ingestd
                      groom,
                      lz4,
                      semigroups,
-                     zeromq3-haskell,
+                     zeromq4-haskell,
                      type-level,
                      protobuf,
                      rados-haskell
@@ -56,8 +56,12 @@ test-suite           check
                      QuickCheck,
                      bytestring,
                      text,
-                     containers,
+                     containers >= 0.5,
                      cereal,
+                     groom,
+                     lz4,
+                     semigroups,
+                     zeromq4-haskell,
                      type-level,
                      protobuf,
                      rados-haskell

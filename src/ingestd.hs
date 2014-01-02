@@ -1,7 +1,7 @@
 --
 -- Data vault for metrics
 --
--- Copyright © 2013-     Anchor Systems, Pty Ltd and Others
+-- Copyright © 2013-2014 Anchor Systems, Pty Ltd and Others
 --
 -- The code in this file, and the program it is a part of, is
 -- made available to you by its authors as open source software:
@@ -23,7 +23,7 @@ import qualified Data.ByteString as S
 import Data.List.NonEmpty (fromList)
 import Data.Maybe (fromJust)
 import System.Environment (getArgs, getProgName)
-import System.ZMQ3.Monadic
+import System.ZMQ4.Monadic
 import Text.Groom
 
 import Vaultaire.Conversion.Receiver
