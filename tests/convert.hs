@@ -71,12 +71,12 @@ main = do
     putStrLn ""
 
     let p' = runPut $ encodeMessage pb
-    putStrLn $ toHex p'
+    putStrLn $ "0x" ++ toHex p'
 
     putStrLn ""
     S.putStrLn $ Bucket.formObjectLabel p
 
 
 toHex :: ByteString -> String
-toHex = concat . map (printf "%02x") . B.unpack
+toHex = concat . map (printf "%02X") . B.unpack
 

@@ -44,10 +44,10 @@ import Debug.Trace
 -- What we're actually testing.
 --
 
+import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
-import Vaultaire.Conversion.Reader
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
@@ -232,7 +232,7 @@ testSerializeVaultPoint =
             Left err    -> assertFailure err
             Right pb2   -> do
                 assertEqual "Incorrect de-serialization" pb1 pb2
-                
+
                 let cb2 = undefined
 
                 let p2 = convertVaultToPoint cb2 pb2

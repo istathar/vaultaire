@@ -74,7 +74,7 @@ instance Show DataFrame where
                 BINARY  -> "0x" ++ (toHex $ fromMaybe S.empty $ getField $ valueBlob x)
 
         toHex :: ByteString -> String
-        toHex = concat . map (printf "%02x") . B.unpack
+        toHex = concat . map (printf "%02X") . B.unpack
 
 
 data DataBurst = DataBurst {
