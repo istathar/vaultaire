@@ -9,16 +9,23 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS -fno-warn-orphans #-}
 
 module Vaultaire.Persistence.ObjectFormat (
     formObjectLabel
 ) where
 
 import qualified Data.ByteString.Char8 as S
+import Data.Map.Strict (Map)
+import Data.Serialize
+import Data.Text (Text)
+import qualified Data.Text.Encoding as T
 import Data.Word
 
 import qualified Vaultaire.Internal.CoreTypes as Core
+import Vaultaire.Persistence.Hashes
 
 --
 -- Number of seconds per bucket
@@ -56,10 +63,33 @@ formObjectLabel :: Core.Point -> S.ByteString
 formObjectLabel p =
     S.intercalate "_" [o', s', t']
   where
-    o' = Core.origin p
-    s' = "ABCD"
+    o' = hashOriginName $ Core.origin p
+    s' = hashSourceDict $ Core.source p
     t  = (Core.timestamp p) `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t * windowSize)
 
--- HERE hashable? TODO FIXME
 
+hashOriginName :: S.ByteString -> S.ByteString
+hashOriginName m =
+  let
+    m' = encode m
+  in
+    hashStringToBase62 6 m'
+
+
+hashSourceDict :: Map Text Text -> S.ByteString
+hashSourceDict m =
+  let
+    m' = encode m
+  in
+    hashStringToBase62 20 m'
+
+
+instance Serialize Text where
+--  put :: Text -> Put
+    put t = putByteString $ T.encodeUtf8 t
+
+--  get :: Get Text
+    get = do
+        x' <- getByteString 0
+        return $ T.decodeUtf8 x'

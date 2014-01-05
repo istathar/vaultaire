@@ -16,10 +16,7 @@
 
 module Vaultaire.Persistence.Hashes
 (
-    encode,
-    decode,
-    convert,
-    digest
+    hashStringToBase62
 ) where
 
 
@@ -99,12 +96,18 @@ digest ws =
     x' = S.pack ws
 
 
-convert :: String -> String
-convert cs =
-    r
+--
+-- | Take an arbitrary string, hash it, then encode it as a short
+-- @digits@-long base62 string.
+--
+hashStringToBase62 :: Int -> S.ByteString -> S.ByteString
+hashStringToBase62 digits s' =
+    r'
   where
-    r  = encode x
-    x  = mod n limit
-    n  = digest cs
-    limit = 62 ^ (5 :: Int)
+    s = S.unpack s'
+    n  = digest s           -- SHA1 hash
+    limit = 62 ^ digits
+    x  = mod n limit        -- trim to 5 baes62 digits
+    r  = encode x           -- convert to String
+    r' = S.pack r
 

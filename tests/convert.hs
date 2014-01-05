@@ -43,6 +43,7 @@ import Text.Printf
 
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
+import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 
 main = do
     let tags = Map.fromList
@@ -52,8 +53,8 @@ main = do
             ("epoch", "1")]
 
     let p = Point {
-        origin = "",
-        source = SourceMap tags,
+        origin = "perf_data/syd1/127.0.0.1",
+        source = tags,
         timestamp = 1386931666289201468,
         payload = Numeric 201468
 --      payload = Textual "66.249.74.101 - - [12/Nov/2013:04:02:20 +1100] \"GET /the-politics-of-praise-william-w-young-iii/prod9780754656463.html HTTP/1.1\" 200 15695 \"-\" \"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\""
@@ -71,6 +72,9 @@ main = do
 
     let p' = runPut $ encodeMessage pb
     putStrLn $ toHex p'
+
+    putStrLn ""
+    S.putStrLn $ Bucket.formObjectLabel p
 
 
 toHex :: ByteString -> String
