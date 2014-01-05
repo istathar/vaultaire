@@ -53,7 +53,7 @@ main = do
             ("epoch", "1")]
 
     let p = Point {
-        origin = "perf_data/syd1/127.0.0.1",
+        origin = "perf_data",
         source = tags,
         timestamp = 1386931666289201468,
         payload = Numeric 201468

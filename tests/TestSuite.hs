@@ -69,6 +69,7 @@ suite = do
         testSerializeVaultPoint
 
     describe "objects in vault" $ do
+        testOriginNameTidying
         testFormBucketLabel
 
 
@@ -240,6 +241,16 @@ testSerializeVaultPoint =
                 pendingWith "Define VaultContents conversion code"
                 assertEqual "Point object converted not equal to original object" p1 p2
 
+testOriginNameTidying =
+  let
+    o1' = "perf_data"
+    o2' = (Bucket.tidyOriginName o1')
+  in
+    it "appropriate tidying of origin name" $ do
+        assertEqual "Incorrect sanitization of origin name" 
+            "perfdata::" o2'
+
+
 
 testFormBucketLabel =
   let
@@ -271,14 +282,14 @@ testFormBucketLabel =
         Core.origin = "arithmetic",
         Core.source = t2,
         Core.timestamp = 1387929601314159265,       -- 25 Dec + pi
-        Core.payload = Core.Measurement 3.141592        -- pi
+        Core.payload = Core.Measurement 3.141592    -- pi
     }
 
   in do
     it "correctly forms an object label" $ do
         let l1 = Bucket.formObjectLabel p1
         assertEqual "Incorrect label"
-            (S.pack "arithmetic_ABCD_1387900000") l1
+            (S.pack "01_arithmetic_fmp7RtQKcPqVLiAQgAUB_1387900000") l1
 
     it "two labels in same mark match" $ do
         let l1 = Bucket.formObjectLabel p1

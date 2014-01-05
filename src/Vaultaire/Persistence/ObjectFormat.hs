@@ -14,7 +14,10 @@
 {-# OPTIONS -fno-warn-orphans #-}
 
 module Vaultaire.Persistence.ObjectFormat (
-    formObjectLabel
+    formObjectLabel,
+
+    -- for testing
+    tidyOriginName
 ) where
 
 import Data.ByteString (ByteString)
@@ -24,6 +27,7 @@ import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word
+import Data.Char
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Persistence.Hashes
@@ -74,18 +78,23 @@ formObjectLabel :: Core.Point -> S.ByteString
 formObjectLabel p =
     S.intercalate "_" [__EPOCH__, o', s', t']
   where
-    o' = hashOriginName $ Core.origin p
+    o' = tidyOriginName $ Core.origin p
     s' = hashSourceDict $ Core.source p
     t  = (Core.timestamp p) `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t * windowSize)
 
 
-hashOriginName :: S.ByteString -> S.ByteString
-hashOriginName m =
+tidyOriginName :: S.ByteString -> S.ByteString
+tidyOriginName o' =
   let
-    m' = encode m
+    width = 10
+
+    predicate :: Char -> Bool
+    predicate c = isAscii c && isPrint c && (c /= '_')
+
+    n' = S.append (S.filter predicate o') (S.replicate width ':')
   in
-    hashStringToBase62 6 m'
+    S.take width n'
 
 
 hashSourceDict :: Map Text Text -> S.ByteString
