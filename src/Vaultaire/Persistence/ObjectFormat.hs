@@ -17,6 +17,7 @@ module Vaultaire.Persistence.ObjectFormat (
     formObjectLabel
 ) where
 
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Map.Strict (Map)
 import Data.Serialize
@@ -28,7 +29,17 @@ import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Persistence.Hashes
 
 --
--- Number of seconds per bucket
+-- Epoch version of the bucket object labels. This is only a sanity guard.
+-- Different object label versions must be in different pools, as there is (by
+-- design) no logic to probe for differnt epoch versions; the code reading a
+-- given pool should know the one [and only one] epoch it is valid for.
+--
+
+__EPOCH__ :: ByteString
+__EPOCH__ = "01"
+
+--
+-- Number of seconds per bucket.
 --
 
 __WINDOW_SIZE__ :: Int
@@ -61,7 +72,7 @@ nanoseconds = fromIntegral $ (1000000000 :: Int)
 --
 formObjectLabel :: Core.Point -> S.ByteString
 formObjectLabel p =
-    S.intercalate "_" [o', s', t']
+    S.intercalate "_" [__EPOCH__, o', s', t']
   where
     o' = hashOriginName $ Core.origin p
     s' = hashSourceDict $ Core.source p
