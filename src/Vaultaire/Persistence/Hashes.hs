@@ -1,7 +1,7 @@
 --
 -- Data vault for metrics
 --
--- Copyright © 2011-2012 Operational Dynamics Consulting, Pty Ltd
+-- Copyright © 2011-2014 Operational Dynamics Consulting, Pty Ltd
 -- Copyright © 2014-     Anchor Systems, Pty Ltd
 --
 -- The code in this file, and the program it is a part of, is
@@ -14,17 +14,23 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Hashes (encode, decode, convert, digest) where
+module Vaultaire.Persistence.Hashes
+(
+    encode,
+    decode,
+    convert,
+    digest
+) where
+
 
 import Prelude hiding (toInteger)
 
-import Numeric (showIntAtBase)
+import Crypto.Hash.SHA1 as Crypto
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Char (isDigit, isUpper, isLower, chr, ord)
-import Crypto.Hash.SHA1 as SHA1
+import Data.Char (chr, isDigit, isLower, isUpper, ord)
 import Data.Word
+import Numeric (showIntAtBase)
 
 --
 -- Conversion between decimal and base 62
@@ -89,7 +95,7 @@ digest ws =
   where
     i  = concatToInteger h
     h  = B.unpack h'
-    h' = SHA1.hash x'
+    h' = Crypto.hash x'
     x' = S.pack ws
 
 
@@ -100,5 +106,5 @@ convert cs =
     r  = encode x
     x  = mod n limit
     n  = digest cs
-    limit = 62 ^ 5
+    limit = 62 ^ (5 :: Int)
 
