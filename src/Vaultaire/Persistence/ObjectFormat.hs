@@ -102,7 +102,7 @@ hashSourceDict m =
   let
     m' = encode m
   in
-    hashStringToBase62 20 m'
+    hashStringToBase62 27 m'
 
 
 instance Serialize Text where

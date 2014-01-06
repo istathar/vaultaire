@@ -44,12 +44,12 @@ toBase62 :: Integer -> String
 toBase62 x =
     showIntAtBase 62 represent x ""
 
-encode :: Integer -> String
-encode x =
+padWithZeros :: Int -> Integer -> String
+padWithZeros digits x =
     pad ++ str
   where
-    pad = take len "00000"
-    len = 5 - length str
+    pad = take len (replicate digits '0')
+    len = digits - length str
     str = toBase62 x
 
 
@@ -97,7 +97,7 @@ digest ws =
 
 
 --
--- | Take an arbitrary string, hash it, then encode it as a short
+-- | Take an arbitrary string, hash it, then padWithZeros it as a short
 -- @digits@-long base62 string.
 --
 hashStringToBase62 :: Int -> S.ByteString -> S.ByteString
@@ -105,9 +105,9 @@ hashStringToBase62 digits s' =
     r'
   where
     s = S.unpack s'
-    n  = digest s           -- SHA1 hash
+    n  = digest s               -- SHA1 hash
     limit = 62 ^ digits
-    x  = mod n limit        -- trim to 5 baes62 digits
-    r  = encode x           -- convert to String
+    x  = mod n limit            -- trim to specified number base62 chars
+    r  = padWithZeros digits x  -- convert to String
     r' = S.pack r
 
