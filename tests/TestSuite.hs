@@ -49,11 +49,11 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
+import Vaultaire.Persistence.Locators (fromLocator16, toLocator16)
 import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
-import Vaultaire.Persistence.Locators (fromLocator16, toLocator16)
 
 suite :: Spec
 suite = do
@@ -280,7 +280,7 @@ testFormBucketLabel =
     it "correctly forms an object label" $ do
         let l1 = Bucket.formObjectLabel p1
         assertEqual "Incorrect label"
-            (S.pack "01_91UZKZ_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l1
+            (S.pack "01_YM9Z1Z_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l1
 
     it "two labels in same mark match" $ do
         let l1 = Bucket.formObjectLabel p1

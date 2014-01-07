@@ -22,12 +22,12 @@ module Vaultaire.Persistence.ObjectFormat (
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.Char
 import Data.Map.Strict (Map)
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word
-import Data.Char
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Persistence.Hashes

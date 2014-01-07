@@ -32,28 +32,27 @@ import Numeric (showIntAtBase)
 
 {-
 
-1    ['A','J','K','8']
-2    ['B','C','D','E','G','P','T','V', 'Z' '3']
+    ['A','J','K','8']
+    ['B','C','D','E','G','P','T','V', 'Z' '3']
     -- 'Z' because Americans can't pronounce Zed properly.
-3    ['F','S']
+    ['F','S']
     -- don't use 'S', conflicts '5' in handwriting.
-4    ['H']
-5    ['I','Y','5']
-     ['L']
+    ['H']
+    ['I','Y','5']
+    ['L']
     -- suspect; scores low in readback tests
-6    ['M', 'N']
-     ['O', '0']
+    ['M', 'N']
+    ['O', '0']
     -- can't tell the difference between 'O' and '0', and meanwhile people screw up 'Q' all the time.
-8    ['Q','U','W','2']
-9    ['R']
-0    ['X','6']
-     ['1']
+    ['Q','U','W','2']
+    ['R']
+    ['X','6']
+    ['1']
     -- conflicts with lower case 'l' and upper case 'I'
-D    ['4'] 
-     ['7']
-    -- disqualified, looks like '1' to Europeans
-F    ['9']
-
+    ['4']
+    ['7']
+    -- looks like '1' to Europeans
+    ['9']
 -}
 
 
@@ -65,20 +64,20 @@ represent :: Int -> Char
 represent x =
     case x of
         0   -> '0'
-        1   -> 'K'
-        2   -> 'F'
-        3   -> 'V'
-        4   -> 'H'
-        5   -> 'Y'
-        6   -> 'M'
-        7   -> 'R'
-        8   -> 'X'
-        9   -> 'U'
-        10  -> '1'
-        11  -> '4'
-        12  -> '7'
-        13  -> '8'
-        14  -> '9'
+        1   -> '1'
+        2   -> 'C'
+        3   -> 'F'
+        4   -> '4'
+        5   -> 'H'
+        6   -> 'K'
+        7   -> '7'
+        8   -> '8'
+        9   -> '9'
+        10  -> 'M'
+        11  -> 'R'
+        12  -> 'U'
+        13  -> 'X'
+        14  -> 'Y'
         15  -> 'Z'
         _   -> error "Illegal character"
 
@@ -87,38 +86,52 @@ value :: Char -> Int
 value c =
     case c of
         '0' -> 0
-        'K' -> 1
-        'F' -> 2
-        'V' -> 3
-        'H' -> 4
-        'Y' -> 5
-        'M' -> 6
-        'R' -> 7
-        'X' -> 8
-        'U' -> 9
-        '1' -> 10
-        '4' -> 11
-        '7' -> 12
-        '8' -> 13
-        '9' -> 14
+        '1' -> 1
+        'C' -> 2
+        'F' -> 3
+        '4' -> 4
+        'H' -> 5
+        'K' -> 6
+        '7' -> 7
+        '8' -> 8
+        '9' -> 9
+        'M' -> 10
+        'R' -> 11
+        'U' -> 12
+        'X' -> 13
+        'Y' -> 14
         'Z' -> 15
 
         -- and now, some preliminary human error catching
         'o' -> 0
         'O' -> 0
-        'k' -> 1
-        'f' -> 2
-        'v' -> 3
-        'h' -> 4
-        'y' -> 5
-        'm' -> 6
-        'r' -> 7
-        'x' -> 8
-        'u' -> 9
-        'l' -> 10
-        'i' -> 10
-        'I' -> 10
-        'L' -> 10
+        'q' -> 0
+        'Q' -> 0
+        'l' -> 1
+        'i' -> 1
+        'I' -> 1
+        'L' -> 1
+        'c' -> 2
+        'd' -> 2
+        'e' -> 2
+        'g' -> 2
+        'p' -> 2
+        't' -> 2
+        'T' -> 2
+        'v' -> 2
+        'V' -> 2
+        'f' -> 3
+        'h' -> 5
+        'k' -> 6
+        'm' -> 10
+        'n' -> 10
+        'r' -> 11
+        'u' -> 12
+        'w' -> 12
+        'W' -> 12
+        'x' -> 13
+        '6' -> 13
+        'y' -> 14
         'z' -> 15
         '2' -> 15
         _   -> error "Illegal digit"
