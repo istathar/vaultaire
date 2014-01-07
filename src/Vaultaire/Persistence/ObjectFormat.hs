@@ -31,6 +31,7 @@ import Data.Char
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Persistence.Hashes
+import Vaultaire.Persistence.Locators
 
 --
 -- Epoch version of the bucket object labels. This is only a sanity guard.
@@ -78,7 +79,7 @@ formObjectLabel :: Core.Point -> S.ByteString
 formObjectLabel p =
     S.intercalate "_" [__EPOCH__, o', s', t']
   where
-    o' = tidyOriginName $ Core.origin p
+    o' = hashOriginName $ Core.origin p
     s' = hashSourceDict $ Core.source p
     t  = (Core.timestamp p) `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t * windowSize)
@@ -95,6 +96,11 @@ tidyOriginName o' =
     n' = S.append (S.filter predicate o') (S.replicate width ':')
   in
     S.take width n'
+
+
+hashOriginName :: S.ByteString -> S.ByteString
+hashOriginName o' =
+    hashStringToLocator16 6 o'
 
 
 hashSourceDict :: Map Text Text -> S.ByteString
