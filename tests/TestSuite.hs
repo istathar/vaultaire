@@ -53,6 +53,7 @@ import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
+import Vaultaire.Persistence.Locators (fromLocator16, toLocator16)
 
 suite :: Spec
 suite = do
@@ -70,6 +71,7 @@ suite = do
 
     describe "objects in vault" $ do
         testOriginNameTidying
+        testRoundTripLocator16
         testFormBucketLabel
 
 
@@ -295,3 +297,15 @@ testFormBucketLabel =
         let l1 = Bucket.formObjectLabel p1
         let l2 = Bucket.formObjectLabel p2
         assertEqual "Map should be sorted, time mark div 10^6" l1 l2
+
+testRoundTripLocator16 =
+    prop "safe conversion to/from Locator16" prop_Locator16
+
+prop_Locator16 :: Int -> Bool
+prop_Locator16 i =
+  let
+    n = abs i
+    decoded = fromLocator16 (toLocator16 n)
+  in
+    n == decoded
+
