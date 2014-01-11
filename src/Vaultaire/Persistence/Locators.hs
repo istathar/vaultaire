@@ -67,20 +67,20 @@ import Numeric (showIntAtBase)
 data Locator
     = Zero      --  0
     | One       --  1
-    | Charlie   --  2
-    | Foxtrot   --  3
+    | Two       --  2
+    | Charlie   --  3
     | Four      --  4
-    | Hotel     --  5
-    | Kilo      --  6
+    | Foxtrot   --  5
+    | Hotel     --  6
     | Seven     --  7
     | Eight     --  8
     | Nine      --  9
-    | Mike      -- 10
-    | Romeo     -- 11
-    | Uniform   -- 12
-    | XRay      -- 13
-    | Yankee    -- 14
-    | Zulu      -- 15
+    | Kilo      -- 10
+    | Lima      -- 11
+    | Mike      -- 12
+    | Romeo     -- 13
+    | XRay      -- 14
+    | Yankee    -- 15
     deriving (Eq, Ord, Enum, Bounded)
 
 
@@ -100,20 +100,20 @@ locatorToDigit x =
     case x of
         Zero    -> '0'
         One     -> '1'
+        Two     -> '2'
         Charlie -> 'C'
-        Foxtrot -> 'F'
         Four    -> '4'
+        Foxtrot -> 'F'
         Hotel   -> 'H'
-        Kilo    -> 'K'
         Seven   -> '7'
         Eight   -> '8'
         Nine    -> '9'
+        Kilo    -> 'K'
+        Lima    -> 'L'
         Mike    -> 'M'
         Romeo   -> 'R'
-        Uniform -> 'U'
         XRay    -> 'X'
         Yankee  -> 'Y'
-        Zulu    -> 'Z'
 
 
 value :: Char -> Int
@@ -126,20 +126,20 @@ digitToLocator c =
     case c of
         '0' -> Zero
         '1' -> One
+        '2' -> Two
         'C' -> Charlie
-        'F' -> Foxtrot
         '4' -> Four
+        'F' -> Foxtrot
         'H' -> Hotel
-        'K' -> Kilo
         '7' -> Seven
         '8' -> Eight
         '9' -> Nine
+        'K' -> Kilo
+        'L' -> Lima
         'M' -> Mike
         'R' -> Romeo
-        'U' -> Uniform
         'X' -> XRay
         'Y' -> Yankee
-        'Z' -> Zulu
         _   -> error "Illegal digit"
 
 

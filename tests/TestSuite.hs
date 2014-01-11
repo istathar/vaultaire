@@ -49,7 +49,7 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
-import Vaultaire.Persistence.Locators (fromLocator16, toLocator16)
+import Vaultaire.Persistence.Locators
 import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
@@ -71,6 +71,7 @@ suite = do
 
     describe "objects in vault" $ do
         testRoundTripLocator16
+        testKnownLocator16a
         testFormBucketLabel
 
 
@@ -280,7 +281,7 @@ testFormBucketLabel =
     it "correctly forms an object label" $ do
         let l1 = Bucket.formObjectLabel p1
         assertEqual "Incorrect label"
-            (S.pack "01_YM9Z1Z_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l1
+            (S.pack "01_XK9Y10_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l1
 
     it "two labels in same mark match" $ do
         let l1 = Bucket.formObjectLabel p1
@@ -298,4 +299,15 @@ prop_Locator16 i =
     decoded = fromLocator16 (toLocator16 n)
   in
     n == decoded
+
+
+--
+-- Have to do these manually, since Locator16a is not round-trip safe.
+--
+testKnownLocator16a =
+    it "constrains Locator16a to unique digits" $ do
+        assertEqual "Incorrect result" "12C4FH" (toLocator16a 0x111111)
+        assertEqual "Incorrect result" "789KLM" (toLocator16a 0x777777)
+        assertEqual "Incorrect result" "MRXY01" (toLocator16a 0xCCCCCC)
+
 
