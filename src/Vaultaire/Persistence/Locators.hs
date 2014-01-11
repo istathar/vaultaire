@@ -16,9 +16,10 @@
 
 module Vaultaire.Persistence.Locators
 (
-    hashStringToLocator16,
+    fromLocator16,
     toLocator16,
-    fromLocator16
+    toLocator16a,
+    hashStringToLocator16a
 ) where
 
 
@@ -27,6 +28,9 @@ import Prelude hiding (toInteger)
 import Crypto.Hash.SHA1 as Crypto
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
+import Data.List (mapAccumL)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Word
 import Numeric (showIntAtBase)
 
@@ -57,83 +61,85 @@ import Numeric (showIntAtBase)
 
 
 --
--- Conversion between decimal and base 16
+-- Conversion between decimal and locator 16
 --
 
+data Locator
+    = Zero      --  0
+    | One       --  1
+    | Charlie   --  2
+    | Foxtrot   --  3
+    | Four      --  4
+    | Hotel     --  5
+    | Kilo      --  6
+    | Seven     --  7
+    | Eight     --  8
+    | Nine      --  9
+    | Mike      -- 10
+    | Romeo     -- 11
+    | Uniform   -- 12
+    | XRay      -- 13
+    | Yankee    -- 14
+    | Zulu      -- 15
+    deriving (Eq, Ord, Enum, Bounded)
+
+
+instance Show Locator where
+    show x = [c]
+      where
+        c = locatorToDigit x
+
+
 represent :: Int -> Char
-represent x =
+represent n =
+    locatorToDigit $ toEnum n
+
+
+locatorToDigit :: Locator -> Char
+locatorToDigit x =
     case x of
-        0   -> '0'
-        1   -> '1'
-        2   -> 'C'
-        3   -> 'F'
-        4   -> '4'
-        5   -> 'H'
-        6   -> 'K'
-        7   -> '7'
-        8   -> '8'
-        9   -> '9'
-        10  -> 'M'
-        11  -> 'R'
-        12  -> 'U'
-        13  -> 'X'
-        14  -> 'Y'
-        15  -> 'Z'
-        _   -> error "Illegal character"
+        Zero    -> '0'
+        One     -> '1'
+        Charlie -> 'C'
+        Foxtrot -> 'F'
+        Four    -> '4'
+        Hotel   -> 'H'
+        Kilo    -> 'K'
+        Seven   -> '7'
+        Eight   -> '8'
+        Nine    -> '9'
+        Mike    -> 'M'
+        Romeo   -> 'R'
+        Uniform -> 'U'
+        XRay    -> 'X'
+        Yankee  -> 'Y'
+        Zulu    -> 'Z'
 
 
 value :: Char -> Int
 value c =
-    case c of
-        '0' -> 0
-        '1' -> 1
-        'C' -> 2
-        'F' -> 3
-        '4' -> 4
-        'H' -> 5
-        'K' -> 6
-        '7' -> 7
-        '8' -> 8
-        '9' -> 9
-        'M' -> 10
-        'R' -> 11
-        'U' -> 12
-        'X' -> 13
-        'Y' -> 14
-        'Z' -> 15
+    fromEnum $ digitToLocator c
 
-        -- and now, some preliminary human error catching
-        'o' -> 0
-        'O' -> 0
-        'q' -> 0
-        'Q' -> 0
-        'l' -> 1
-        'i' -> 1
-        'I' -> 1
-        'L' -> 1
-        'c' -> 2
-        'd' -> 2
-        'e' -> 2
-        'g' -> 2
-        'p' -> 2
-        't' -> 2
-        'T' -> 2
-        'v' -> 2
-        'V' -> 2
-        'f' -> 3
-        'h' -> 5
-        'k' -> 6
-        'm' -> 10
-        'n' -> 10
-        'r' -> 11
-        'u' -> 12
-        'w' -> 12
-        'W' -> 12
-        'x' -> 13
-        '6' -> 13
-        'y' -> 14
-        'z' -> 15
-        '2' -> 15
+
+digitToLocator :: Char -> Locator
+digitToLocator c =
+    case c of
+        '0' -> Zero
+        '1' -> One
+        'C' -> Charlie
+        'F' -> Foxtrot
+        '4' -> Four
+        'H' -> Hotel
+        'K' -> Kilo
+        '7' -> Seven
+        '8' -> Eight
+        '9' -> Nine
+        'M' -> Mike
+        'R' -> Romeo
+        'U' -> Uniform
+        'X' -> XRay
+        'Y' -> Yankee
+        'Z' -> Zulu
         _   -> error "Illegal digit"
 
 
@@ -141,13 +147,44 @@ toLocator16 :: Int -> String
 toLocator16 x =
     showIntAtBase 16 represent x ""
 
+
+toLocator16a :: Int -> String
+toLocator16a n =
+  let
+    ls = convert n []
+    (_,us) = mapAccumL uniq Set.empty ls
+  in
+    map locatorToDigit us
+  where
+    convert :: Int -> [Locator] -> [Locator]
+    convert 0 xs = xs
+    convert i xs =
+      let
+        (d,r) = divMod i 16
+        x = toEnum r
+      in
+        convert d (x:xs)
+
+    uniq :: Set Locator -> Locator -> (Set Locator, Locator)
+    uniq s x =
+        if Set.member x s
+            then uniq s (subsequent x)
+            else (Set.insert x s, x)
+
+    subsequent :: Locator -> Locator
+    subsequent x =
+        if x == maxBound
+            then minBound
+            else succ x
+
+
 padWithZeros :: Int -> Int -> String
 padWithZeros digits x =
     pad ++ str
   where
     pad = take len (replicate digits '0')
     len = digits - length str
-    str = toLocator16 x
+    str = toLocator16a x
 
 
 multiply :: Int -> Char -> Int
@@ -190,8 +227,8 @@ digest ws =
 -- | Take an arbitrary string, hash it, then padWithZeros it as a short
 -- @digits@-long locator16 string.
 --
-hashStringToLocator16 :: Int -> S.ByteString -> S.ByteString
-hashStringToLocator16 digits s' =
+hashStringToLocator16a :: Int -> S.ByteString -> S.ByteString
+hashStringToLocator16a digits s' =
     r'
   where
     s = S.unpack s'

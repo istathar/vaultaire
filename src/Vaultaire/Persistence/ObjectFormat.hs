@@ -100,7 +100,7 @@ tidyOriginName o' =
 
 hashOriginName :: S.ByteString -> S.ByteString
 hashOriginName o' =
-    hashStringToLocator16 6 o'
+    hashStringToLocator16a 6 o'
 
 
 hashSourceDict :: Map Text Text -> S.ByteString
