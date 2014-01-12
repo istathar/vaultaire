@@ -49,7 +49,6 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
-import Vaultaire.Persistence.Locators
 import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
@@ -70,8 +69,6 @@ suite = do
         testSerializeVaultPoint
 
     describe "objects in vault" $ do
-        testRoundTripLocator16
-        testKnownLocator16a
         testFormBucketLabel
 
 
@@ -287,27 +284,5 @@ testFormBucketLabel =
         let l1 = Bucket.formObjectLabel p1
         let l2 = Bucket.formObjectLabel p2
         assertEqual "Map should be sorted, time mark div 10^6" l1 l2
-
-
-testRoundTripLocator16 =
-    prop "safe conversion to/from Locator16" prop_Locator16
-
-prop_Locator16 :: Int -> Bool
-prop_Locator16 i =
-  let
-    n = abs i
-    decoded = fromLocator16 (toLocator16 n)
-  in
-    n == decoded
-
-
---
--- Have to do these manually, since Locator16a is not round-trip safe.
---
-testKnownLocator16a =
-    it "constrains Locator16a to unique digits" $ do
-        assertEqual "Incorrect result" "12C4FH" (toLocator16a 0x111111)
-        assertEqual "Incorrect result" "789KLM" (toLocator16a 0x777777)
-        assertEqual "Incorrect result" "MRXY01" (toLocator16a 0xCCCCCC)
 
 
