@@ -22,6 +22,7 @@ executable           ingestd
                      cereal,
                      type-level,
                      protobuf,
+                     locators,
                      rados-haskell
 
   main-is:           ingestd.hs
@@ -56,6 +57,7 @@ test-suite           check
                      cereal,
                      type-level,
                      protobuf,
+                     locators,
                      rados-haskell
 
   hs-source-dirs:    src,tests
