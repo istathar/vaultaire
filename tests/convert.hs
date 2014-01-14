@@ -33,9 +33,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word32, Word64)
 import Debug.Trace
-import Numeric (showHex)
-import Text.Groom
-import Text.Printf
 
 --
 -- What we're testing
@@ -65,7 +62,7 @@ main = do
     let pb = createDataFrame p
 
     putStrLn ""
-    putStrLn $ groom p
+    putStrLn $ show p
     putStrLn ""
     putStrLn $ show pb
     putStrLn ""
@@ -76,7 +73,4 @@ main = do
     putStrLn ""
     S.putStrLn $ Bucket.formObjectLabel p
 
-
-toHex :: ByteString -> String
-toHex = concat . map (printf "%02X") . B.unpack
 
