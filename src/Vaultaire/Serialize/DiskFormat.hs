@@ -162,8 +162,8 @@ instance Serialize VaultPrefix where
 
 
 data VaultContent = VaultContent {
-    origin  :: Required D8 (Value ByteString),
-    source  :: Repeated D1 (Message SourceTag)
+    origin :: Required D8 (Value ByteString),
+    source :: Repeated D1 (Message SourceTag)
 } deriving (Generic, Eq)
 
 instance Encode VaultContent

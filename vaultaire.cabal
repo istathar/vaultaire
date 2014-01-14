@@ -26,6 +26,7 @@ executable           ingestd
                      zeromq4-haskell,
                      type-level,
                      protobuf,
+                     locators,
                      rados-haskell
 
   main-is:           ingestd.hs
@@ -64,6 +65,7 @@ test-suite           check
                      zeromq4-haskell,
                      type-level,
                      protobuf,
+                     locators,
                      rados-haskell
 
   hs-source-dirs:    src,tests

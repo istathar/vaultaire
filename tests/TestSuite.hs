@@ -44,10 +44,10 @@ import Debug.Trace
 -- What we're actually testing.
 --
 
+import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
-import Vaultaire.Conversion.Reader
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Persistence.ObjectFormat as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
@@ -232,7 +232,7 @@ testSerializeVaultPoint =
             Left err    -> assertFailure err
             Right pb2   -> do
                 assertEqual "Incorrect de-serialization" pb1 pb2
-                
+
                 let cb2 = undefined
 
                 let p2 = convertVaultToPoint cb2 pb2
@@ -256,7 +256,7 @@ testFormBucketLabel =
             ("datacenter", "lhr1")]
 
     p1 = Core.Point {
-        Core.origin = "arithmetic",
+        Core.origin = "arithmetic/127.0.0.1",
         Core.source = t1,
         Core.timestamp = 1387929601271828182,       -- 25 Dec + e
         Core.payload = Core.Measurement 2.718281    -- e
@@ -268,19 +268,21 @@ testFormBucketLabel =
             ("hostname", "web01.example.com")]
 
     p2 = Core.Point {
-        Core.origin = "arithmetic",
+        Core.origin = "arithmetic/127.0.0.1",
         Core.source = t2,
         Core.timestamp = 1387929601314159265,       -- 25 Dec + pi
-        Core.payload = Core.Measurement 3.141592        -- pi
+        Core.payload = Core.Measurement 3.141592    -- pi
     }
 
   in do
     it "correctly forms an object label" $ do
         let l1 = Bucket.formObjectLabel p1
         assertEqual "Incorrect label"
-            (S.pack "arithmetic_ABCD_1387900000") l1
+            (S.pack "01_XK9Y10_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l1
 
     it "two labels in same mark match" $ do
         let l1 = Bucket.formObjectLabel p1
         let l2 = Bucket.formObjectLabel p2
         assertEqual "Map should be sorted, time mark div 10^6" l1 l2
+
+
