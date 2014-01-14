@@ -1,7 +1,7 @@
 --
 -- Data vault for metrics
 --
--- Copyright © 2013-     Anchor Systems, Pty Ltd and Others
+-- Copyright © 2013-2014 Anchor Systems, Pty Ltd and Others
 --
 -- The code in this file, and the program it is a part of, is
 -- made available to you by its authors as open source software:
@@ -102,6 +102,14 @@ hashOriginName o' =
     hashStringToLocator16a 6 o'
 
 
+--
+-- | The source dictionary portion of the bucket label is formed as follows:
+--
+-- 1. Sources are in a Data.Map which is a sorted map, per Ord order.
+-- 2. Map is serialized to bytes by __cereal__'s "Data.Serialize.encode"
+-- 3. The bytes are hashed with SHA1
+-- 4. The hash is converted to 27 digits of base62
+--
 hashSourceDict :: Map Text Text -> S.ByteString
 hashSourceDict m =
   let
