@@ -29,6 +29,7 @@ import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word
+import System.Rados
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Persistence.Constants
@@ -70,7 +71,7 @@ tidyOriginName o' =
     S.take width n'
 
 
-hashOriginName :: S.ByteString -> S.ByteString
+hashOriginName :: ByteString -> ByteString
 hashOriginName o' =
     hashStringToLocator16a 6 o'
 
@@ -83,7 +84,7 @@ hashOriginName o' =
 -- 3. The bytes are hashed with SHA1
 -- 4. The hash is converted to 27 digits of base62
 --
-hashSourceDict :: Map Text Text -> S.ByteString
+hashSourceDict :: Map Text Text -> ByteString
 hashSourceDict m =
   let
     m' = encode m
@@ -99,3 +100,9 @@ instance Serialize Text where
     get = do
         x' <- getByteString 0
         return $ T.decodeUtf8 x'
+
+
+writeVaultPoint :: Core.Point -> Pool -> IO ()
+writeVaultPoint _ _ = do
+    return ()
+

@@ -27,10 +27,10 @@ import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.ProtocolBuffers (encodeMessage)
 import Data.Serialize
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word32, Word64)

@@ -26,6 +26,7 @@ module Vaultaire.Conversion.Writer (
 -- Code begins
 --
 
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Int (Int64)
 import qualified Data.Map.Strict as Map
@@ -131,7 +132,10 @@ createSourceTag k v =
     }
 
 
-encodePoint :: Protobuf.VaultPoint -> S.ByteString
-encodePoint x = runPut $ encodeMessage x
-
+encodePoint :: Core.Point -> ByteString
+encodePoint p =
+  let
+    pb = createDiskPoint p          :: Protobuf.VaultPoint
+  in
+    runPut $ encodeMessage pb
 

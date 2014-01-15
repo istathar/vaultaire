@@ -27,8 +27,8 @@ import qualified Data.ByteString as B
 import Data.Int (Int64)
 import Data.List (intercalate)
 import Data.Map (Map)
-import Data.Set (Set)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -77,9 +77,8 @@ toHex :: ByteString -> String
 toHex = concat . map (printf "%02X") . B.unpack
 
 
-
 data Contents = Contents {
-    locator  :: ByteString,         -- origin
+    locator :: ByteString,         -- origin
     sources :: Set (Map Text Text)
 } deriving (Eq, Show)
 
