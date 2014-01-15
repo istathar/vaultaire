@@ -1,10 +1,13 @@
 tags
 config.h
 ingestd
+vault
 dist/
-junk/
 
 # test binaries
 check
 convert
 snippet
+
+# other detruitus
+junk/
