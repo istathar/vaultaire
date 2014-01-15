@@ -12,13 +12,13 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# OPTIONS -fno-warn-unused-imports #-}
 
 module Vaultaire.Internal.CoreTypes
 (
     Point(..),
     Value(..),
-    toHex
+    toHex,
+    Contents(..)
 )
 where
 
@@ -27,10 +27,12 @@ import qualified Data.ByteString as B
 import Data.Int (Int64)
 import Data.List (intercalate)
 import Data.Map (Map)
+import Data.Set (Set)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 import Text.Printf
 
 
@@ -73,3 +75,11 @@ showSourceMap m =
 
 toHex :: ByteString -> String
 toHex = concat . map (printf "%02X") . B.unpack
+
+
+
+data Contents = Contents {
+    locator  :: ByteString,         -- origin
+    sources :: Set (Map Text Text)
+} deriving (Eq, Show)
+

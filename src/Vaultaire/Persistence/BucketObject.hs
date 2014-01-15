@@ -13,7 +13,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
-module Vaultaire.Persistence.ObjectFormat (
+module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
 
     -- for testing
@@ -31,34 +31,7 @@ import qualified Data.Text.Encoding as T
 import Data.Word
 
 import qualified Vaultaire.Internal.CoreTypes as Core
-
---
--- Epoch version of the bucket object labels. This is only a sanity guard.
--- Different object label versions must be in different pools, as there is (by
--- design) no logic to probe for differnt epoch versions; the code reading a
--- given pool should know the one [and only one] epoch it is valid for.
---
-
-__EPOCH__ :: ByteString
-__EPOCH__ = "01"
-
---
--- Number of seconds per bucket.
---
-
-__WINDOW_SIZE__ :: Int
-__WINDOW_SIZE__ = 100000
-
-
-{-
-import qualified Data.Map.Strict as Map
-
-data Bucket = Bucket {
-    origin :: Text,
-    source2 :: Map Text Text,
-    timemark :: Word64      -- seconds since epoch, div 100000
-} deriving (Eq, Show)
--}
+import Vaultaire.Persistence.Constants
 
 {-
     I'd really like to think there's an easier way of doing constants

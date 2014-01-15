@@ -27,6 +27,8 @@ import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.ProtocolBuffers (encodeMessage)
 import Data.Serialize
 import Data.Text (Text)
@@ -40,7 +42,8 @@ import Debug.Trace
 
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
-import qualified Vaultaire.Persistence.ObjectFormat as Bucket
+import qualified Vaultaire.Persistence.BucketObject as Bucket
+import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 main = do
     let tags = Map.fromList
@@ -50,13 +53,18 @@ main = do
             ("epoch", "1")]
 
     let p = Point {
-        origin = "perf_data",
+        origin = "perf_data/bletchley",
         source = tags,
         timestamp = 1386931666289201468,
         payload = Numeric 201468
 --      payload = Textual "66.249.74.101 - - [12/Nov/2013:04:02:20 +1100] \"GET /the-politics-of-praise-william-w-young-iii/prod9780754656463.html HTTP/1.1\" 200 15695 \"-\" \"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\""
 --      payload = Measurement 45.9
 --      payload = Blob (B.pack [0x01, 0x0f, 0x5a])
+    }
+
+    let c = Contents {
+        locator = "K48F01",
+        sources = Set.singleton tags
     }
 
     let pb = createDataFrame p
@@ -72,5 +80,8 @@ main = do
 
     putStrLn ""
     S.putStrLn $ Bucket.formObjectLabel p
+
+    putStrLn ""
+    S.putStrLn $ Contents.formObjectLabel c
 
 
