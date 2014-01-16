@@ -52,7 +52,7 @@ formObjectLabel :: Core.Point -> S.ByteString
 formObjectLabel p =
     S.intercalate "_" [__EPOCH__, o', s', t']
   where
-    o' = hashOriginName $ Core.origin p
+    o' = Core.origin p
     s' = hashSourceDict $ Core.source p
     t  = (Core.timestamp p) `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t * windowSize)

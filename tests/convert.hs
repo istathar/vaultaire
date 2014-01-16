@@ -40,6 +40,7 @@ import Debug.Trace
 -- What we're testing
 --
 
+import Data.Locator
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
@@ -52,8 +53,10 @@ main = do
             ("datacenter", "lhr1"),
             ("epoch", "1")]
 
+    let o = hashStringToLocator16a 6 "perf_data/bletchley"
+
     let p = Point {
-        origin = "perf_data/bletchley",
+        origin = o,
         source = tags,
         timestamp = 1386931666289201468,
         payload = Numeric 201468

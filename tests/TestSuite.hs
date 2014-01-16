@@ -44,12 +44,13 @@ import Debug.Trace
 -- What we're actually testing.
 --
 
+import Data.Locator
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
-import qualified Vaultaire.Persistence.ObjectFormat as Bucket
+import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Serialize.DiskFormat (Compression (..), Quantity (..))
 import qualified Vaultaire.Serialize.DiskFormat as Disk
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
@@ -255,8 +256,10 @@ testFormBucketLabel =
             ("metric", "math-constants"),
             ("datacenter", "lhr1")]
 
+    o  = hashStringToLocator16a 6 "arithmetic/127.0.0.1"
+
     p1 = Core.Point {
-        Core.origin = "arithmetic/127.0.0.1",
+        Core.origin = o,
         Core.source = t1,
         Core.timestamp = 1387929601271828182,       -- 25 Dec + e
         Core.payload = Core.Measurement 2.718281    -- e
@@ -268,7 +271,7 @@ testFormBucketLabel =
             ("hostname", "web01.example.com")]
 
     p2 = Core.Point {
-        Core.origin = "arithmetic/127.0.0.1",
+        Core.origin = o,
         Core.source = t2,
         Core.timestamp = 1387929601314159265,       -- 25 Dec + pi
         Core.payload = Core.Measurement 3.141592    -- pi
