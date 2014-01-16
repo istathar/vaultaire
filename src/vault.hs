@@ -26,7 +26,7 @@ import Vaultaire.Conversion.Receiver
 
 data Options = Options {
     optGlobalQuiet :: Bool,
-    optCommand :: Command
+    optCommand     :: Command
 }
 
 data Command
@@ -48,11 +48,10 @@ toplevel = Options
     <$> switch
             (long "verbose" <>
              short 'v' <>
-             help "Whether to be quiet")
+             help "Include diagnostic information in output")
     <*> subparser
-            (command "read" (Read <$> readParser){- <>
-             command "contents" (info contentsOptions
-                    (progDesc "Get the contents list for this origin"))-})
+            (command "read" (Read <$> readParser) <>
+             command "contents" (Contents <$> contentsParser))
 
 
 readParser :: ParserInfo ReadOptions
@@ -67,17 +66,18 @@ readOptions =
             (metavar "ORIGIN")
     <*> argument str
             (metavar "SOURCE")
-             
 
 
-contentsOptions :: Parser Command
-contentsOptions = undefined
-{-
-   ContentsOptions
+contentsParser :: ParserInfo ContentsOptions
+contentsParser =
+    info (helper <*> contentsOptions) (progDesc "Get the contents list for this origin")
+
+
+contentsOptions :: Parser ContentsOptions
+contentsOptions =
+    ContentsOptions
     <$> argument str
             (metavar "ORIGIN")
--}
-
 
 
 greet :: Options -> IO ()
