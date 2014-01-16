@@ -34,12 +34,13 @@ data Command
     | Contents ContentsOptions
 
 data ReadOptions = ReadOptions {
-    optReadOrigin :: String,
-    optReadSource :: String
+    argReadOrigin :: String,
+    argReadSource :: String,
+    argReadTimestamp :: String
 }
 
 data ContentsOptions = ContentsOptions {
-    optContentsOrigin :: String
+    argContentsOrigin :: String
 }
 
 
@@ -56,7 +57,7 @@ toplevel = Options
 
 readParser :: ParserInfo ReadOptions
 readParser =
-    info (helper <*> readOptions) (progDesc "Read values from a bucket")
+    info (helper <*> readOptions) (progDesc "Dump the values in the bucket containing TIME")
 
 
 readOptions :: Parser ReadOptions
@@ -66,6 +67,8 @@ readOptions =
             (metavar "ORIGIN")
     <*> argument str
             (metavar "SOURCE")
+    <*> argument str
+            (metavar "TIME")
 
 
 contentsParser :: ParserInfo ContentsOptions
@@ -94,5 +97,5 @@ commandLineParser = info (helper <*> toplevel)
                 <> header "A data vault for metrics"
                 <> footer txt)
   where
-    txt =   "There is specific help available for each command;\n" ++
+    txt =   "There are specific instructions available for each command;\n" ++
             "use vault COMMAND --help for details."
