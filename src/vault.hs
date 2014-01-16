@@ -24,27 +24,75 @@ import Options.Applicative
 import Vaultaire.Conversion.Receiver
 
 
-data Sample = Sample {
-    hello :: String,
-    quiet :: Bool
+data Options = Options {
+    optGlobalQuiet :: Bool,
+    optCommand :: Command
 }
 
-sample :: Parser Sample
-sample = Sample
-    <$> strOption
-            (long "hello" <> metavar "TARGET" <> help "Target for the greeting")
-    <*> switch
-            (long "quiet" <> help "Whether to be quiet")
+data Command
+    = Read ReadOptions
+    | Contents ContentsOptions
+
+data ReadOptions = ReadOptions {
+    optReadOrigin :: String,
+    optReadSource :: String
+}
+
+data ContentsOptions = ContentsOptions {
+    optContentsOrigin :: String
+}
 
 
-greet :: Sample -> IO ()
-greet (Sample h False) = putStrLn $ "Hello " ++ h
+toplevel :: Parser Options
+toplevel = Options
+    <$> switch
+            (long "verbose" <>
+             short 'v' <>
+             help "Whether to be quiet")
+    <*> subparser
+            (command "read" (Read <$> readParser){- <>
+             command "contents" (info contentsOptions
+                    (progDesc "Get the contents list for this origin"))-})
+
+
+readParser :: ParserInfo ReadOptions
+readParser =
+    info (helper <*> readOptions) (progDesc "Read values from a bucket")
+
+
+readOptions :: Parser ReadOptions
+readOptions =
+    ReadOptions
+    <$> argument str
+            (metavar "ORIGIN")
+    <*> argument str
+            (metavar "SOURCE")
+             
+
+
+contentsOptions :: Parser Command
+contentsOptions = undefined
+{-
+   ContentsOptions
+    <$> argument str
+            (metavar "ORIGIN")
+-}
+
+
+
+greet :: Options -> IO ()
+greet (Options False _) = putStrLn "Hello"
 greet _ = return ()
 
 
-main = execParser opts >>= greet
-  where
-    opts = info (helper <*> sample)
+main = execParser commandLineParser >>= greet
+
+commandLineParser :: ParserInfo Options
+commandLineParser = info (helper <*> toplevel)
             (fullDesc
-                <> progDesc "Print a greeting for TARGET"
-                <> header "A test of optparse-applicative")
+                <> progDesc "Operations on a Vaultaire data vault."
+                <> header "A data vault for metrics"
+                <> footer txt)
+  where
+    txt =   "There is specific help available for each command;\n" ++
+            "use vault COMMAND --help for details."
