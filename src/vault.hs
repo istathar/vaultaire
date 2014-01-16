@@ -83,19 +83,20 @@ contentsOptions =
             (metavar "ORIGIN")
 
 
-greet :: Options -> IO ()
-greet (Options False _) = putStrLn "Hello"
-greet _ = return ()
-
-
-main = execParser commandLineParser >>= greet
 
 commandLineParser :: ParserInfo Options
 commandLineParser = info (helper <*> toplevel)
-            (fullDesc
-                <> progDesc "Operations on a Vaultaire data vault."
-                <> header "A data vault for metrics"
-                <> footer txt)
+            (fullDesc <>
+                progDesc "Operations on a Vaultaire data vault." <>
+                header "A data vault for metrics" <>
+                footer txt)
   where
     txt =   "There are specific instructions available for each command;\n" ++
             "use vault COMMAND --help for details."
+
+program :: Options -> IO ()
+program (Options _ (Read (ReadOptions o s t))) = print [o, s, t]
+program (Options _ (Contents (ContentsOptions o))) = print [o]
+
+
+main = execParser commandLineParser >>= program
