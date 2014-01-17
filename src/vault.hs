@@ -39,19 +39,15 @@ data Options = Options {
     optCommand     :: Command
 }
 
-data Command
-    = ReadCommand ReadOptions
-    | ContentsCommand ContentsOptions
-
-data ReadOptions = ReadOptions {
-    argReadOrigin    :: String,
-    argReadSource    :: String,
-    argReadTimestamp :: String
-}
-
-data ContentsOptions = ContentsOptions {
-    argContentsOrigin :: String
-}
+data Command =
+    ReadCommand {
+        argReadOrigin    :: String,
+        argReadSource    :: String,
+        argReadTimestamp :: String
+    } |
+    ContentsCommand {
+        argContentsOrigin :: String
+    }
 
 
 toplevel :: Parser Options
@@ -61,18 +57,18 @@ toplevel = Options
              short 'v' <>
              help "Include diagnostic information in output")
     <*> subparser
-            (command "read" (ReadCommand <$> readParser) <>
-             command "contents" (ContentsCommand <$> contentsParser))
+            (command "read" readParser <>
+             command "contents" contentsParser)
 
 
-readParser :: ParserInfo ReadOptions
+readParser :: ParserInfo Command
 readParser =
     info (helper <*> readOptions) (progDesc "Dump the values in the bucket containing TIME")
 
 
-readOptions :: Parser ReadOptions
+readOptions :: Parser Command
 readOptions =
-    ReadOptions
+    ReadCommand
     <$> argument str
             (metavar "ORIGIN")
     <*> argument str
@@ -81,14 +77,14 @@ readOptions =
             (metavar "TIME")
 
 
-contentsParser :: ParserInfo ContentsOptions
+contentsParser :: ParserInfo Command
 contentsParser =
     info (helper <*> contentsOptions) (progDesc "Get the contents list for this origin")
 
 
-contentsOptions :: Parser ContentsOptions
+contentsOptions :: Parser Command
 contentsOptions =
-    ContentsOptions
+    ContentsCommand
     <$> argument str
             (metavar "ORIGIN")
 
@@ -130,7 +126,7 @@ handleSourceArgument arg =
 program :: Options -> IO ()
 program (Options verbose cmd) =
     case cmd of
-        ReadCommand (ReadOptions o s t)        -> do
+        ReadCommand o s t   -> do
             let tags = handleSourceArgument s
 
             let p = Point {
@@ -161,7 +157,7 @@ program (Options verbose cmd) =
             putStrLn $ toHex y'
 
 
-        ContentsCommand (ContentsOptions o)    -> print [o]
+        ContentsCommand o   -> print [o]
 
 
 main = execParser commandLineParser >>= program
