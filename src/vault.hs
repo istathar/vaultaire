@@ -13,25 +13,26 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module Main where
 
 import Codec.Compression.LZ4
 import Control.Applicative
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import qualified Data.Map.Strict as Map
-import Data.Word (Word64)
-import Options.Applicative
 import Data.Map (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Word (Word64)
+import Options.Applicative
+import System.Rados
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
-
-import Debug.Trace
 
 data Options = Options {
     optGlobalQuiet :: Bool,
@@ -103,21 +104,31 @@ commandLineParser = info (helper <*> toplevel)
     txt =   "There are specific instructions available for each command;\n" ++
             "use vault COMMAND --help for details."
 
-
+{-
+    We can probably replace this with a proper parser in order to get better
+    error reporting.
+-}
 handleSourceArgument :: String -> Map Text Text
 handleSourceArgument arg =
   let
-    arg' = S.pack arg
-    pairs' = S.split ',' arg'
-    sources' = map (S.split ':') pairs'
-    sources = map toTag sources'
+    arg'   = S.pack arg
+    items' = S.split ',' arg'
+    pairs' = map (S.split ':') items'
+    pairs  = map toTag pairs'
   in
-    Map.fromList sources
+    Map.fromList pairs
   where
+    toTag :: [ByteString] -> (Text, Text)
     toTag [k',v'] = (T.pack $ S.unpack k', T.pack $ S.unpack v')
+    toTag _ = error "invalid source argument"
+
+{-
+    Some of this code will be refactored to elsewhere, probably
+    Vaultaire.Persistence.BucketObject.
+-}
 
 program :: Options -> IO ()
-program (Options _ cmd) =
+program (Options verbose cmd) =
     case cmd of
         ReadCommand (ReadOptions o s t)        -> do
             let tags = handleSourceArgument s
@@ -129,8 +140,26 @@ program (Options _ cmd) =
                 payload = Empty
             }
 
-            let l' = traceShow p $ Bucket.formObjectLabel p
-            print l'
+--
+-- Display the Point used to query, if verbose
+--
+
+            if verbose then print p else return ()
+
+--
+-- Determine the appropriate object label, then see if it exists
+--
+
+            let l' = Bucket.formObjectLabel p
+
+            if verbose then putStrLn $ S.unpack l' else return ()
+
+            y' <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+                withPool connection "test1" (\pool ->
+                    syncRead pool l' 0 (2 ^ 22)))
+
+            putStrLn $ toHex y'
+
 
         ContentsCommand (ContentsOptions o)    -> print [o]
 
