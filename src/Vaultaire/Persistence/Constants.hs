@@ -15,6 +15,7 @@
 module Vaultaire.Persistence.Constants where
 
 import Data.ByteString (ByteString)
+import Data.Word (Word64)
 
 --
 -- Epoch version of the bucket object labels. This is only a sanity guard.
@@ -35,10 +36,16 @@ __WINDOW_SIZE__ = 100000
 
 
 --
--- static name of contents buckets
+-- Static name of contents buckets.
 --
 
 __CONTENTS__ :: ByteString
 __CONTENTS__ = "contents"
 
 
+--
+-- Number of nanoseconds per second.
+--
+
+nanoseconds :: Word64
+nanoseconds = fromIntegral $ (1000000000 :: Int)

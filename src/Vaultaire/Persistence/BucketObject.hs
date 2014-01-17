@@ -41,9 +41,6 @@ import Vaultaire.Persistence.Constants
 windowSize :: Word64
 windowSize = fromIntegral __WINDOW_SIZE__
 
-nanoseconds :: Word64
-nanoseconds = fromIntegral $ (1000000000 :: Int)
-
 --
 -- Use the relevant information from a point to find out what bucket
 -- it belongs in.
