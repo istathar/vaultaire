@@ -18,11 +18,20 @@ module Main where
 
 import Codec.Compression.LZ4
 import Control.Applicative
-import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S
+import qualified Data.Map.Strict as Map
+import Data.Word (Word64)
 import Options.Applicative
+import Data.Map (Map)
+import Data.Text (Text)
+import qualified Data.Text as T
 
 import Vaultaire.Conversion.Receiver
+import Vaultaire.Conversion.Transmitter
+import Vaultaire.Internal.CoreTypes
+import qualified Vaultaire.Persistence.BucketObject as Bucket
 
+import Debug.Trace
 
 data Options = Options {
     optGlobalQuiet :: Bool,
@@ -30,12 +39,12 @@ data Options = Options {
 }
 
 data Command
-    = Read ReadOptions
-    | Contents ContentsOptions
+    = ReadCommand ReadOptions
+    | ContentsCommand ContentsOptions
 
 data ReadOptions = ReadOptions {
-    argReadOrigin :: String,
-    argReadSource :: String,
+    argReadOrigin    :: String,
+    argReadSource    :: String,
     argReadTimestamp :: String
 }
 
@@ -51,8 +60,8 @@ toplevel = Options
              short 'v' <>
              help "Include diagnostic information in output")
     <*> subparser
-            (command "read" (Read <$> readParser) <>
-             command "contents" (Contents <$> contentsParser))
+            (command "read" (ReadCommand <$> readParser) <>
+             command "contents" (ContentsCommand <$> contentsParser))
 
 
 readParser :: ParserInfo ReadOptions
@@ -94,9 +103,36 @@ commandLineParser = info (helper <*> toplevel)
     txt =   "There are specific instructions available for each command;\n" ++
             "use vault COMMAND --help for details."
 
+
+handleSourceArgument :: String -> Map Text Text
+handleSourceArgument arg =
+  let
+    arg' = S.pack arg
+    pairs' = S.split ',' arg'
+    sources' = map (S.split ':') pairs'
+    sources = map toTag sources'
+  in
+    Map.fromList sources
+  where
+    toTag [k',v'] = (T.pack $ S.unpack k', T.pack $ S.unpack v')
+
 program :: Options -> IO ()
-program (Options _ (Read (ReadOptions o s t))) = print [o, s, t]
-program (Options _ (Contents (ContentsOptions o))) = print [o]
+program (Options _ cmd) =
+    case cmd of
+        ReadCommand (ReadOptions o s t)        -> do
+            let tags = handleSourceArgument s
+
+            let p = Point {
+                origin = S.pack o,
+                source = tags,
+                timestamp = read t :: Word64,
+                payload = Empty
+            }
+
+            let l' = traceShow p $ Bucket.formObjectLabel p
+            print l'
+
+        ContentsCommand (ContentsOptions o)    -> print [o]
 
 
 main = execParser commandLineParser >>= program
