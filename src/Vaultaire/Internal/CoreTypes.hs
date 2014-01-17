@@ -62,7 +62,7 @@ instance Show Point where
                 Numeric n   ->  show n
                 Textual t   ->  T.unpack t
                 Measurement r -> show r
-                Blob b'     -> "0x" ++ toHex b']
+                Blob b'     -> toHex b']
 
 
 showSourceMap m =
@@ -74,7 +74,11 @@ showSourceMap m =
 
 
 toHex :: ByteString -> String
-toHex = concat . map (printf "%02X") . B.unpack
+toHex x =
+  let
+    f = concat . map (printf "%02X") . B.unpack
+  in
+    "0x" ++ f x
 
 
 data Contents = Contents {

@@ -66,7 +66,7 @@ main = do
     }
 
     let c = Contents {
-        locator = "K48F01",
+        locator = o,
         sources = Set.singleton tags
     }
 

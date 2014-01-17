@@ -13,6 +13,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module Main where
 
@@ -55,8 +56,10 @@ main = do
             ("datacenter", "lhr1"),
             ("epoch", "1")]
 
+    let o = hashStringToLocator16a 6 "arithmetic"  -- FIXME hack; we should lookup!
+
     let p = Point {
-        origin = "arithmetic",
+        origin = o,
         source = tags,
         timestamp = 1386931666289201468,
         payload = Numeric 201468
@@ -66,7 +69,7 @@ main = do
     }
 
     let c = Contents {
-        locator = hashStringToLocator16a 6 (origin p),  -- FIXME hack; we should lookup!
+        locator = o,
         sources = Set.singleton tags
     }
 
@@ -79,10 +82,16 @@ main = do
     putStrLn ""
     S.putStrLn l'
     putStrLn ""
+    putStrLn $ "0x" ++ toHex p'
 
     withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
         withPool connection "test1" (\pool ->
             syncWriteFull pool l' p'))
 
+    y' <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+        withPool connection "test1" (\pool ->
+            syncRead pool l' 0 (2 ^ 22)))
 
+    putStrLn ""
+    putStrLn $ "0x" ++ toHex y'
 
