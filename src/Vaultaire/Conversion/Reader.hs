@@ -34,28 +34,12 @@ import qualified Vaultaire.Serialize.DiskFormat as Protobuf
 -- This completes use of the Data.Protobuf library on the ingest side; from
 -- here we're in normal Haskell types.
 --
-
-convertVaultToPoint :: Protobuf.VaultContent -> Protobuf.VaultPoint -> Core.Point
-convertVaultToPoint cb pb =
-  let
-    v = case (getField $ Protobuf.payload pb) of
-        Protobuf.EMPTY   -> Core.Empty
-        Protobuf.NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ Protobuf.valueNumeric pb)
-        Protobuf.REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ Protobuf.valueMeasurement pb)
-        Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual pb)
-        Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob pb)
+{-
     ss = getField $ Protobuf.source cb         :: [Protobuf.SourceTag]
     as = map convertToMapEntry ss              :: [(Text,Text)]
-    (Fixed m) = getField (Protobuf.timestamp pb)
-    o = getField $ Protobuf.origin cb
   in
-    Core.Point {
-        Core.origin = o,
-        Core.source = Map.fromList as,
-        Core.timestamp = m,
-        Core.payload = v
-    }
-
+    ...
+    Core.source = Map.fromList as,
 
 convertToMapEntry :: Protobuf.SourceTag -> (Text,Text)
 convertToMapEntry tag =
@@ -64,6 +48,28 @@ convertToMapEntry tag =
     v = getField $ Protobuf.value tag
   in
     (k,v)
+-}
+
+convertVaultToPoint :: Core.SourceMap -> Protobuf.VaultPoint -> Core.Point
+convertVaultToPoint s pb =
+  let
+    v = case (getField $ Protobuf.payload pb) of
+        Protobuf.EMPTY   -> Core.Empty
+        Protobuf.NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ Protobuf.valueNumeric pb)
+        Protobuf.REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ Protobuf.valueMeasurement pb)
+        Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual pb)
+        Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob pb)
+    (Fixed m) = getField (Protobuf.timestamp pb)
+    o = getField $ Protobuf.origin cb
+  in
+    Core.Point {
+        Core.origin = o,
+        Core.source = s,
+        Core.timestamp = m,
+        Core.payload = v
+    }
+
+
 
 {-
     Encoding and decoding.

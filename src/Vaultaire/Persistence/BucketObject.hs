@@ -81,12 +81,24 @@ hashOriginName o' =
 -- 3. The bytes are hashed with SHA1
 -- 4. The hash is converted to 27 digits of base62
 --
-hashSourceDict :: Map Text Text -> ByteString
-hashSourceDict m =
+hashSourceDict :: Core.SourceDict -> ByteString
+hashSourceDict s =
   let
-    m' = encode m
+    m' = encode s
   in
     hashStringToBase62 27 m'
+
+
+instance Serialize Core.SourceDict where
+--  put :: a -> Put
+    put x =
+      let
+        m = Core.runSourceDict x
+      in
+        put m
+
+--  get :: Get a
+    get = get
 
 
 instance Serialize Text where
@@ -98,6 +110,12 @@ instance Serialize Text where
         x' <- getByteString 0
         return $ T.decodeUtf8 x'
 
+
+--
+-- | Given a single data point, write it down to Ceph. We express as a
+-- VaultPoint protobuf, serialize to bytes, then prepend a VaultPrefix
+-- in order to store the size necessary to be able to read it back again.
+--
 
 writeVaultPoint :: Core.Point -> Pool -> IO ()
 writeVaultPoint _ _ = do
