@@ -17,12 +17,15 @@
 
 module Main where
 
+import Prelude hiding (mapM)
+
 import Codec.Compression.LZ4
 import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import Data.Foldable
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word64)
@@ -119,6 +122,27 @@ handleSourceArgument arg =
     toTag [k',v'] = (T.pack $ S.unpack k', T.pack $ S.unpack v')
     toTag _ = error "invalid source argument"
 
+
+--
+-- This is essentially the same code as in the Show instance for Point, but
+-- here meant for output to the read command, not debugging.
+--
+displayPoint :: Point -> IO ()
+displayPoint p =
+  let
+    t = show $ timestamp p
+    v = case payload p of
+        Empty       -> ""
+        Numeric n   ->  show n
+        Textual x   ->  T.unpack x
+        Measurement r -> show r
+        Blob b'     -> toHex b'
+  in do
+    putStrLn $ t ++ "\t" ++ v
+
+
+
+
 {-
     Some of this code will be refactored to elsewhere, probably
     Vaultaire.Persistence.BucketObject.
@@ -152,7 +176,11 @@ program (Options verbose cmd) =
                 withPool connection "test1" (\pool ->
                     Bucket.readVaultObject pool o' s t))
 
-            putStrLn $ show $ Map.elems m
+--
+--          Fold over m, print the timestamps + values
+--
+
+            traverse_ displayPoint m
 
 
         ContentsCommand o   -> print [o]
