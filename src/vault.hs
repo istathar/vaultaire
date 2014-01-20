@@ -105,7 +105,7 @@ commandLineParser = info (helper <*> toplevel)
     We can probably replace this with a proper parser in order to get better
     error reporting.
 -}
-handleSourceArgument :: String -> Map Text Text
+handleSourceArgument :: String -> SourceDict
 handleSourceArgument arg =
   let
     arg'   = S.pack arg
@@ -113,7 +113,7 @@ handleSourceArgument arg =
     pairs' = map (S.split ':') items'
     pairs  = map toTag pairs'
   in
-    Map.fromList pairs
+    SourceDict $ Map.fromList pairs
   where
     toTag :: [ByteString] -> (Text, Text)
     toTag [k',v'] = (T.pack $ S.unpack k', T.pack $ S.unpack v')
@@ -127,41 +127,44 @@ handleSourceArgument arg =
 program :: Options -> IO ()
 program (Options verbose cmd) =
     case cmd of
-        ReadCommand o s t   -> do
-            let tags = handleSourceArgument s
+        ReadCommand o0 s0 t0   -> do
+            let o' = S.pack o0
 
-            let second = (read t :: Word64) * nanoseconds
+            let s = handleSourceArgument s0
 
-            let p = Point {
-                origin = S.pack o,
-                source = tags,
-                timestamp = second,
-                payload = Empty
-            }
-            let p1 = Point (S.pack o) tags second Empty
+            let t = (read t0 :: Word64) * nanoseconds
 
 --
--- Display the Point used to query, if verbose
+-- Display the SourceDict used to query, if verbose
 --
 
-            if verbose then print p else return ()
+            debug verbose s
 
 --
 -- Determine the appropriate object label, then see if it exists
 --
 
-            let l' = Bucket.formObjectLabel p
 
-            if verbose then putStrLn $ S.unpack l' else return ()
+            debug verbose $ Bucket.formObjectLabel o' s t
 
-            y' <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+
+            m <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
                 withPool connection "test1" (\pool ->
-                    syncRead pool l' 0 (2 ^ 22)))
+                    Bucket.readVaultObject pool o' s t))
 
-            putStrLn $ toHex y'
+            putStrLn $ show $ Map.elems m
 
 
         ContentsCommand o   -> print [o]
 
+
+debug :: Show s => Bool -> s -> IO ()
+debug verbose x =
+    if verbose
+        then do
+            putStrLn $ show x
+            putStrLn ""
+        else
+            return ()
 
 main = execParser commandLineParser >>= program
