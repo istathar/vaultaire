@@ -62,11 +62,11 @@ see there for more cohesive comments.
 --
 
 
-createDiskContent :: Core.Point -> Protobuf.VaultContent
-createDiskContent p =
+createDiskContent :: Core.SourceDict -> Protobuf.VaultContent
+createDiskContent s =
   let
     tags =
-           Map.elems $ Map.mapWithKey createSourceTag (Core.source p)
+           Map.elems $ Map.mapWithKey createSourceTag (Core.runSourceDict s)
   in
     Protobuf.VaultContent {
         Protobuf.origin = putField $ S.pack "FIXME",

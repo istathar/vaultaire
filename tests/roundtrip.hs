@@ -13,6 +13,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module Main where
 
@@ -40,24 +41,27 @@ import Debug.Trace
 -- What we're testing
 --
 
+import System.Rados
+
 import Data.Locator
-import Vaultaire.Conversion.Transmitter
+import Vaultaire.Conversion.Reader
+import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 main = do
-    let tags = Map.fromList
+    let s = SourceDict $ Map.fromList
            [("hostname", "secure.example.org"),
             ("metric", "eth0-tx-bytes"),
             ("datacenter", "lhr1"),
             ("epoch", "1")]
 
-    let o = hashStringToLocator16a 6 "perf_data/bletchley"
+    let o' = hashStringToLocator16a 6 "arithmetic"  -- FIXME hack; we should lookup!
 
     let p = Point {
-        origin = o,
-        source = tags,
+        origin = o',
+        source = s,
         timestamp = 1386931666289201468,
         payload = Numeric 201468
 --      payload = Textual "66.249.74.101 - - [12/Nov/2013:04:02:20 +1100] \"GET /the-politics-of-praise-william-w-young-iii/prod9780754656463.html HTTP/1.1\" 200 15695 \"-\" \"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\""
@@ -65,26 +69,43 @@ main = do
 --      payload = Blob (B.pack [0x01, 0x0f, 0x5a])
     }
 
+{-
     let c = Contents {
         locator = o,
         sources = Set.singleton tags
     }
+-}
 
-    let pb = createDataFrame p
+    let p' = encodePoint p
+    let r' = createDiskPrefix (fromIntegral $ S.length p')
+    let l' = Bucket.formObjectLabel p
 
     putStrLn ""
     putStrLn $ show p
     putStrLn ""
-    putStrLn $ show pb
+    S.putStrLn l'
     putStrLn ""
+    putStrLn $ toHex p'
 
-    let p' = runPut $ encodeMessage pb
-    putStrLn $ "0x" ++ toHex p'
+{-
+    withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+        withPool connection "test1" (\pool ->
+            syncWriteFull pool l' p'))
+
+    y' <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+        withPool connection "test1" (\pool ->
+            syncRead pool l' 0 (2 ^ 22)))
+-}
+    withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+        withPool connection "test1" (\pool ->
+            Bucket.writeVaultPoint pool p))
+
+    y' <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+        withPool connection "test1" (\pool ->
+            Bucket.readVaultObject pool o' s 1386931666289201468))
 
     putStrLn ""
-    S.putStrLn $ Bucket.formObjectLabel p
+    putStrLn $ show y'
 
-    putStrLn ""
-    S.putStrLn $ Contents.formObjectLabel c
-
+--    decodeBurst y'
 

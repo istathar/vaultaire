@@ -12,9 +12,12 @@
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS -fno-warn-orphans #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
+    writeVaultPoint,
+    readVaultObject,
 
     -- for testing
     tidyOriginName
@@ -29,10 +32,13 @@ import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word
-import System.Rados
+import qualified System.Rados as Rados
 
+import Vaultaire.Conversion.Reader
+import Vaultaire.Conversion.Writer
 import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Persistence.Constants
+import qualified Vaultaire.Serialize.DiskFormat as Disk
 
 {-
     I'd really like to think there's an easier way of doing constants
@@ -40,9 +46,6 @@ import Vaultaire.Persistence.Constants
 
 windowSize :: Word64
 windowSize = fromIntegral __WINDOW_SIZE__
-
-nanoseconds :: Word64
-nanoseconds = fromIntegral $ (1000000000 :: Int)
 
 --
 -- Use the relevant information from a point to find out what bucket
@@ -52,7 +55,7 @@ formObjectLabel :: Core.Point -> S.ByteString
 formObjectLabel p =
     S.intercalate "_" [__EPOCH__, o', s', t']
   where
-    o' = hashOriginName $ Core.origin p
+    o' = Core.origin p
     s' = hashSourceDict $ Core.source p
     t  = (Core.timestamp p) `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t * windowSize)
@@ -84,12 +87,26 @@ hashOriginName o' =
 -- 3. The bytes are hashed with SHA1
 -- 4. The hash is converted to 27 digits of base62
 --
-hashSourceDict :: Map Text Text -> ByteString
-hashSourceDict m =
+hashSourceDict :: Core.SourceDict -> ByteString
+hashSourceDict s =
   let
-    m' = encode m
+    m' = encode s
   in
     hashStringToBase62 27 m'
+
+
+instance Serialize Core.SourceDict where
+--  put :: a -> Put
+    put x =
+      let
+        m = Core.runSourceDict x
+      in
+        put m
+
+--  get :: Get a
+    get = do
+        m <- get
+        return $ Core.SourceDict (m :: Map Text Text)
 
 
 instance Serialize Text where
@@ -102,7 +119,64 @@ instance Serialize Text where
         return $ T.decodeUtf8 x'
 
 
-writeVaultPoint :: Core.Point -> Pool -> IO ()
-writeVaultPoint _ _ = do
-    return ()
+--
+-- | Given a single data point, write it down to Ceph. We express as a
+-- VaultPoint protobuf, serialize to bytes, then prepend a VaultPrefix
+-- in order to store the size necessary to be able to read it back again.
+--
+
+writeVaultPoint :: Rados.Pool -> Core.Point -> IO ()
+writeVaultPoint pool p =
+    let
+        p' = encodePoint p
+        r  = createDiskPrefix (fromIntegral $ S.length p')
+        r' = encode r
+
+        b' = S.concat [r',p']
+        l' = formObjectLabel p
+    in do
+        Rados.withSharedLock pool l' "name" "desc" "tag" (Just 1)
+            (Rados.syncAppend pool l' b')
+
+{-
+    Marshalling into a Point just to form a bucket label is a bit silly.
+-}
+
+readVaultObject :: Rados.Pool -> Core.Origin -> Core.SourceDict -> Word64 -> IO [Core.Point]
+readVaultObject pool o' s t =
+    let
+        q = Core.Point {
+            Core.origin = o',
+            Core.source = s,
+            Core.timestamp = t,
+            Core.payload = Core.Empty
+        }
+        l' = formObjectLabel q
+
+    in do
+        y' <- Rados.syncRead pool l' 0 (2 ^ 22)             -- FIXME size
+
+        let (p,_) = readPoint y'
+
+        return [p]
+
+
+
+    where
+        readPoint :: ByteString -> (Core.Point, ByteString)
+        readPoint b1' =
+          let
+            parser = get :: Get Disk.VaultPrefix
+            result = runGetState parser b1' 0
+          in
+            case result of
+                Left err             -> error (err :: String)    -- FIXME
+                Right (prefix,b2')   ->
+                    let
+                        (x',b3') = S.splitAt (fromIntegral $ Disk.size prefix) b2'
+                        pe = decodeSingle o' s x'
+                    in
+                        case pe of
+                            Left err2   -> error err2
+                            Right p     -> (p, b3')
 

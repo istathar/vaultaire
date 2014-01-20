@@ -9,16 +9,20 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 module Vaultaire.Internal.CoreTypes
 (
     Point(..),
+    SourceDict(..),
     Value(..),
     toHex,
-    Contents(..)
+    Origin,
+    OriginMap(..),
+    ContentsList(..)
 )
 where
 
@@ -28,6 +32,7 @@ import Data.Int (Int64)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -38,7 +43,7 @@ import Text.Printf
 
 data Point = Point {
     origin    :: ByteString,
-    source    :: Map Text Text,
+    source    :: SourceDict,
     timestamp :: Word64,     -- ?
     payload   :: Value
 } deriving (Eq)
@@ -55,30 +60,47 @@ data Value
 
 instance Show Point where
     show x = intercalate "\n"
-        [showSourceMap $ source x,
+        [show $ source x,
          show $ timestamp x,
          case payload x of
                 Empty       -> ""
                 Numeric n   ->  show n
                 Textual t   ->  T.unpack t
                 Measurement r -> show r
-                Blob b'     -> "0x" ++ toHex b']
+                Blob b'     -> toHex b']
 
 
-showSourceMap m =
+newtype SourceDict = SourceDict {
+    runSourceDict :: Map Text Text
+} deriving (Eq)
+
+instance Show SourceDict where
+    show x =
         intercalate ",\n" ps
       where
+        m  = runSourceDict x
         ss = Map.toList m
 
         ps = map (\(k,v) -> (T.unpack k) ++ ":" ++ (T.unpack v)) ss
 
-
 toHex :: ByteString -> String
-toHex = concat . map (printf "%02X") . B.unpack
+toHex x =
+  let
+    f = concat . map (printf "%02X") . B.unpack
+  in
+    "0x" ++ f x
 
 
-data Contents = Contents {
-    locator :: ByteString,         -- origin
-    sources :: Set (Map Text Text)
+--
+--
+--
+type Origin = ByteString
+
+newtype OriginMap = OriginMap {
+    runOriginMap :: Map Origin ContentsList
+} deriving (Eq, Show)
+
+data ContentsList = ContentsList {
+    sources :: Set SourceDict
 } deriving (Eq, Show)
 

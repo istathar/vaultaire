@@ -19,11 +19,6 @@ module Vaultaire.Persistence.ContentsObject (
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import Data.Locator
-import Data.Map.Strict (Map)
-import Data.Serialize
-import Data.Text (Text)
-import Data.Word
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import Vaultaire.Persistence.Constants
@@ -33,9 +28,7 @@ import Vaultaire.Persistence.Constants
 -- For each origin, we maintain a list of known sources. This is the name of
 -- the object we store it in
 --
-formObjectLabel :: Core.Contents -> S.ByteString
-formObjectLabel c =
+formObjectLabel :: Core.Origin -> ByteString
+formObjectLabel o' =
     S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
-  where
-    o' = Core.locator c
 
