@@ -109,7 +109,7 @@ testSerializeDataFrame =
 
 testConvertPoint =
   let
-    tags = Map.fromList
+    s = Core.SourceDict $ Map.fromList
            [("origin", "bletchley/testframe"),
             ("hostname", "hut4"),
             ("service_name", "bombe"),
@@ -117,7 +117,7 @@ testConvertPoint =
 
     msg = Core.Point {
         Core.origin = S.empty,
-        Core.source = tags,
+        Core.source = s,
         Core.timestamp = 1388482381430911607,
         Core.payload = Core.Measurement 8.461049696649084
     }
@@ -132,7 +132,7 @@ testConvertPoint =
 
 testReadFrame =
   let
-    tags = Map.fromList
+    s = Core.SourceDict $ Map.fromList
            [("origin", "bletchley/testframe"),
             ("hostname", "hut4"),
             ("service_name", "bombe"),
@@ -140,7 +140,7 @@ testReadFrame =
 
     msg = Core.Point {
         Core.origin = S.empty,
-        Core.source = tags,
+        Core.source = s,
         Core.timestamp = 1388482381430911607,
         Core.payload = Core.Measurement 8.461049696649084
     }
@@ -206,16 +206,20 @@ prop_RoundTrip prefix =
 
 testSerializeVaultPoint =
   let
-    tags = Map.fromList
+    s = Core.SourceDict $ Map.fromList
            [("hostname", "secure.example.org"),
             ("metric", "eth0-tx-bytes"),
             ("datacenter", "lhr1"),
             ("epoch", "1")]
 
+    o' = "FXM47K"
+
+    t = 1386931666289201468
+
     p1 = Core.Point {
-        Core.origin = "perf_data",
-        Core.source = tags,
-        Core.timestamp = 1386931666289201468,
+        Core.origin = o',
+        Core.source = s,
+        Core.timestamp = t,
         Core.payload = Core.Numeric 201468
 --      payload = Core.Textual "203.0.113.101 - - [12/Dec/2013:04:11:16 +1100] \"GET /the-politics-of-praise-william-w-young-iii/prod9780754656463.html HTTP/1.1\" 200 15695 \"-\" \"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\""
 --      payload = Core.Measurement 45.9
@@ -236,7 +240,7 @@ testSerializeVaultPoint =
 
                 let cb2 = undefined
 
-                let p2 = convertVaultToPoint cb2 pb2
+                let p2 = convertVaultToPoint o' s pb2
 
                 pendingWith "Define VaultContents conversion code"
                 assertEqual "Point object converted not equal to original object" p1 p2
@@ -244,48 +248,45 @@ testSerializeVaultPoint =
 
 testFormBucketLabel =
   let
-{-
-    b1 = Core.Bucket {
-        Core.origin = "perf_data",
-        Core.source2 = tags,
-        Core.timemark = 1388400000
-    }
--}
-    t1 = Map.fromList
+    o'  = hashStringToLocator16a 6 "arithmetic/127.0.0.1"
+
+    s1 = Core.SourceDict $ Map.fromList
            [("hostname", "web01.example.com"),
             ("metric", "math-constants"),
             ("datacenter", "lhr1")]
 
-    o  = hashStringToLocator16a 6 "arithmetic/127.0.0.1"
+    t1 = 1387929601271828182        -- 25 Dec + e
 
     p1 = Core.Point {
-        Core.origin = o,
-        Core.source = t1,
-        Core.timestamp = 1387929601271828182,       -- 25 Dec + e
+        Core.origin = o',
+        Core.source = s1,
+        Core.timestamp = t1,
         Core.payload = Core.Measurement 2.718281    -- e
     }
 
-    t2 = Map.fromList
+    s2 = Core.SourceDict $ Map.fromList
            [("metric", "math-constants"),
             ("datacenter", "lhr1"),
             ("hostname", "web01.example.com")]
 
+    t2 = 1387929601314159265        -- 25 Dec + pi
+
     p2 = Core.Point {
-        Core.origin = o,
-        Core.source = t2,
-        Core.timestamp = 1387929601314159265,       -- 25 Dec + pi
+        Core.origin = o',
+        Core.source = s2,
+        Core.timestamp = t2,
         Core.payload = Core.Measurement 3.141592    -- pi
     }
 
   in do
     it "correctly forms an object label" $ do
-        let l1 = Bucket.formObjectLabel p1
+        let l1 = Bucket.formObjectLabel o' s1 t1
         assertEqual "Incorrect label"
             (S.pack "01_XK9Y10_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l1
 
     it "two labels in same mark match" $ do
-        let l1 = Bucket.formObjectLabel p1
-        let l2 = Bucket.formObjectLabel p2
+        let l1 = Bucket.formObjectLabel o' s1 t1
+        let l2 = Bucket.formObjectLabel o' s2 t2
         assertEqual "Map should be sorted, time mark div 10^6" l1 l2
 
 

@@ -47,7 +47,7 @@ createDataFrame :: Core.Point -> Protobuf.DataFrame
 createDataFrame p =
   let
     tags =
-           Map.elems $ Map.mapWithKey createSourceTag (Core.source p)
+           Map.elems $ Map.mapWithKey createSourceTag (Core.runSourceDict $ Core.source p)
   in
     case Core.payload p of
         Core.Empty       ->

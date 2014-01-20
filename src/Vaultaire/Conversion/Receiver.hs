@@ -57,7 +57,7 @@ convertToPoint x =
   in
     Core.Point {
         Core.origin = o,
-        Core.source = Map.fromList as,
+        Core.source = Core.SourceDict $ Map.fromList as,
         Core.timestamp = m,
         Core.payload = v
     }
