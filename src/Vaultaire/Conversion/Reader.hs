@@ -14,18 +14,17 @@
 {-# LANGUAGE OverloadedStrings  #-}
 
 module Vaultaire.Conversion.Reader (
-    convertVaultToPoint
+    convertVaultToPoint,
+    decodeSingle
 ) where
 
 import qualified Data.ByteString.Char8 as S
-import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.ProtocolBuffers hiding (field)
-import Data.Text (Text)
+import Data.Serialize
 import qualified Data.Text as T
 
 import qualified Vaultaire.Internal.CoreTypes as Core
-import qualified Vaultaire.Serialize.DiskFormat as Disk
 import qualified Vaultaire.Serialize.DiskFormat as Protobuf
 
 
@@ -50,8 +49,8 @@ convertToMapEntry tag =
     (k,v)
 -}
 
-convertVaultToPoint :: Core.SourceMap -> Protobuf.VaultPoint -> Core.Point
-convertVaultToPoint s pb =
+convertVaultToPoint :: Core.Origin -> Core.SourceDict -> Protobuf.VaultPoint -> Core.Point
+convertVaultToPoint o' s pb =
   let
     v = case (getField $ Protobuf.payload pb) of
         Protobuf.EMPTY   -> Core.Empty
@@ -60,10 +59,9 @@ convertVaultToPoint s pb =
         Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual pb)
         Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob pb)
     (Fixed m) = getField (Protobuf.timestamp pb)
-    o = getField $ Protobuf.origin cb
   in
     Core.Point {
-        Core.origin = o,
+        Core.origin = o',
         Core.source = s,
         Core.timestamp = m,
         Core.payload = v
@@ -76,4 +74,14 @@ convertVaultToPoint s pb =
 -}
 
 
+
+
+decodeSingle :: Core.Origin -> Core.SourceDict -> S.ByteString -> Either String Core.Point
+decodeSingle o' s y' =
+  let
+    ey = runGet decodeMessage y' :: Either String Protobuf.VaultPoint
+  in
+    case ey of
+        Left err    -> Left err
+        Right y     -> Right $ convertVaultToPoint o' s y
 

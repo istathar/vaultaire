@@ -33,6 +33,7 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+import Vaultaire.Persistence.Constants
 
 data Options = Options {
     optGlobalQuiet :: Bool,
@@ -129,12 +130,15 @@ program (Options verbose cmd) =
         ReadCommand o s t   -> do
             let tags = handleSourceArgument s
 
+            let second = (read t :: Word64) * nanoseconds
+
             let p = Point {
                 origin = S.pack o,
                 source = tags,
-                timestamp = read t :: Word64,
+                timestamp = second,
                 payload = Empty
             }
+            let p1 = Point (S.pack o) tags second Empty
 
 --
 -- Display the Point used to query, if verbose
