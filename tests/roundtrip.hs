@@ -87,12 +87,9 @@ main = do
     putStrLn ""
     putStrLn $ toHex p'
 
-    withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
-        withPool connection "test1" (\pool ->
-            Bucket.writeVaultPoint pool p))
-
     m <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
-        withPool connection "test1" (\pool ->
+        withPool connection "test1" (\pool -> do
+            Bucket.writeVaultPoint pool p
             Bucket.readVaultObject pool o' s (timestamp p)))
 
     putStrLn ""
