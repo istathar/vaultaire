@@ -29,6 +29,7 @@ import Data.Foldable
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word64)
+import Text.Printf
 import Options.Applicative
 import System.Rados
 
@@ -132,22 +133,28 @@ displayPoint p =
   let
     t = show $ timestamp p
     v = case payload p of
-        Empty       -> ""
-        Numeric n   ->  show n
-        Textual x   ->  T.unpack x
-        Measurement r -> show r
-        Blob b'     -> toHex b'
+        Empty           -> ""
+        Numeric n       -> printf "%10d" n
+        Textual x       -> T.unpack x
+        Measurement r   -> printf "%14.3f" r
+        Blob b'         -> toHex b'
   in do
-    putStrLn $ t ++ "\t" ++ v
+    putStrLn $ t ++ " " ++ v
 
 
+debug :: Show s => Bool -> s -> IO ()
+debug verbose x =
+    if verbose
+        then do
+            putStrLn $ show x
+            putStrLn ""
+        else
+            return ()
 
 
-{-
-    Some of this code will be refactored to elsewhere, probably
-    Vaultaire.Persistence.BucketObject.
--}
-
+--
+-- Handle the different modes of operation
+--
 program :: Options -> IO ()
 program (Options verbose cmd) =
     case cmd of
@@ -168,16 +175,14 @@ program (Options verbose cmd) =
 -- Determine the appropriate object label, then see if it exists
 --
 
-
             debug verbose $ Bucket.formObjectLabel o' s t
-
 
             m <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
                 withPool connection "test1" (\pool ->
                     Bucket.readVaultObject pool o' s t))
 
 --
---          Fold over m, print the timestamps + values
+-- Fold over m, print the timestamps + values
 --
 
             traverse_ displayPoint m
@@ -185,14 +190,5 @@ program (Options verbose cmd) =
 
         ContentsCommand o   -> print [o]
 
-
-debug :: Show s => Bool -> s -> IO ()
-debug verbose x =
-    if verbose
-        then do
-            putStrLn $ show x
-            putStrLn ""
-        else
-            return ()
 
 main = execParser commandLineParser >>= program

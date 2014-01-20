@@ -76,6 +76,7 @@ main = do
         source = s,
         timestamp = t,
         payload = Numeric $ fromIntegral pid
+--      payload = Blob $ S.pack $ show $ fromIntegral pid
     }
 
     let p' = encodePoint p
