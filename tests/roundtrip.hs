@@ -66,19 +66,21 @@ main = do
 -- Use pid as a incrementing marker to make it easy to see results are sorted.
 --
 
-    t <- getPOSIXTime
+    now <- getPOSIXTime
     pid <- getProcessID
+
+    let t = fromIntegral $ floor (now * 1000000000)
 
     let p = Point {
         origin = o',
         source = s,
-        timestamp = fromIntegral $ floor (t * 1000000000),
+        timestamp = t,
         payload = Numeric $ fromIntegral pid
     }
 
     let p' = encodePoint p
     let r' = createDiskPrefix (fromIntegral $ S.length p')
-    let l' = Bucket.formObjectLabel p
+    let l' = Bucket.formObjectLabel o' s t
 
     putStrLn ""
     putStrLn $ show p

@@ -52,14 +52,13 @@ windowSize = fromIntegral __WINDOW_SIZE__
 -- Use the relevant information from a point to find out what bucket
 -- it belongs in.
 --
-formObjectLabel :: Core.Point -> S.ByteString
-formObjectLabel p =
+formObjectLabel :: Core.Origin -> Core.SourceDict -> Word64 -> S.ByteString
+formObjectLabel o' s t =
     S.intercalate "_" [__EPOCH__, o', s', t']
   where
-    o' = Core.origin p
-    s' = hashSourceDict $ Core.source p
-    t  = (Core.timestamp p) `div` (windowSize * nanoseconds)
-    t' = S.pack $ show (t * windowSize)
+    s' = hashSourceDict s
+    t2 = t `div` (windowSize * nanoseconds)
+    t' = S.pack $ show (t2 * windowSize)
 
 
 tidyOriginName :: S.ByteString -> S.ByteString
@@ -134,7 +133,12 @@ writeVaultPoint pool p =
         r' = encode r
 
         b' = S.concat [r',p']
-        l' = formObjectLabel p
+
+        o' = Core.origin p
+        s  = Core.source p
+        t  = Core.timestamp p
+
+        l' = formObjectLabel o' s t
     in do
         Rados.withSharedLock pool l' "name" "desc" "tag" (Just 1)
             (Rados.syncAppend pool l' b')
@@ -149,13 +153,7 @@ writeVaultPoint pool p =
 readVaultObject :: Rados.Pool -> Core.Origin -> Core.SourceDict -> Word64 -> IO (Map Word64 Core.Point)
 readVaultObject pool o' s t =
     let
-        q = Core.Point {
-            Core.origin = o',
-            Core.source = s,
-            Core.timestamp = t,
-            Core.payload = Core.Empty
-        }
-        l' = formObjectLabel q
+        l' = formObjectLabel o' s t
 
     in do
         y' <- Rados.syncRead pool l' 0 (2 ^ 22)                 -- FIXME size
@@ -163,13 +161,13 @@ readVaultObject pool o' s t =
         return $ process y' Map.empty
 
     where
+
 --
---
--- First write wins. This is a crucial safety property; someone can maliciously
--- write later, but we will ignore it.  A little closer to home, we DO expect
--- duplicate writes as a consequence of the distributed system design of
--- Vaultaire: points are idempotent for a given timestamp; if we see another no
--- need to insert it.
+-- First write wins. This is a crucial design property; we DO expect duplicate
+-- writes as a consequence of the distributed system design of Vaultaire:
+-- points are idempotent for a given timestamp; if we see another no need to
+-- insert it. This also has an important security aspect: someone can
+-- maliciously write later, but we will ignore it and thereby not destroy data.
 --
 
         process :: ByteString -> Map Word64 Core.Point -> Map Word64 Core.Point
@@ -181,7 +179,6 @@ readVaultObject pool o' s t =
             m2 = if Map.member t m1
                     then m1
                     else Map.insert t p m1
-
           in
             if S.null z'
                 then m2
