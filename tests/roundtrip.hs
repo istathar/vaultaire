@@ -41,6 +41,9 @@ import Debug.Trace
 -- What we're testing
 --
 
+import Data.Time.Clock
+import Data.Time.Clock.POSIX
+import System.Posix.Process
 import System.Rados
 
 import Data.Locator
@@ -48,33 +51,30 @@ import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+import Vaultaire.Persistence.Constants (nanoseconds)
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 main = do
     let s = SourceDict $ Map.fromList
            [("hostname", "secure.example.org"),
             ("metric", "eth0-tx-bytes"),
-            ("datacenter", "lhr1"),
-            ("epoch", "1")]
+            ("datacenter", "lhr1")]
 
     let o' = hashStringToLocator16a 6 "arithmetic"  -- FIXME hack; we should lookup!
+
+--
+-- Use pid as a incrementing marker to make it easy to see results are sorted.
+--
+
+    t <- getPOSIXTime
+    pid <- getProcessID
 
     let p = Point {
         origin = o',
         source = s,
-        timestamp = 1386931666289201468,
-        payload = Numeric 201468
---      payload = Textual "66.249.74.101 - - [12/Nov/2013:04:02:20 +1100] \"GET /the-politics-of-praise-william-w-young-iii/prod9780754656463.html HTTP/1.1\" 200 15695 \"-\" \"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)\""
---      payload = Measurement 45.9
---      payload = Blob (B.pack [0x01, 0x0f, 0x5a])
+        timestamp = fromIntegral $ floor (t * 1000000000),
+        payload = Numeric $ fromIntegral pid
     }
-
-{-
-    let c = Contents {
-        locator = o,
-        sources = Set.singleton tags
-    }
--}
 
     let p' = encodePoint p
     let r' = createDiskPrefix (fromIntegral $ S.length p')
@@ -87,25 +87,14 @@ main = do
     putStrLn ""
     putStrLn $ toHex p'
 
-{-
-    withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
-        withPool connection "test1" (\pool ->
-            syncWriteFull pool l' p'))
-
-    y' <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
-        withPool connection "test1" (\pool ->
-            syncRead pool l' 0 (2 ^ 22)))
--}
     withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
         withPool connection "test1" (\pool ->
             Bucket.writeVaultPoint pool p))
 
-    y' <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+    m <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
         withPool connection "test1" (\pool ->
-            Bucket.readVaultObject pool o' s 1386931666289201468))
+            Bucket.readVaultObject pool o' s (timestamp p)))
 
     putStrLn ""
-    putStrLn $ show y'
-
---    decodeBurst y'
+    putStrLn $ show $ Map.elems m
 

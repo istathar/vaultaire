@@ -28,6 +28,7 @@ import qualified Data.ByteString.Char8 as S
 import Data.Char
 import Data.Locator
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
@@ -140,9 +141,12 @@ writeVaultPoint pool p =
 
 {-
     Marshalling into a Point just to form a bucket label is a bit silly.
+
+    This whole thing is a bit crazy. We should just merge it all into a single
+    use of Data.Serialize.Get
 -}
 
-readVaultObject :: Rados.Pool -> Core.Origin -> Core.SourceDict -> Word64 -> IO [Core.Point]
+readVaultObject :: Rados.Pool -> Core.Origin -> Core.SourceDict -> Word64 -> IO (Map Word64 Core.Point)
 readVaultObject pool o' s t =
     let
         q = Core.Point {
@@ -154,15 +158,37 @@ readVaultObject pool o' s t =
         l' = formObjectLabel q
 
     in do
-        y' <- Rados.syncRead pool l' 0 (2 ^ 22)             -- FIXME size
+        y' <- Rados.syncRead pool l' 0 (2 ^ 22)                 -- FIXME size
 
-        let (p,_) = readPoint y'
-
-        return [p]
-
-
+        return $ process y' Map.empty
 
     where
+--
+--
+-- First write wins. This is a crucial safety property; someone can maliciously
+-- write later, but we will ignore it.  A little closer to home, we DO expect
+-- duplicate writes as a consequence of the distributed system design of
+-- Vaultaire: points are idempotent for a given timestamp; if we see another no
+-- need to insert it.
+--
+
+        process :: ByteString -> Map Word64 Core.Point -> Map Word64 Core.Point
+        process y' m1 =
+          let
+            (p,z') = readPoint y'
+            t = Core.timestamp p
+
+            m2 = if Map.member t m1
+                    then m1
+                    else Map.insert t p m1
+
+          in
+            if S.null z'
+                then m2
+                else process z' m2
+
+
+
         readPoint :: ByteString -> (Core.Point, ByteString)
         readPoint b1' =
           let
@@ -170,7 +196,7 @@ readVaultObject pool o' s t =
             result = runGetState parser b1' 0
           in
             case result of
-                Left err             -> error (err :: String)    -- FIXME
+                Left err             -> error (err :: String)   -- FIXME
                 Right (prefix,b2')   ->
                     let
                         (x',b3') = S.splitAt (fromIntegral $ Disk.size prefix) b2'
