@@ -1,12 +1,9 @@
 message VaultContent {
-        required bytes      origin = 8;
-
         message SourceTag {
                 required string field = 1;
                 required string value = 2;
         }
         repeated SourceTag  source = 1;
-
 }
 
 // vim: set expandtab tabstop=4:

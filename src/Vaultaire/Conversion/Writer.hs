@@ -27,7 +27,6 @@ module Vaultaire.Conversion.Writer (
 --
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S
 import Data.Int (Int64)
 import qualified Data.Map.Strict as Map
 import Data.Monoid (Monoid, mempty)
@@ -65,11 +64,9 @@ see there for more cohesive comments.
 createDiskContent :: Core.SourceDict -> Protobuf.VaultContent
 createDiskContent s =
   let
-    tags =
-           Map.elems $ Map.mapWithKey createSourceTag (Core.runSourceDict s)
+    tags = Map.elems $ Map.mapWithKey createSourceTag (Core.runSourceDict s)
   in
     Protobuf.VaultContent {
-        Protobuf.origin = putField $ S.pack "FIXME",
         Protobuf.source = putField tags
     }
 

@@ -37,7 +37,7 @@ import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.TypeLevel (D1, D2, D3, D4, D5, D6, D7, D8)
+import Data.TypeLevel (D1, D2, D3, D4, D5, D6, D7)
 import Data.Word
 import GHC.Generics (Generic)
 import Prelude hiding (and, or)
@@ -162,7 +162,6 @@ instance Serialize VaultPrefix where
 
 
 data VaultContent = VaultContent {
-    origin :: Required D8 (Value ByteString),
     source :: Repeated D1 (Message SourceTag)
 } deriving (Generic, Eq)
 
@@ -170,12 +169,18 @@ instance Encode VaultContent
 
 instance Decode VaultContent
 
+instance Serialize VaultContent where
+--  put :: a -> Put
+    put x = encodeMessage x
+
+--  get :: Get a
+    get = decodeMessage
+
+
 instance Show VaultContent where
     show x =
-        o ++ "\n" ++
         s
       where
-        o = S.unpack $ (getField $ origin x)
         s = intercalate ",\n" $ map show (getField $ source x)
 
 
