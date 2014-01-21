@@ -12,23 +12,93 @@
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS -fno-warn-orphans #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module Vaultaire.Persistence.ContentsObject (
-    formObjectLabel
+    formObjectLabel,
+    appendVaultSource,
+    readVaultContents
 ) where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.Serialize
+import Data.Set (Set)
+import qualified Data.Set as Set
+import qualified System.Rados as Rados
 
-import qualified Vaultaire.Internal.CoreTypes as Core
+import Vaultaire.Conversion.Reader
+import Vaultaire.Conversion.Writer
+import Vaultaire.Internal.CoreTypes
 import Vaultaire.Persistence.Constants
+import qualified Vaultaire.Serialize.DiskFormat as Disk
 
 
 --
 -- For each origin, we maintain a list of known sources. This is the name of
 -- the object we store it in
 --
-formObjectLabel :: Core.Origin -> ByteString
+formObjectLabel :: Origin -> ByteString
 formObjectLabel o' =
     S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
+
+
+appendVaultSource :: Rados.Pool -> Origin -> SourceDict -> IO ()
+appendVaultSource pool o' s =
+    let
+        s' = encode $ createDiskContent s
+        r' = encode $ createDiskPrefix (fromIntegral $ S.length s')
+
+        b' = S.concat [r',s']
+
+        l' = formObjectLabel o'
+    in do
+        Rados.withSharedLock pool l' "name" "desc" "tag" (Just 1)
+            (Rados.syncAppend pool l' b')
+
+
+readVaultContents :: Rados.Pool -> Origin -> IO (Set SourceDict)
+readVaultContents pool o' =
+    let
+        l' = formObjectLabel o'
+
+    in do
+        y' <- Rados.syncRead pool l' 0 (2 ^ 22)                 -- FIXME size
+
+        either error return (process y' Set.empty)
+    where
+
+        process :: ByteString -> Set SourceDict -> Either String (Set SourceDict)
+        process y' e1 = do
+            (s,z') <- readSource y'
+
+            let e2 = if Set.member s e1
+                    then e1
+                    else Set.insert s e1
+
+            if S.null z'
+                then return e2
+                else process z' e2
+
+
+        readSource :: ByteString -> Either String (SourceDict, ByteString)
+        readSource x' = do
+            ((VaultRecord _ sb), z') <- runGetState get x' 0
+            return (convertToSource sb, z')
+
+
+data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultContent
+
+instance Serialize VaultRecord where
+    put (VaultRecord pre s) = do
+        put pre
+        put s
+
+    get = do
+        pre <- get
+        let len = fromIntegral $ Disk.size pre
+        s <- isolate len get
+        return $ VaultRecord pre s
+
+
 
