@@ -150,6 +150,8 @@ writeVaultPoint pool p =
     use of Data.Serialize.Get
 -}
 
+type Timestamp = Word64
+
 readVaultObject :: Rados.Pool -> Core.Origin -> Core.SourceDict -> Word64 -> IO (Map Word64 Core.Point)
 readVaultObject pool o' s t =
     let
@@ -170,7 +172,7 @@ readVaultObject pool o' s t =
 -- maliciously write later, but we will ignore it and thereby not destroy data.
 --
 
-        process :: ByteString -> Map Word64 Core.Point -> Map Word64 Core.Point
+        process :: ByteString -> Map Timestamp Core.Point -> Map Timestamp Core.Point
         process y' m1 =
           let
             (p,z') = readPoint y'

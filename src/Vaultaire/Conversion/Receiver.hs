@@ -22,6 +22,7 @@ module Vaultaire.Conversion.Receiver (
 -- Code begins
 --
 
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
@@ -88,14 +89,13 @@ convertToPoints y =
     ps
 
 
-decodeBurst :: S.ByteString -> Either String [Core.Point]
+decodeBurst :: ByteString -> Either String [Core.Point]
 decodeBurst y' =
   let
-    ey = runGet decodeMessage y' :: Either String Protobuf.DataBurst
+    ey = runGet decodeMessage y'
   in
     case ey of
         Left err    -> Left err
         Right y     -> Right $ convertToPoints y
-
 
 
