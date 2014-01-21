@@ -17,7 +17,7 @@
 module Vaultaire.Persistence.ContentsObject (
     formObjectLabel,
     appendVaultSource,
-    readVaultContents
+    readVaultObject
 ) where
 
 import Data.ByteString (ByteString)
@@ -57,8 +57,8 @@ appendVaultSource pool o' s =
             (Rados.syncAppend pool l' b')
 
 
-readVaultContents :: Rados.Pool -> Origin -> IO (Set SourceDict)
-readVaultContents pool o' =
+readVaultObject :: Rados.Pool -> Origin -> IO (Set SourceDict)
+readVaultObject pool o' =
     let
         l' = formObjectLabel o'
 

@@ -38,6 +38,7 @@ import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Persistence.Constants
+import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 data Options = Options {
     optGlobalQuiet :: Bool,
@@ -142,6 +143,11 @@ displayPoint p =
     putStrLn $ t ++ " " ++ v
 
 
+displaySource :: SourceDict -> IO ()
+displaySource s = do
+    putStrLn $ show s
+
+
 debug :: Show s => Bool -> s -> IO ()
 debug verbose x =
     if verbose
@@ -188,7 +194,15 @@ program (Options verbose cmd) =
             traverse_ displayPoint m
 
 
-        ContentsCommand o   -> print [o]
+        ContentsCommand o0   -> do
+            let o' = S.pack o0
+
+            e <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
+                withPool connection "test1" (\pool ->
+                    Contents.readVaultObject pool o'))
+
+            traverse_ displaySource e
+
 
 
 main = execParser commandLineParser >>= program
