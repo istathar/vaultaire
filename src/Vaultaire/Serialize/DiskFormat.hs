@@ -191,6 +191,14 @@ data VaultPoint = VaultPoint {
 instance Encode VaultPoint
 instance Decode VaultPoint
 
+instance Serialize VaultPoint where
+--  put :: a -> Put
+    put x = encodeMessage x
+
+--  get :: Get a
+    get = decodeMessage
+
+
 instance Show VaultPoint where
     show x =
         ms ++

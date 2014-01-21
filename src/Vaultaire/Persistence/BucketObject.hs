@@ -175,33 +175,40 @@ readVaultObject pool o' s t =
         process :: ByteString -> Map Timestamp Core.Point -> Map Timestamp Core.Point
         process y' m1 =
           let
-            (p,z') = readPoint y'
-            t = Core.timestamp p
+            (p,z') = readPoint2 y'
+            k = Core.timestamp p
 
-            m2 = if Map.member t m1
+            m2 = if Map.member k m1
                     then m1
-                    else Map.insert t p m1
+                    else Map.insert k p m1
           in
             if S.null z'
                 then m2
                 else process z' m2
 
 
-
-        readPoint :: ByteString -> (Core.Point, ByteString)
-        readPoint b1' =
+        readPoint2 :: ByteString -> (Core.Point, ByteString)
+        readPoint2 x' = 
           let
-            parser = get :: Get Disk.VaultPrefix
-            result = runGetState parser b1' 0
+            result = runGetState get x' 0
           in
             case result of
                 Left err             -> error (err :: String)   -- FIXME
-                Right (prefix,b2')   ->
-                    let
-                        (x',b3') = S.splitAt (fromIntegral $ Disk.size prefix) b2'
-                        pe = decodeSingle o' s x'
-                    in
-                        case pe of
-                            Left err2   -> error err2
-                            Right p     -> (p, b3')
+                Right ((VaultRecord _ pb), remainder')   -> (convertVaultToPoint o' s pb, remainder')
+
+
+data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultPoint
+
+instance Serialize VaultRecord where
+    put (VaultRecord prefix point) = do
+        put prefix
+        put point
+
+    get = do
+        prefix <- get
+        let len = fromIntegral $ Disk.size prefix
+        point <- isolate len get
+        return $ VaultRecord prefix point
+
+
 
