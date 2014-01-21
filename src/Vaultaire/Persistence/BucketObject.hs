@@ -23,6 +23,7 @@ module Vaultaire.Persistence.BucketObject (
     tidyOriginName
 ) where
 
+import Control.Monad.Error
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Char
@@ -160,8 +161,7 @@ readVaultObject pool o' s t =
     in do
         y' <- Rados.syncRead pool l' 0 (2 ^ 22)                 -- FIXME size
 
-        return $ process y' Map.empty
-
+        either error return (process y' Map.empty)
     where
 
 --
@@ -172,29 +172,22 @@ readVaultObject pool o' s t =
 -- maliciously write later, but we will ignore it and thereby not destroy data.
 --
 
-        process :: ByteString -> Map Timestamp Core.Point -> Map Timestamp Core.Point
-        process y' m1 =
-          let
-            (p,z') = readPoint2 y'
-            k = Core.timestamp p
-
-            m2 = if Map.member k m1
+        process :: ByteString -> Map Timestamp Core.Point -> Either String (Map Timestamp Core.Point)
+        process y' m1 = do
+            (p,z') <- readPoint2 y'
+            let k = Core.timestamp p
+            let m2 = if Map.member k m1
                     then m1
                     else Map.insert k p m1
-          in
             if S.null z'
-                then m2
+                then return m2
                 else process z' m2
 
 
-        readPoint2 :: ByteString -> (Core.Point, ByteString)
-        readPoint2 x' = 
-          let
-            result = runGetState get x' 0
-          in
-            case result of
-                Left err             -> error (err :: String)   -- FIXME
-                Right ((VaultRecord _ pb), remainder')   -> (convertVaultToPoint o' s pb, remainder')
+        readPoint2 :: ByteString -> Either String (Core.Point, ByteString)
+        readPoint2 x' = do
+            ((VaultRecord _ pb), remainder') <- runGetState get x' 0
+            return (convertVaultToPoint o' s pb, remainder')
 
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultPoint

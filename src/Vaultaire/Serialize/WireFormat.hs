@@ -9,8 +9,8 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Vaultaire.Serialize.WireFormat
 (

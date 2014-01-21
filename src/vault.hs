@@ -23,15 +23,15 @@ import Codec.Compression.LZ4
 import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import Data.Foldable
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word64)
-import Text.Printf
 import Options.Applicative
 import System.Rados
+import Text.Printf
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
