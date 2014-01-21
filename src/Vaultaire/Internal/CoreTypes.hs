@@ -73,7 +73,8 @@ instance Show Point where
 
 newtype SourceDict = SourceDict {
     runSourceDict :: Map Text Text
-} deriving (Eq)
+} deriving (Eq, Ord)
+
 
 instance Show SourceDict where
     show x =
@@ -98,10 +99,10 @@ toHex x =
 type Origin = ByteString
 
 newtype OriginMap = OriginMap {
-    runOriginMap :: Map Origin ContentsList
+    contents :: Map Origin ContentsList
 } deriving (Eq, Show)
 
-data ContentsList = ContentsList {
+newtype ContentsList = ContentsList {
     sources :: Set SourceDict
 } deriving (Eq, Show)
 

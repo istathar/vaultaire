@@ -16,7 +16,7 @@
 
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
-    writeVaultPoint,
+    appendVaultPoint,
     readVaultObject,
 
     -- for testing
@@ -126,8 +126,8 @@ instance Serialize Text where
 -- in order to store the size necessary to be able to read it back again.
 --
 
-writeVaultPoint :: Rados.Pool -> Point -> IO ()
-writeVaultPoint pool p =
+appendVaultPoint :: Rados.Pool -> Point -> IO ()
+appendVaultPoint pool p =
     let
         p' = encodePoint p
         r  = createDiskPrefix (fromIntegral $ S.length p')
@@ -185,7 +185,7 @@ readVaultObject pool o' s t =
         readPoint2 :: ByteString -> Either String (Point, ByteString)
         readPoint2 x' = do
             ((VaultRecord _ pb), remainder') <- runGetState get x' 0
-            return (convertVaultToPoint o' s pb, remainder')
+            return (convertToPoint o' s pb, remainder')
 
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultPoint

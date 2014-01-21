@@ -92,7 +92,8 @@ main = do
 
     m <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
         withPool connection "test1" (\pool -> do
-            Bucket.writeVaultPoint pool p
+            Bucket.appendVaultPoint pool p
+            Contents.appendVaultSource pool o' s
             Bucket.readVaultObject pool o' s (timestamp p)))
 
     putStrLn ""
