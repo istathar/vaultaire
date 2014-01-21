@@ -23,7 +23,7 @@ module Vaultaire.Persistence.BucketObject (
     tidyOriginName
 ) where
 
-import Control.Monad.Error
+import Control.Monad.Error ()
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Char
@@ -38,7 +38,7 @@ import qualified System.Rados as Rados
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
-import qualified Vaultaire.Internal.CoreTypes as Core
+import Vaultaire.Internal.CoreTypes
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Serialize.DiskFormat as Disk
 
@@ -53,7 +53,7 @@ windowSize = fromIntegral __WINDOW_SIZE__
 -- Use the relevant information from a point to find out what bucket
 -- it belongs in.
 --
-formObjectLabel :: Core.Origin -> Core.SourceDict -> Word64 -> S.ByteString
+formObjectLabel :: Origin -> SourceDict -> Word64 -> ByteString
 formObjectLabel o' s t =
     S.intercalate "_" [__EPOCH__, o', s', t']
   where
@@ -62,7 +62,7 @@ formObjectLabel o' s t =
     t' = S.pack $ show (t2 * windowSize)
 
 
-tidyOriginName :: S.ByteString -> S.ByteString
+tidyOriginName :: ByteString -> ByteString
 tidyOriginName o' =
   let
     width = 10
@@ -88,7 +88,7 @@ hashOriginName o' =
 -- 3. The bytes are hashed with SHA1
 -- 4. The hash is converted to 27 digits of base62
 --
-hashSourceDict :: Core.SourceDict -> ByteString
+hashSourceDict :: SourceDict -> ByteString
 hashSourceDict s =
   let
     m' = encode s
@@ -96,18 +96,18 @@ hashSourceDict s =
     hashStringToBase62 27 m'
 
 
-instance Serialize Core.SourceDict where
+instance Serialize SourceDict where
 --  put :: a -> Put
     put x =
       let
-        m = Core.runSourceDict x
+        m = runSourceDict x
       in
         put m
 
 --  get :: Get a
     get = do
         m <- get
-        return $ Core.SourceDict (m :: Map Text Text)
+        return $ SourceDict (m :: Map Text Text)
 
 
 instance Serialize Text where
@@ -126,7 +126,7 @@ instance Serialize Text where
 -- in order to store the size necessary to be able to read it back again.
 --
 
-writeVaultPoint :: Rados.Pool -> Core.Point -> IO ()
+writeVaultPoint :: Rados.Pool -> Point -> IO ()
 writeVaultPoint pool p =
     let
         p' = encodePoint p
@@ -135,9 +135,9 @@ writeVaultPoint pool p =
 
         b' = S.concat [r',p']
 
-        o' = Core.origin p
-        s  = Core.source p
-        t  = Core.timestamp p
+        o' = origin p
+        s  = source p
+        t  = timestamp p
 
         l' = formObjectLabel o' s t
     in do
@@ -151,9 +151,7 @@ writeVaultPoint pool p =
     use of Data.Serialize.Get
 -}
 
-type Timestamp = Word64
-
-readVaultObject :: Rados.Pool -> Core.Origin -> Core.SourceDict -> Word64 -> IO (Map Word64 Core.Point)
+readVaultObject :: Rados.Pool -> Origin -> SourceDict -> Timestamp -> IO (Map Timestamp Point)
 readVaultObject pool o' s t =
     let
         l' = formObjectLabel o' s t
@@ -172,10 +170,10 @@ readVaultObject pool o' s t =
 -- maliciously write later, but we will ignore it and thereby not destroy data.
 --
 
-        process :: ByteString -> Map Timestamp Core.Point -> Either String (Map Timestamp Core.Point)
+        process :: ByteString -> Map Timestamp Point -> Either String (Map Timestamp Point)
         process y' m1 = do
             (p,z') <- readPoint2 y'
-            let k = Core.timestamp p
+            let k = timestamp p
             let m2 = if Map.member k m1
                     then m1
                     else Map.insert k p m1
@@ -184,7 +182,7 @@ readVaultObject pool o' s t =
                 else process z' m2
 
 
-        readPoint2 :: ByteString -> Either String (Core.Point, ByteString)
+        readPoint2 :: ByteString -> Either String (Point, ByteString)
         readPoint2 x' = do
             ((VaultRecord _ pb), remainder') <- runGetState get x' 0
             return (convertVaultToPoint o' s pb, remainder')

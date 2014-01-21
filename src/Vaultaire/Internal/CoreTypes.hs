@@ -17,6 +17,7 @@
 module Vaultaire.Internal.CoreTypes
 (
     Point(..),
+    Timestamp,
     SourceDict(..),
     Value(..),
     toHex,
@@ -32,7 +33,6 @@ import Data.Int (Int64)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -40,11 +40,12 @@ import qualified Data.Text as T
 import Data.Word (Word64)
 import Text.Printf
 
+type Timestamp = Word64
 
 data Point = Point {
     origin    :: ByteString,
     source    :: SourceDict,
-    timestamp :: Word64,     -- ?
+    timestamp :: Timestamp,
     payload   :: Value
 } deriving (Eq)
 
