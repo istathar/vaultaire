@@ -23,7 +23,9 @@ module Vaultaire.Persistence.BucketObject (
     tidyOriginName
 ) where
 
+import Control.Exception
 import Control.Monad.Error ()
+import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Char
@@ -35,8 +37,6 @@ import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word
 import System.Rados
-import Control.Monad.IO.Class
-import Control.Exception
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
@@ -145,7 +145,7 @@ appendVaultPoint p =
     in do
         e <- withSharedLock l' "name" "desc" "tag" (Just 1.0)
             (runObject l' $ append b')
-    
+
         case e of
             Just err    -> liftIO $ throwIO err
             Nothing     -> return ()

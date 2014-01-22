@@ -20,12 +20,14 @@ module Vaultaire.Persistence.ContentsObject (
     readVaultObject
 ) where
 
+import Control.Exception
+import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
-import qualified System.Rados as Rados
+import System.Rados
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
@@ -43,8 +45,8 @@ formObjectLabel o' =
     S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
 
 
-appendVaultSource :: Rados.Pool -> Origin -> SourceDict -> IO ()
-appendVaultSource pool o' s =
+appendVaultSource :: Origin -> SourceDict -> Pool ()
+appendVaultSource o' s =
     let
         s' = encode $ createDiskContent s
         r' = encode $ createDiskPrefix (fromIntegral $ S.length s')
@@ -53,19 +55,26 @@ appendVaultSource pool o' s =
 
         l' = formObjectLabel o'
     in do
-        Rados.withSharedLock pool l' "name" "desc" "tag" (Just 1)
-            (Rados.syncAppend pool l' b')
+        em <- withSharedLock l' "name" "desc" "tag" (Just 1)
+            (runObject l' $ append b')
+
+        case em of
+            Just err    -> liftIO $ throwIO err
+            Nothing     -> return ()
 
 
-readVaultObject :: Rados.Pool -> Origin -> IO (Set SourceDict)
-readVaultObject pool o' =
+readVaultObject :: Origin -> Pool (Set SourceDict)
+readVaultObject o' =
     let
         l' = formObjectLabel o'
 
     in do
-        y' <- Rados.syncRead pool l' 0 (2 ^ 22)                 -- FIXME size
+        ey' <- runObject l' readFull
 
-        either error return (process y' Set.empty)
+        case ey' of
+            Left err        -> liftIO $ throwIO err
+            Right y'        -> either error return $ process y' Set.empty
+
     where
 
         process :: ByteString -> Set SourceDict -> Either String (Set SourceDict)

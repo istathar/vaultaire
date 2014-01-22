@@ -183,9 +183,9 @@ program (Options verbose cmd) =
 
             debug verbose $ Bucket.formObjectLabel o' s t
 
-            m <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
-                withPool connection "test1" (\pool ->
-                    Bucket.readVaultObject pool o' s t))
+            m <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+                runPool "test1" $ do
+                    Bucket.readVaultObject o' s t
 
 --
 -- Fold over m, print the timestamps + values
@@ -197,9 +197,9 @@ program (Options verbose cmd) =
         ContentsCommand o0   -> do
             let o' = S.pack o0
 
-            e <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
-                withPool connection "test1" (\pool ->
-                    Contents.readVaultObject pool o'))
+            e <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+                runPool "test1" $ do
+                    Contents.readVaultObject o'
 
             traverse_ displaySource e
 
