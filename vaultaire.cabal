@@ -27,7 +27,7 @@ executable           ingestd
                      type-level,
                      protobuf,
                      locators,
-                     rados-haskell
+                     rados-haskell >= 2.0.0
 
   main-is:           ingestd.hs
   hs-source-dirs:    src

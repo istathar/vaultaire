@@ -90,8 +90,8 @@ main = do
     putStrLn ""
     putStrLn $ toHex p'
 
-    m <- withConnection Nothing (readConfig "/etc/ceph/ceph.conf") (\connection ->
-        withPool connection "test1" (\pool -> do
+    m <- runConnect Nothing (readConfig "/etc/ceph/ceph.conf") $ 
+        runPool "test1" do
             Bucket.appendVaultPoint pool p
             Contents.appendVaultSource pool o' s
             Bucket.readVaultObject pool o' s (timestamp p)))

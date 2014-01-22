@@ -34,7 +34,9 @@ import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word
-import qualified System.Rados as Rados
+import System.Rados
+import Control.Monad.IO.Class
+import Control.Exception
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
@@ -126,8 +128,8 @@ instance Serialize Text where
 -- in order to store the size necessary to be able to read it back again.
 --
 
-appendVaultPoint :: Rados.Pool -> Point -> IO ()
-appendVaultPoint pool p =
+appendVaultPoint :: Point -> Pool ()
+appendVaultPoint p =
     let
         p' = encodePoint p
         r  = createDiskPrefix (fromIntegral $ S.length p')
@@ -141,8 +143,12 @@ appendVaultPoint pool p =
 
         l' = formObjectLabel o' s t
     in do
-        Rados.withSharedLock pool l' "name" "desc" "tag" (Just 1)
-            (Rados.syncAppend pool l' b')
+        e <- withSharedLock l' "name" "desc" "tag" (Just 1.0)
+            (runObject l' $ append b')
+    
+        case e of
+            Just err    -> liftIO $ throwIO err
+            Nothing     -> return ()
 
 {-
     Marshalling into a Point just to form a bucket label is a bit silly.
@@ -151,15 +157,22 @@ appendVaultPoint pool p =
     use of Data.Serialize.Get
 -}
 
-readVaultObject :: Rados.Pool -> Origin -> SourceDict -> Timestamp -> IO (Map Timestamp Point)
-readVaultObject pool o' s t =
+readVaultObject
+    :: Origin
+    -> SourceDict
+    -> Timestamp
+    -> Pool (Map Timestamp Point)
+readVaultObject o' s t =
     let
         l' = formObjectLabel o' s t
 
     in do
-        y' <- Rados.syncRead pool l' 0 (2 ^ 22)                 -- FIXME size
+        ey' <- runObject l' readFull    -- Pool (Either RadosError ByteString)
 
-        either error return (process y' Map.empty)
+        case ey' of
+            Left err        -> liftIO $ throwIO err
+            Right y'        -> either error return $ process y' Map.empty
+
     where
 
 --
