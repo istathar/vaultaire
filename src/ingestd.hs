@@ -27,6 +27,7 @@ import System.ZMQ4.Monadic
 import Text.Groom
 
 import Vaultaire.Conversion.Receiver
+import Vaultaire.Persistence.BucketObject
 
 main = do
     args <- getArgs
