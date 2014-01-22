@@ -25,9 +25,32 @@ import Data.Maybe (fromJust)
 import System.Environment (getArgs, getProgName)
 import System.ZMQ4.Monadic
 import Text.Groom
+import System.Rados
 
+import Vaultaire.Internal.CoreTypes
 import Vaultaire.Conversion.Receiver
+import Vaultaire.Persistence.BucketObject
 
+validateBurst :: [Point] -> IO ()
+validateBurst [] = return ()
+validateBurst (p:_) =
+  let
+    o' = origin p
+  in
+    if S.null o'
+        then error "Empty origin value, discarding burst"
+        else return ()
+
+
+processBurst :: [Point] -> IO ()
+processBurst [] = return ()
+processBurst ps = do
+    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+        runPool "test1" $ do
+            mapM_ appendVaultPoint ps
+
+
+main :: IO ()
 main = do
     args <- getArgs
 
@@ -51,9 +74,10 @@ main = do
 
             liftIO $ case eps of
                 Left err    -> putStrLn err
-                Right ps    -> putStrLn $ groom ps
-
-            liftIO $ putStrLn "----"
+                Right ps    -> do
+                    validateBurst ps
+                    processBurst ps
+                    putStrLn $ show $ length ps -- FIXME
 
 --
 -- We have to use sendMulti because we are manually following the rules of
