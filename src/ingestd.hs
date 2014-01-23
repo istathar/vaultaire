@@ -24,6 +24,8 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
+import Data.Map (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import System.Environment (getArgs, getProgName)
 import System.Rados
@@ -32,29 +34,39 @@ import Text.Groom
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Internal.CoreTypes
-import Vaultaire.Persistence.BucketObject
+import qualified Vaultaire.Persistence.BucketObject as Bucket
+import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 
-validate :: [Point] -> Either String [Point]
-validate [] = Left "Zero length burst, ignoring"
-validate ps@(p:_) =
+groupBurst :: [Point] -> Either String (Map Origin [Point])
+groupBurst [] = Left "Zero length burst, ignoring"
+groupBurst ps =
+    Right $ foldl f Map.empty ps
+  where
+    f :: Map Origin [Point] -> Point -> Map Origin [Point]
+    f m p = Map.insertWith (++) (origin p) [p] m
+
+{-
+
   let
     o' = origin p
   in
     if S.null o'
         then Left "Empty origin value, discarding burst"
         else Right ps
+-}
 
-
-processBurst :: [Point] -> IO ()
-processBurst [] = return ()
-processBurst ps = do
+processBurst :: Map Origin [Point] -> IO ()
+processBurst m = void $ do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
-            mapM_ appendVaultPoint ps
+            Map.traverseWithKey (\o' ps -> do
+                let l' = Contents.formObjectLabel o'
+                withSharedLock l' "name" "desc" "tag" (Just 10.0) $
+                    Bucket.appendVaultPoints o' ps) m
 
 
-parseMessage :: ByteString -> Either String [Point]
+parseMessage :: ByteString -> Either String (Map Origin [Point])
 parseMessage message' = do
             y' <- case decompress message' of
                 Just x' -> Right x'
@@ -62,7 +74,9 @@ parseMessage message' = do
 
             ps <- decodeBurst y'
 
-            validate ps
+            groupBurst ps
+
+
 
 
 main :: IO ()
@@ -87,9 +101,9 @@ main = do
                     Left err -> do
                         liftIO $ putStr err
                         return $ S.pack err
-                    Right ps -> do
-                        liftIO $ processBurst ps
-                        liftIO $ print $ ps
+                    Right mp -> do
+                        liftIO $ processBurst mp
+                        liftIO $ print $ Map.size mp
                         return $ S.empty
 
 --

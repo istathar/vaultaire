@@ -16,7 +16,7 @@
 
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
-    appendVaultPoint,
+    appendVaultPoints,
     readVaultObject,
 
     -- for testing
@@ -29,6 +29,7 @@ import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Char
+import Data.Foldable (traverse_)
 import Data.Locator
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -123,30 +124,56 @@ instance Serialize Text where
 
 
 --
--- | Given a single data point, write it down to Ceph. We express as a
+-- | Given a collection of points in the same source, write them down to Ceph. We express as a
 -- VaultPoint protobuf, serialize to bytes, then prepend a VaultPrefix
 -- in order to store the size necessary to be able to read it back again.
 --
 
-appendVaultPoint :: Point -> Pool ()
-appendVaultPoint p =
-    let
-        p' = encodePoint p
-        r  = createDiskPrefix (fromIntegral $ S.length p')
-        r' = encode r
 
-        b' = S.concat [r',p']
+bucket :: Origin -> Point -> (ByteString, ByteString)
+bucket o' p =
+  let
+    p' = encodePoint p
+    r  = createDiskPrefix (fromIntegral $ S.length p')
+    r' = encode r
 
-        o' = origin p
-        s  = source p
-        t  = timestamp p
+    b' = S.concat [r',p']
 
-        l' = formObjectLabel o' s t
-    in do
-        e <- withSharedLock l' "name" "desc" "tag" (Just 1.0)
-            (runObject l' $ append b')
+    s  = source p
+    t  = timestamp p
 
-        case e of
+    l' = formObjectLabel o' s t
+  in
+    (l',b')
+
+
+
+--
+-- The origin contents file is locked before entering here
+--
+appendVaultPoints :: Origin -> [Point] -> Pool ()
+appendVaultPoints o' ps =
+  let
+    m :: Map ByteString ByteString
+    m = foldl f Map.empty ps
+
+    f :: Map ByteString ByteString -> Point -> Map ByteString ByteString
+    f m0 p =
+      let
+        (label',encoded') = bucket o' p
+      in
+        Map.insertWith (S.append) label' encoded' m0
+
+  in do
+    -- fold, accumulate a list
+    asyncs <- Map.traverseWithKey (\k v -> runAsync . runObject k $ append v) m
+    -- mapM_
+    traverse_ checkError asyncs
+
+  where
+    checkError write_in_flight = do
+        maybe_error <- waitSafe write_in_flight
+        case maybe_error of
             Just err    -> liftIO $ throwIO err
             Nothing     -> return ()
 
