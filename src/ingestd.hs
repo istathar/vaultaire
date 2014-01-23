@@ -19,27 +19,31 @@ module Main where
 import Codec.Compression.LZ4
 import Control.Applicative
 import Control.Monad (forever)
-import qualified Data.ByteString as S
+import Control.Monad.Error
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
 import Data.Maybe (fromJust)
 import System.Environment (getArgs, getProgName)
+import System.Rados
 import System.ZMQ4.Monadic
 import Text.Groom
-import System.Rados
 
-import Vaultaire.Internal.CoreTypes
 import Vaultaire.Conversion.Receiver
+import Vaultaire.Internal.CoreTypes
 import Vaultaire.Persistence.BucketObject
 
-validateBurst :: [Point] -> IO ()
-validateBurst [] = return ()
-validateBurst (p:_) =
+
+validate :: [Point] -> Either String [Point]
+validate [] = Left "Zero length burst, ignoring"
+validate ps@(p:_) =
   let
     o' = origin p
   in
     if S.null o'
-        then error "Empty origin value, discarding burst"
-        else return ()
+        then Left "Empty origin value, discarding burst"
+        else Right ps
 
 
 processBurst :: [Point] -> IO ()
@@ -48,6 +52,17 @@ processBurst ps = do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
             mapM_ appendVaultPoint ps
+
+
+parseMessage :: ByteString -> Either String [Point]
+parseMessage message' = do
+            y' <- case decompress message' of
+                Just x' -> Right x'
+                Nothing -> Left "Decompressing DataBurst failed"
+
+            ps <- decodeBurst y'
+
+            validate ps
 
 
 main :: IO ()
@@ -68,16 +83,14 @@ main = do
         forever $ do
             [envelope', delimiter', message'] <- receiveMulti pull
 
-            let burst' = fromJust $ decompress message'
-
-            let eps = decodeBurst burst'
-
-            liftIO $ case eps of
-                Left err    -> putStrLn err
-                Right ps    -> do
-                    validateBurst ps
-                    processBurst ps
-                    putStrLn $ show $ length ps -- FIXME
+            ok' <- case parseMessage message' of
+                    Left err -> do
+                        liftIO $ putStr err
+                        return $ S.pack err
+                    Right ps -> do
+                        liftIO $ processBurst ps
+                        liftIO $ print $ ps
+                        return $ S.empty
 
 --
 -- We have to use sendMulti because we are manually following the rules of
@@ -86,5 +99,5 @@ main = do
 -- return the
 --
 
-            sendMulti ack (fromList [envelope', delimiter', S.empty])
+            sendMulti ack (fromList [envelope', delimiter', ok'])
 

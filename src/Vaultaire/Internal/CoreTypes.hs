@@ -60,7 +60,8 @@ data Value
 
 instance Show Point where
     show x = intercalate "\n"
-        [show $ source x,
+        [show $ origin x,
+         show $ source x,
          show $ timestamp x,
          case payload x of
                 Empty       -> ""
