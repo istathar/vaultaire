@@ -36,6 +36,7 @@ import qualified Data.Map.Strict as Map
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
+import Data.Traversable
 import Data.Word
 import System.Rados
 
@@ -147,7 +148,6 @@ bucket o' p =
     (l',b')
 
 
-
 --
 -- The origin contents file is locked before entering here
 --
@@ -164,13 +164,13 @@ appendVaultPoints o' ps =
       in
         Map.insertWith (S.append) label' encoded' m0
 
-  in do
-    -- fold, accumulate a list
-    asyncs <- Map.traverseWithKey (\k v -> runAsync . runObject k $ append v) m
-    -- mapM_
+  in {-# SCC "RADOS" #-} do
+    asyncs <- sequenceA $ Map.foldrWithKey asyncAppend [] m
     traverse_ checkError asyncs
 
   where
+    asyncAppend l' b' as = (runAsync . runObject l' $ append b') : as
+
     checkError write_in_flight = do
         maybe_error <- waitSafe write_in_flight
         case maybe_error of

@@ -24,10 +24,16 @@ import Control.Exception
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.Foldable
+import Data.Map (Map)
+import qualified Data.Map.Strict as Map
 import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Traversable
+import Prelude hiding (foldl)
 import System.Rados
+
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
@@ -43,6 +49,34 @@ import qualified Vaultaire.Serialize.DiskFormat as Disk
 formObjectLabel :: Origin -> ByteString
 formObjectLabel o' =
     S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
+
+bucket = undefined
+
+updateContents :: Origin -> [Point] -> Pool ()
+updateContents o' ps =
+  let
+    m :: Map ByteString ByteString
+    m = foldl f Map.empty ps
+
+    f :: Map ByteString ByteString -> Point -> Map ByteString ByteString
+    f m0 p =
+      let
+        (label',encoded') = bucket o' p
+      in
+        Map.insertWith (S.append) label' encoded' m0
+
+  in do
+    asyncs <- sequenceA $ Map.foldrWithKey f1 [] m
+    traverse_ checkError asyncs
+
+  where
+    f1 l' b' as = (runAsync . runObject l' $ append b') : as
+
+    checkError write_in_flight = do
+        maybe_error <- waitSafe write_in_flight
+        case maybe_error of
+            Just err    -> liftIO $ throwIO err
+            Nothing     -> return ()
 
 
 appendVaultSource :: Origin -> SourceDict -> Pool ()
