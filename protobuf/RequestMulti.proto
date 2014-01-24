@@ -1,0 +1,18 @@
+message RequestMulti {
+        repeated RequestSource  sources = 1;
+}
+
+message RequestSource {
+        required bytes          origin = 8;
+
+        message Tag {
+                required string field = 1;
+                required string value = 2;
+        }
+        repeated Tag            source = 1;
+
+        required fixed64        alpha = 2;
+        optional fixed64        omega = 3;
+}
+
+// vim: set expandtab tabstop=4:
