@@ -25,6 +25,8 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import System.Environment (getArgs, getProgName)
@@ -56,27 +58,41 @@ groupBurst ps =
         else Right ps
 -}
 
-processBurst :: Map Origin [Point] -> IO ()
-processBurst m = void $ do
+processBurst :: [Point] -> IO (Origin, Set SourceDict)
+processBurst [] = return (S.empty, Set.empty)
+processBurst ps =
+  let
+    o' = origin $ head ps
+  in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
-            Map.traverseWithKey (\o' ps -> do
-                let l' = Contents.formObjectLabel o'
-                withSharedLock l' "name" "desc" "tag" (Just 10.0) $
-                    Bucket.appendVaultPoints o' ps) m
+            let l' = Contents.formObjectLabel o'
+            withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
+
+                -- returns the sources that are "new"
+                st <- Bucket.appendVaultPoints o' ps
+                return (o',st)
 
 
-parseMessage :: ByteString -> Either String (Map Origin [Point])
+parseMessage :: ByteString -> Either String [Point]
 parseMessage message' = do
-            y' <- case decompress message' of
-                Just x' -> Right x'
-                Nothing -> Left "Decompressing DataBurst failed"
+    y' <- case decompress message' of
+        Just x' -> Right x'
+        Nothing -> Left "Decompressing DataBurst failed"
 
-            ps <- decodeBurst y'
+    ps <- decodeBurst y'
+    return ps
 
-            groupBurst ps
+--          groupBurst ps
 
 
+updateContents :: Origin -> Set SourceDict -> IO ()
+updateContents o' st = do
+    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+        runPool "test1" $ do
+            let l' = Contents.formObjectLabel o'
+            withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
+                Contents.appendVaultSource l' st
 
 
 main :: IO ()
@@ -97,14 +113,14 @@ main = do
         forever $ do
             [envelope', delimiter', message'] <- receiveMulti pull
 
-            ok' <- case parseMessage message' of
+            (ok', o', st) <- liftIO $ case parseMessage message' of
                     Left err -> do
-                        liftIO $ putStr err
-                        return $ S.pack err
-                    Right mp -> do
-                        liftIO $ processBurst mp
-                        liftIO $ print $ Map.size mp
-                        return $ S.empty
+                        putStr err                  -- temporary
+                        return $ (S.pack err, S.empty, Set.empty)
+                    Right ps -> do
+                        (o',st) <- processBurst ps
+                        print $ length ps         -- tempoary
+                        return $ (S.empty, o', st)
 
 --
 -- We have to use sendMulti because we are manually following the rules of
@@ -114,4 +130,10 @@ main = do
 --
 
             sendMulti ack (fromList [envelope', delimiter', ok'])
+
+--
+-- Now, before looping, write updates to the contents list, if any.
+--
+
+            liftIO $ updateContents o' st
 

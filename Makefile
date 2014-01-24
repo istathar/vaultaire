@@ -71,6 +71,7 @@ $(BUILDDIR)/%.bin: config.h src/%.hs $(CORE_SOURCES)
 	@if [ ! -d $(BUILDDIR) ] ; then /bin/echo -e "MKDIR\t$(BUILDDIR)" ; mkdir -p $(BUILDDIR) ; fi
 	@/bin/echo -e "GHC\t$@"
 	$(GHC) --make \
+		-prof -fprof-auto \
 		-outputdir $(BUILDDIR)/$* \
 		-i"$(BUILDDIR):src" \
 		-I"." \

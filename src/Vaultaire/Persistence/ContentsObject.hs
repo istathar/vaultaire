@@ -20,20 +20,17 @@ module Vaultaire.Persistence.ContentsObject (
     readVaultObject
 ) where
 
+import Prelude hiding (foldl, mapM_)
+
 import Control.Exception
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import Data.Foldable
-import Data.Map (Map)
-import qualified Data.Map.Strict as Map
 import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Traversable
-import Prelude hiding (foldl)
+import Data.Foldable
 import System.Rados
-
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
@@ -50,47 +47,26 @@ formObjectLabel :: Origin -> ByteString
 formObjectLabel o' =
     S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
 
-bucket = undefined
 
-updateContents :: Origin -> [Point] -> Pool ()
-updateContents o' ps =
+content :: SourceDict -> ByteString
+content s =
   let
-    m :: Map ByteString ByteString
-    m = foldl f Map.empty ps
+    s' = encode $ createDiskContent s
+    r' = encode $ createDiskPrefix (fromIntegral $ S.length s')
 
-    f :: Map ByteString ByteString -> Point -> Map ByteString ByteString
-    f m0 p =
-      let
-        (label',encoded') = bucket o' p
-      in
-        Map.insertWith (S.append) label' encoded' m0
+    b' = S.concat [r',s']
+  in
+    b'
 
-  in do
-    asyncs <- sequenceA $ Map.foldrWithKey f1 [] m
-    traverse_ checkError asyncs
-
+appendVaultSource :: ByteString -> Set SourceDict -> Pool ()
+appendVaultSource l' st = do
+    mapM_ action st
   where
-    f1 l' b' as = (runAsync . runObject l' $ append b') : as
-
-    checkError write_in_flight = do
-        maybe_error <- waitSafe write_in_flight
-        case maybe_error of
-            Just err    -> liftIO $ throwIO err
-            Nothing     -> return ()
-
-
-appendVaultSource :: Origin -> SourceDict -> Pool ()
-appendVaultSource o' s =
-    let
-        s' = encode $ createDiskContent s
-        r' = encode $ createDiskPrefix (fromIntegral $ S.length s')
-
-        b' = S.concat [r',s']
-
-        l' = formObjectLabel o'
-    in do
-        em <- withSharedLock l' "name" "desc" "tag" (Just 1)
-            (runObject l' $ append b')
+    action s = 
+      let
+        b' = content s
+      in do
+        em <- runObject l' $ append b'
 
         case em of
             Just err    -> liftIO $ throwIO err

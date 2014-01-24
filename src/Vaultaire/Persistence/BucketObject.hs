@@ -34,6 +34,8 @@ import Data.Locator
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Serialize
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Traversable
@@ -125,11 +127,11 @@ instance Serialize Text where
 
 
 --
--- | Given a collection of points in the same source, write them down to Ceph. We express as a
--- VaultPoint protobuf, serialize to bytes, then prepend a VaultPrefix
--- in order to store the size necessary to be able to read it back again.
+-- | Given a collection of points in the same source, write them down to Ceph.
+-- We express as a VaultPoint protobuf, serialize to bytes, then prepend a
+-- VaultPrefix in order to store the size necessary to be able to read it back
+-- again.
 --
-
 
 bucket :: Origin -> Point -> (ByteString, ByteString)
 bucket o' p =
@@ -151,7 +153,7 @@ bucket o' p =
 --
 -- The origin contents file is locked before entering here
 --
-appendVaultPoints :: Origin -> [Point] -> Pool ()
+appendVaultPoints :: Origin -> [Point] -> Pool (Set SourceDict)
 appendVaultPoints o' ps =
   let
     m :: Map ByteString ByteString
@@ -167,6 +169,7 @@ appendVaultPoints o' ps =
   in {-# SCC "RADOS" #-} do
     asyncs <- sequenceA $ Map.foldrWithKey asyncAppend [] m
     traverse_ checkError asyncs
+    return Set.empty -- FIXME
 
   where
     asyncAppend l' b' as = (runAsync . runObject l' $ append b') : as
@@ -178,8 +181,6 @@ appendVaultPoints o' ps =
             Nothing     -> return ()
 
 {-
-    Marshalling into a Point just to form a bucket label is a bit silly.
-
     This whole thing is a bit crazy. We should just merge it all into a single
     use of Data.Serialize.Get
 -}
