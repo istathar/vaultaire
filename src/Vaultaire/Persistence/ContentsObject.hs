@@ -26,10 +26,10 @@ import Control.Exception
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.Foldable
 import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Foldable
 import System.Rados
 
 import Vaultaire.Conversion.Reader
@@ -62,7 +62,7 @@ appendVaultSource :: ByteString -> Set SourceDict -> Pool ()
 appendVaultSource l' st = do
     mapM_ action st
   where
-    action s = 
+    action s =
       let
         b' = content s
       in do

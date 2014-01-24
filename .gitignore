@@ -3,6 +3,7 @@ config.h
 ingestd
 vault
 dist/
+*.prof
 
 # test binaries
 check

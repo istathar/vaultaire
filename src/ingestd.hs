@@ -25,10 +25,10 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
-import Data.Set (Set)
-import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import System.Environment (getArgs, getProgName)
 import System.Rados
 import System.ZMQ4.Monadic
