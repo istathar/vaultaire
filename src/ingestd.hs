@@ -40,6 +40,9 @@ import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 
+
+
+{-
 groupBurst :: [Point] -> Either String (Map Origin [Point])
 groupBurst [] = Left "Zero length burst, ignoring"
 groupBurst ps =
@@ -47,19 +50,28 @@ groupBurst ps =
   where
     f :: Map Origin [Point] -> Point -> Map Origin [Point]
     f m p = Map.insertWith (++) (origin p) [p] m
+-}
 
-{-
+--
+-- This will be refactored since the Origin value will soon be conveyed at
+-- the ØMQ level, rather than the current hack of an environment variable
+-- passed to libmarquise. But at the moment this is a simple enough check
+-- to ensure we at least have a value.
+--
 
+sanityCheck :: [Point] -> Either String [Point]
+sanityCheck ps =
   let
-    o' = origin p
+    o' = origin $ head ps
   in
     if S.null o'
         then Left "Empty origin value, discarding burst"
         else Right ps
--}
 
-processBurst :: [Point] -> IO (Origin, Set SourceDict)
-processBurst [] = return (S.empty, Set.empty)
+
+processBurst :: [Point] -> IO ContentsList
+processBurst [] =
+                return $ ContentsList S.empty Set.empty
 processBurst ps =
   let
     o' = origin $ head ps
@@ -71,7 +83,7 @@ processBurst ps =
 
                 -- returns the sources that are "new"
                 st <- Bucket.appendVaultPoints o' ps
-                return (o',st)
+                return $ ContentsList o' st
 
 
 parseMessage :: ByteString -> Either String [Point]
@@ -81,18 +93,29 @@ parseMessage message' = do
         Nothing -> Left "Decompressing DataBurst failed"
 
     ps <- decodeBurst y'
-    return ps
 
---          groupBurst ps
+    sanityCheck ps
 
 
-updateContents :: Origin -> Set SourceDict -> IO ()
-updateContents o' st = do
+--
+-- This takes *a* contents list, not *the* contents list, in other words
+-- this is just conveying the SourceDicts that are "new".
+--
+updateContents :: ContentsList -> IO ()
+updateContents c =
+  let
+    o' = origin2 c
+    st = sources c
+  in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
             let l' = Contents.formObjectLabel o'
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
                 Contents.appendVaultSource l' st
+
+
+debug :: Show σ => σ -> IO ()
+debug x = putStrLn $ show x
 
 
 main :: IO ()
@@ -113,14 +136,14 @@ main = do
         forever $ do
             [envelope', delimiter', message'] <- receiveMulti pull
 
-            (ok', o', st) <- liftIO $ case parseMessage message' of
+            (ok', c) <- liftIO $ case parseMessage message' of
                     Left err -> do
-                        putStr err                  -- temporary
-                        return $ (S.pack err, S.empty, Set.empty)
+                        debug err                   -- temporary
+                        return $ (S.pack err, undefined)
                     Right ps -> do
-                        (o',st) <- processBurst ps
-                        print $ length ps         -- tempoary
-                        return $ (S.empty, o', st)
+                        c <- processBurst ps
+                        debug $ length ps           -- tempoary
+                        return $ (S.empty, c)
 
 --
 -- We have to use sendMulti because we are manually following the rules of
@@ -135,5 +158,6 @@ main = do
 -- Now, before looping, write updates to the contents list, if any.
 --
 
-            liftIO $ updateContents o' st
+            liftIO $ updateContents c
+
 
