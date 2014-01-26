@@ -103,7 +103,6 @@ newtype OriginMap = OriginMap {
 } deriving (Eq, Show)
 
 data ContentsList = ContentsList {
-    origin2 :: Origin,
     sources :: Set SourceDict
 } deriving (Eq, Show)
 

@@ -4,6 +4,7 @@ ingestd
 vault
 dist/
 *.prof
+*.mem
 
 # test binaries
 check

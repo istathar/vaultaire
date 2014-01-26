@@ -69,21 +69,21 @@ sanityCheck ps =
         else Right ps
 
 
-processBurst :: [Point] -> IO ContentsList
-processBurst [] =
-                return $ ContentsList S.empty Set.empty
-processBurst ps =
+processBurst :: Map Origin (Set SourceDict) -> Origin -> [Point] -> IO (Set SourceDict)
+processBurst _ _ [] =
+    return Set.empty
+processBurst cm o' ps =
   let
-    o' = origin $ head ps
+    known = Map.findWithDefault Set.empty o' cm
   in do
-    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+    new <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
             let l' = Contents.formObjectLabel o'
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
 
                 -- returns the sources that are "new"
-                st <- Bucket.appendVaultPoints o' ps
-                return $ ContentsList o' st
+                Bucket.appendVaultPoints o' known ps
+    return new
 
 
 parseMessage :: ByteString -> Either String [Point]
@@ -101,17 +101,20 @@ parseMessage message' = do
 -- This takes *a* contents list, not *the* contents list, in other words
 -- this is just conveying the SourceDicts that are "new".
 --
-updateContents :: ContentsList -> IO ()
-updateContents c =
+updateContents :: Map Origin (Set SourceDict) -> Origin -> Set SourceDict -> IO (Map Origin (Set SourceDict))
+updateContents cm0 o' new =
   let
-    o' = origin2 c
-    st = sources c
+    orig = Map.findWithDefault Set.empty o' cm0
+
+    replace = Set.foldl (\acc s -> Set.insert s acc) orig new
+    cm1 = Map.insert o' replace cm0
+    l' = Contents.formObjectLabel o'
   in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
-            let l' = Contents.formObjectLabel o'
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
-                Contents.appendVaultSource l' st
+                Contents.appendVaultSource l' new
+    return cm1
 
 
 debug :: Show σ => σ -> IO ()
@@ -126,24 +129,36 @@ main = do
                     then head args
                     else error "Specify broker hostname or IP address on command line"
 
+    cm <- return $ Map.singleton "FIXME0" Set.empty
+
     runZMQ $ do
         pull <- socket Pull
         connect pull ("tcp://" ++ broker ++ ":5561")
 
         ack  <- socket Push
         connect ack  ("tcp://" ++ broker ++ ":5560")
-
-        forever $ do
+        
+        loop pull ack cm
+  where
+    loop pull ack cm = do
             [envelope', delimiter', message'] <- receiveMulti pull
 
-            (ok', c) <- liftIO $ case parseMessage message' of
+            (ok', o', st) <- liftIO $ case parseMessage message' of
                     Left err -> do
-                        debug err                   -- temporary
-                        return $ (S.pack err, undefined)
+                        -- temporary, replace with telemetry
+                        debug err
+
+                        return $ (S.pack err, S.empty, Set.empty)
                     Right ps -> do
-                        c <- processBurst ps
-                        debug $ length ps           -- tempoary
-                        return $ (S.empty, c)
+                        -- temporary, replace with zmq message part
+                        let o' = origin $ head ps
+
+                        st <- processBurst cm o' ps
+
+                        -- temporary, replace with telemetry
+                        debug $ length ps
+
+                        return $ (S.empty, o', st)
 
 --
 -- We have to use sendMulti because we are manually following the rules of
@@ -158,6 +173,7 @@ main = do
 -- Now, before looping, write updates to the contents list, if any.
 --
 
-            liftIO $ updateContents c
+            cm2 <- liftIO $ updateContents cm o' st
 
+            loop pull ack cm2
 

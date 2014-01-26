@@ -151,11 +151,26 @@ bucket o' p =
 
 
 --
--- The origin contents file is locked before entering here
+-- The origin contents file is locked before entering here. Build a map of
+-- labels to encoded points, then construct a list of asynchronous appends.
+-- While we're doing that, we note any SourceDicts we didn't know about
+-- already.
 --
-appendVaultPoints :: Origin -> [Point] -> Pool (Set SourceDict)
-appendVaultPoints o' ps =
+appendVaultPoints :: Origin -> Set SourceDict -> [Point] -> Pool (Set SourceDict)
+appendVaultPoints o' known ps =
   let
+    new :: Set SourceDict
+    new = foldl g Set.empty ps
+
+    g :: Set SourceDict -> Point -> Set SourceDict
+    g st p =
+      let
+        s = source p
+      in
+        if Set.member s known
+            then st
+            else Set.insert s st
+
     m :: Map ByteString ByteString
     m = foldl f Map.empty ps
 
@@ -169,7 +184,8 @@ appendVaultPoints o' ps =
   in {-# SCC "RADOS" #-} do
     asyncs <- sequenceA $ Map.foldrWithKey asyncAppend [] m
     traverse_ checkError asyncs
-    return Set.empty -- FIXME
+
+    return new
 
   where
     asyncAppend l' b' as = (runAsync . runObject l' $ append b') : as
