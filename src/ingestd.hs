@@ -31,7 +31,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import System.Environment (getArgs, getProgName)
 import System.Rados
-import System.ZMQ4.Monadic
+import System.ZMQ4.Monadic hiding (source)
 import Text.Groom
 
 import Vaultaire.Conversion.Receiver
@@ -75,14 +75,27 @@ processBurst _ _ [] =
 processBurst cm o' ps =
   let
     known = Map.findWithDefault Set.empty o' cm
+
+    new :: Set SourceDict
+    new = foldl g Set.empty ps
+
+    g :: Set SourceDict -> Point -> Set SourceDict
+    g st p =
+      let
+        s = source p
+      in
+        if Set.member s known
+            then st
+            else Set.insert s st
+
   in do
-    new <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
             let l' = Contents.formObjectLabel o'
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
 
                 -- returns the sources that are "new"
-                Bucket.appendVaultPoints o' known ps
+                Bucket.appendVaultPoints o' ps
     return new
 
 

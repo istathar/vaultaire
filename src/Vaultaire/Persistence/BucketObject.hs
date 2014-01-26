@@ -34,8 +34,6 @@ import Data.Locator
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Serialize
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Traversable
@@ -153,24 +151,10 @@ bucket o' p =
 --
 -- The origin contents file is locked before entering here. Build a map of
 -- labels to encoded points, then construct a list of asynchronous appends.
--- While we're doing that, we note any SourceDicts we didn't know about
--- already.
 --
-appendVaultPoints :: Origin -> Set SourceDict -> [Point] -> Pool (Set SourceDict)
-appendVaultPoints o' known ps =
+appendVaultPoints :: Origin -> [Point] -> Pool ()
+appendVaultPoints o' ps =
   let
-    new :: Set SourceDict
-    new = foldl g Set.empty ps
-
-    g :: Set SourceDict -> Point -> Set SourceDict
-    g st p =
-      let
-        s = source p
-      in
-        if Set.member s known
-            then st
-            else Set.insert s st
-
     m :: Map ByteString ByteString
     m = foldl f Map.empty ps
 
@@ -184,8 +168,6 @@ appendVaultPoints o' known ps =
   in {-# SCC "RADOS" #-} do
     asyncs <- sequenceA $ Map.foldrWithKey asyncAppend [] m
     traverse_ checkError asyncs
-
-    return new
 
   where
     asyncAppend l' b' as = (runAsync . runObject l' $ append b') : as

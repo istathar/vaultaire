@@ -83,6 +83,8 @@ main = do
     let r' = createDiskPrefix (fromIntegral $ S.length p')
     let l' = Bucket.formObjectLabel o' s t
 
+    let st = Set.singleton s
+
     putStrLn ""
     putStrLn $ show p
     putStrLn ""
@@ -92,8 +94,8 @@ main = do
 
     m <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
-            Bucket.appendVaultPoint p
-            Contents.appendVaultSource o' s
+            Bucket.appendVaultPoints o' [p]
+            Contents.appendVaultSource o' st
             Bucket.readVaultObject o' s (timestamp p)
 
     putStrLn ""
