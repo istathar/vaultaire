@@ -29,6 +29,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Time.Clock
 import System.Environment (getArgs, getProgName)
 import System.Rados
 import System.ZMQ4.Monadic hiding (source)
@@ -130,6 +131,12 @@ updateContents cm0 o' new =
     return cm1
 
 
+debugTime :: UTCTime -> IO ()
+debugTime t1 = do
+    t2 <- getCurrentTime
+    debug $ diffUTCTime t2 t1
+
+
 debug :: Show σ => σ -> IO ()
 debug x = putStrLn $ show x
 
@@ -155,6 +162,7 @@ main = do
   where
         loop pull ack cm = do
             [envelope', delimiter', message'] <- receiveMulti pull
+            t <- liftIO $ getCurrentTime
 
             (ok', o', st) <- liftIO $ case parseMessage message' of
                 Left err -> do
@@ -187,6 +195,7 @@ main = do
 --
 
             cm2 <- liftIO $ updateContents cm o' st
+            liftIO $ debugTime t
 
             loop pull ack cm2
 
