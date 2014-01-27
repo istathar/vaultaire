@@ -150,28 +150,28 @@ main = do
 
         ack  <- socket Push
         connect ack  ("tcp://" ++ broker ++ ":5560")
-        
+
         loop pull ack cm
   where
-    loop pull ack cm = do
+        loop pull ack cm = do
             [envelope', delimiter', message'] <- receiveMulti pull
 
             (ok', o', st) <- liftIO $ case parseMessage message' of
-                    Left err -> do
-                        -- temporary, replace with telemetry
-                        debug err
+                Left err -> do
+                    -- temporary, replace with telemetry
+                    debug err
 
-                        return $ (S.pack err, S.empty, Set.empty)
-                    Right ps -> do
-                        -- temporary, replace with zmq message part
-                        let o' = origin $ head ps
+                    return $ (S.pack err, S.empty, Set.empty)
+                Right ps -> do
+                    -- temporary, replace with zmq message part
+                    let o' = origin $ head ps
 
-                        st <- processBurst cm o' ps
+                    st <- processBurst cm o' ps
 
-                        -- temporary, replace with telemetry
-                        debug $ length ps
+                    -- temporary, replace with telemetry
+                    debug $ length ps
 
-                        return $ (S.empty, o', st)
+                    return $ (S.empty, o', st)
 
 --
 -- We have to use sendMulti because we are manually following the rules of
