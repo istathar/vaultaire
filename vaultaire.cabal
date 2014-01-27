@@ -20,10 +20,12 @@ executable           ingestd
                      text,
                      containers >= 0.5,
                      cereal,
-                     groom,
-                     lz4,
                      semigroups,
+                     transformers,
+                     mtl,
+                     lz4,
                      zeromq4-haskell,
+                     time,
                      type-level,
                      protobuf,
                      locators,
@@ -59,17 +61,20 @@ test-suite           check
                      text,
                      containers >= 0.5,
                      cereal,
-                     groom,
-                     lz4,
                      semigroups,
+                     transformers,
+                     mtl,
+                     lz4,
                      zeromq4-haskell,
+                     time,
                      type-level,
                      protobuf,
                      locators,
-                     rados-haskell
+                     rados-haskell >= 2.0.0
 
-  hs-source-dirs:    src,tests
   main-is:           check.hs
+  hs-source-dirs:    src,tests
+  include-dirs:      .
 
   ghc-options:       -O2
                      -threaded
