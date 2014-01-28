@@ -2,4 +2,4 @@ message VaultHeader {
         required fixed32 header = 1
 }
 
-// vim: set expandtab tabstop=4:
+// vim: set expandtab tabstop=8:
