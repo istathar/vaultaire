@@ -218,15 +218,17 @@ readVaultObject o' s t =
 --
 
         process :: ByteString -> Map Timestamp Point -> Either String (Map Timestamp Point)
-        process y' m1 = do
-            (p,z') <- readPoint2 y'
-            let k = timestamp p
-            let m2 = if Map.member k m1
-                    then m1
-                    else Map.insert k p m1
-            if S.null z'
-                then return m2
-                else process z' m2
+        process y' m1 =
+            if S.null y'
+                then return m1
+                else do
+                    (p,z') <- readPoint2 y'
+                    let k = timestamp p
+                    let m2 = if Map.member k m1
+                            then m1
+                            else Map.insert k p m1
+
+                    process z' m2
 
 
         readPoint2 :: ByteString -> Either String (Point, ByteString)
