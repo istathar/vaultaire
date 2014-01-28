@@ -11,6 +11,7 @@
 
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports    #-}
 {-# OPTIONS -fno-warn-orphans #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
@@ -24,15 +25,18 @@ module Vaultaire.Persistence.BucketObject (
 ) where
 
 import Control.Exception
-import Control.Monad.Error ()
+import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import qualified Data.ByteString.Lazy as L
+import Data.ByteString.Lazy.Builder
 import Data.Char
 import Data.Foldable (traverse_)
 import Data.Locator
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Monoid
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
@@ -131,21 +135,23 @@ instance Serialize Text where
 -- again.
 --
 
-bucket :: Origin -> Point -> (ByteString, ByteString)
+bucket :: Origin -> Point -> (ByteString, Builder)
 bucket o' p =
   let
     p' = encodePoint p
+    pB = byteString p'
     r  = createDiskPrefix (fromIntegral $ S.length p')
     r' = encode r
+    rB = byteString r'
 
-    b' = S.concat [r',p']
+    bB = mappend rB pB
 
     s  = source p
     t  = timestamp p
 
     l' = formObjectLabel o' s t
   in
-    (l',b')
+    (l',bB)
 
 
 --
@@ -155,28 +161,30 @@ bucket o' p =
 appendVaultPoints :: Origin -> [Point] -> Pool ()
 appendVaultPoints o' ps =
   let
-    m :: Map ByteString ByteString
+    m :: Map ByteString Builder
     m = foldl f Map.empty ps
 
-    f :: Map ByteString ByteString -> Point -> Map ByteString ByteString
+    f :: Map ByteString Builder -> Point -> Map ByteString Builder
     f m0 p =
       let
-        (label',encoded') = bucket o' p
+        (label',encodedB) = bucket o' p
       in
-        Map.insertWith (S.append) label' encoded' m0
+        Map.insertWith (mappend) label' encodedB m0
 
   in {-# SCC "RADOS" #-} do
     asyncs <- sequenceA $ Map.foldrWithKey asyncAppend [] m
     traverse_ checkError asyncs
 
   where
-    asyncAppend l' b' as = (runAsync . runObject l' $ append b') : as
+    asyncAppend l' bB as = (runAsync . runObject l' $ append $ toByteString bB) : as
 
     checkError write_in_flight = do
         maybe_error <- waitSafe write_in_flight
         case maybe_error of
             Just err    -> liftIO $ throwIO err
             Nothing     -> return ()
+
+    toByteString = S.concat . L.toChunks . toLazyByteString
 
 {-
     This whole thing is a bit crazy. We should just merge it all into a single
@@ -210,15 +218,17 @@ readVaultObject o' s t =
 --
 
         process :: ByteString -> Map Timestamp Point -> Either String (Map Timestamp Point)
-        process y' m1 = do
-            (p,z') <- readPoint2 y'
-            let k = timestamp p
-            let m2 = if Map.member k m1
-                    then m1
-                    else Map.insert k p m1
-            if S.null z'
-                then return m2
-                else process z' m2
+        process y' m1 =
+            if S.null y'
+                then return m1
+                else do
+                    (p,z') <- readPoint2 y'
+                    let k = timestamp p
+                    let m2 = if Map.member k m1
+                            then m1
+                            else Map.insert k p m1
+
+                    process z' m2
 
 
         readPoint2 :: ByteString -> Either String (Point, ByteString)

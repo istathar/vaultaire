@@ -75,35 +75,36 @@ appendVaultSource l' st = do
 
 readVaultObject :: Origin -> Pool (Set SourceDict)
 readVaultObject o' =
-    let
-        l' = formObjectLabel o'
+  let
+    l' = formObjectLabel o'
 
-    in do
-        ey' <- runObject l' readFull
+  in do
+    ey' <- runObject l' readFull
 
-        case ey' of
-            Left err        -> liftIO $ throwIO err
-            Right y'        -> either error return $ process y' Set.empty
+    case ey' of
+        Left err        -> liftIO $ throwIO err
+        Right y'        -> either error return $ process y' Set.empty
 
-    where
+  where
 
-        process :: ByteString -> Set SourceDict -> Either String (Set SourceDict)
-        process y' e1 = do
-            (s,z') <- readSource y'
+    process :: ByteString -> Set SourceDict -> Either String (Set SourceDict)
+    process y' e1 =
+        if S.null y'
+            then return e1
+            else do
+                (s,z') <- readSource y'
 
-            let e2 = if Set.member s e1
-                    then e1
-                    else Set.insert s e1
+                let e2 = if Set.member s e1
+                        then e1
+                        else Set.insert s e1
 
-            if S.null z'
-                then return e2
-                else process z' e2
+                process z' e2
 
 
-        readSource :: ByteString -> Either String (SourceDict, ByteString)
-        readSource x' = do
-            ((VaultRecord _ sb), z') <- runGetState get x' 0
-            return (convertToSource sb, z')
+    readSource :: ByteString -> Either String (SourceDict, ByteString)
+    readSource x' = do
+        ((VaultRecord _ sb), z') <- runGetState get x' 0
+        return (convertToSource sb, z')
 
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultContent

@@ -72,7 +72,6 @@ $(BUILDDIR)/%.bin: config.h src/%.hs $(CORE_SOURCES)
 	@/bin/echo -e "GHC\t$@"
 	$(GHC) --make \
 		-prof -fprof-auto \
-		-hide-package monads-tf \
 		-outputdir $(BUILDDIR)/$* \
 		-i"$(BUILDDIR):src" \
 		-I"." \

@@ -12,6 +12,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE PackageImports     #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 
 module Main where
@@ -19,7 +20,7 @@ module Main where
 import Codec.Compression.LZ4
 import Control.Applicative
 import Control.Monad (forever)
-import Control.Monad.Error
+import "mtl" Control.Monad.Error ()
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
@@ -33,7 +34,6 @@ import Data.Time.Clock
 import System.Environment (getArgs, getProgName)
 import System.Rados
 import System.ZMQ4.Monadic hiding (source)
-import Text.Groom
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Internal.CoreTypes
@@ -118,17 +118,27 @@ parseMessage message' = do
 updateContents :: Map Origin (Set SourceDict) -> Origin -> Set SourceDict -> IO (Map Origin (Set SourceDict))
 updateContents cm0 o' new =
   let
-    orig = Map.findWithDefault Set.empty o' cm0
+    st0 = Map.findWithDefault Set.empty o' cm0
 
-    replace = Set.foldl (\acc s -> Set.insert s acc) orig new
-    cm1 = Map.insert o' replace cm0
     l' = Contents.formObjectLabel o'
   in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
-                Contents.appendVaultSource l' new
-    return cm1
+                st1 <- if Set.null st0
+                    then do
+                        Contents.readVaultObject l'
+                    else do
+                        return st0
+
+                let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new
+
+                if Set.size st2 > Set.size st1
+                    then do
+                        Contents.appendVaultSource l' new
+                        return $ Map.insert o' st2 cm0
+                    else
+                        return cm0
 
 
 debugTime :: UTCTime -> IO ()
@@ -149,7 +159,7 @@ main = do
                     then head args
                     else error "Specify broker hostname or IP address on command line"
 
-    cm <- return $ Map.singleton "FIXME0" Set.empty
+    let cm = Map.empty
 
     runZMQ $ do
         pull <- socket Pull
@@ -194,7 +204,10 @@ main = do
 -- Now, before looping, write updates to the contents list, if any.
 --
 
-            cm2 <- liftIO $ updateContents cm o' st
+            cm2 <- if Set.null st
+                then return cm
+                else liftIO $ updateContents cm o' st
+
             liftIO $ debugTime t
 
             loop pull ack cm2
