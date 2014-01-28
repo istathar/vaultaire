@@ -12,6 +12,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE PackageImports     #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 
 module Main where
@@ -19,6 +20,7 @@ module Main where
 import Codec.Compression.LZ4
 import Control.Applicative
 import Control.Monad (forever)
+import "mtl" Control.Monad.Error ()
 import Control.Monad.Error
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B

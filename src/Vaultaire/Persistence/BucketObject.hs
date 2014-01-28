@@ -11,6 +11,7 @@
 
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports    #-}
 {-# OPTIONS -fno-warn-orphans #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
@@ -24,7 +25,7 @@ module Vaultaire.Persistence.BucketObject (
 ) where
 
 import Control.Exception
-import Control.Monad.Error ()
+import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
