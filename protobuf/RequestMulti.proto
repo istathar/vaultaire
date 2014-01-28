@@ -15,4 +15,4 @@ message RequestSource {
         optional fixed64        omega = 3;
 }
 
-// vim: set expandtab tabstop=4:
+// vim: set expandtab tabstop=8:

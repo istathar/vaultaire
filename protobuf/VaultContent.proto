@@ -6,4 +6,4 @@ message VaultContent {
         repeated SourceTag  source = 1;
 }
 
-// vim: set expandtab tabstop=4:
+// vim: set expandtab tabstop=8:
