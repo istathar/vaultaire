@@ -73,12 +73,8 @@ appendVaultSource l' st = do
             Nothing     -> return ()
 
 
-readVaultObject :: Origin -> Pool (Set SourceDict)
-readVaultObject o' =
-    let
-        l' = formObjectLabel o'
-
-    in do
+readVaultObject :: ByteString -> Pool (Set SourceDict)
+readVaultObject l' = do
         ey' <- runObject l' readFull
 
         case ey' of
@@ -88,16 +84,17 @@ readVaultObject o' =
     where
 
         process :: ByteString -> Set SourceDict -> Either String (Set SourceDict)
-        process y' e1 = do
-            (s,z') <- readSource y'
+        process y' e1 =
+            if S.null y'
+                then return e1
+                else do
+                    (s,z') <- readSource y'
 
-            let e2 = if Set.member s e1
-                    then e1
-                    else Set.insert s e1
+                    let e2 = if Set.member s e1
+                            then e1
+                            else Set.insert s e1
 
-            if S.null z'
-                then return e2
-                else process z' e2
+                    process z' e2
 
 
         readSource :: ByteString -> Either String (SourceDict, ByteString)
