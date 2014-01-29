@@ -13,25 +13,20 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE PackageImports     #-}
-{-# OPTIONS -fno-warn-unused-imports #-}
 
 module Main where
 
 import Codec.Compression.LZ4
-import Control.Applicative
-import Control.Monad (forever)
 import "mtl" Control.Monad.Error ()
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
-import System.Environment (getArgs, getProgName)
+import System.Environment (getArgs)
 import System.Rados
 import System.ZMQ4.Monadic hiding (source)
 
@@ -39,8 +34,6 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
-
-
 
 
 {-
@@ -70,10 +63,15 @@ sanityCheck ps =
         else Right ps
 
 
-processBurst :: Map Origin (Set SourceDict) -> Origin -> [Point] -> IO (Set SourceDict)
-processBurst _ _ [] =
+processBurst
+    :: Map Origin (Set SourceDict)
+    -> Origin
+    -> [Point]
+    -> ByteString
+    -> IO (Set SourceDict)
+processBurst _ _ [] _ =
     return Set.empty
-processBurst cm o' ps =
+processBurst cm o' ps pool' =
   let
     known = Map.findWithDefault Set.empty o' cm
 
@@ -91,7 +89,7 @@ processBurst cm o' ps =
 
   in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool "test1" $ do
+        runPool pool' $ do
             let l' = Contents.formObjectLabel o'
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
 
@@ -115,15 +113,20 @@ parseMessage message' = do
 -- This takes *a* contents list, not *the* contents list, in other words
 -- this is just conveying the SourceDicts that are "new".
 --
-updateContents :: Map Origin (Set SourceDict) -> Origin -> Set SourceDict -> IO (Map Origin (Set SourceDict))
-updateContents cm0 o' new =
+updateContents
+    :: Map Origin (Set SourceDict)
+    -> Origin
+    -> Set SourceDict
+    -> ByteString
+    -> IO (Map Origin (Set SourceDict))
+updateContents cm0 o' new pool' =
   let
     st0 = Map.findWithDefault Set.empty o' cm0
 
     l' = Contents.formObjectLabel o'
   in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool "test1" $ do
+        runPool pool' $ do
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
                 st1 <- if Set.null st0
                     then do
@@ -141,12 +144,6 @@ updateContents cm0 o' new =
                         return cm0
 
 
-debugTime :: UTCTime -> IO ()
-debugTime t1 = do
-    t2 <- getCurrentTime
-    debug $ diffUTCTime t2 t1
-
-
 debug :: Show σ => σ -> IO ()
 debug x = putStrLn $ show x
 
@@ -155,9 +152,9 @@ main :: IO ()
 main = do
     args <- getArgs
 
-    let broker = if length args == 1
-                    then head args
-                    else error "Specify broker hostname or IP address on command line"
+    let [broker,pool] = if length args == 2
+                    then take 2 args
+                    else error "usage: ingestd broker poolname"
 
     let cm = Map.empty
 
@@ -168,28 +165,28 @@ main = do
         ack  <- socket Push
         connect ack  ("tcp://" ++ broker ++ ":5560")
 
-        loop pull ack cm
-  where
-        loop pull ack cm = do
-            [envelope', delimiter', message'] <- receiveMulti pull
-            t <- liftIO $ getCurrentTime
+        telem <- socket Pub
+        bind telem "tcp://*:5570"
 
-            (ok', o', st) <- liftIO $ case parseMessage message' of
+        loop pull ack telem cm (S.pack pool)
+  where
+        loop pull ack telem cm pool' = do
+            [envelope', delimiter', message'] <- receiveMulti pull
+            t1 <- liftIO $ getCurrentTime
+
+            (ok', o', st, num) <- liftIO $ case parseMessage message' of
                 Left err -> do
                     -- temporary, replace with telemetry
                     debug err
 
-                    return $ (S.pack err, S.empty, Set.empty)
+                    return $ (S.pack err, S.empty, Set.empty, 0)
                 Right ps -> do
                     -- temporary, replace with zmq message part
                     let o' = origin $ head ps
 
-                    st <- processBurst cm o' ps
+                    st <- processBurst cm o' ps pool'
 
-                    -- temporary, replace with telemetry
-                    debug $ length ps
-
-                    return $ (S.empty, o', st)
+                    return $ (S.empty, o', st, length ps)
 
 --
 -- We have to use sendMulti because we are manually following the rules of
@@ -206,9 +203,20 @@ main = do
 
             cm2 <- if Set.null st
                 then return cm
-                else liftIO $ updateContents cm o' st
+                else liftIO $ updateContents cm o' st pool'
 
-            liftIO $ debugTime t
+            t2 <- liftIO $ getCurrentTime
+            let delta = diffUTCTime t2 t1
+            send telem [] $ composeTelemetry delta num message'
 
-            loop pull ack cm2
+            loop pull ack telem cm2 pool'
+
+
+composeTelemetry :: NominalDiffTime -> Int -> ByteString -> ByteString
+composeTelemetry delta num message' =
+    S.intercalate " " [delta', num', size']
+  where
+    delta' = S.pack $ show delta
+    num'   = S.pack $ show num
+    size'  = S.pack $ show $ S.length message'
 
