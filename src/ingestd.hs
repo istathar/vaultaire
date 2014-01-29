@@ -68,10 +68,15 @@ sanityCheck ps =
         else Right ps
 
 
-processBurst :: Map Origin (Set SourceDict) -> Origin -> [Point] -> IO (Set SourceDict)
-processBurst _ _ [] =
+processBurst
+    :: Map Origin (Set SourceDict)
+    -> Origin
+    -> [Point]
+    -> ByteString
+    -> IO (Set SourceDict)
+processBurst _ _ [] _ =
     return Set.empty
-processBurst cm o' ps =
+processBurst cm o' ps pool' =
   let
     known = Map.findWithDefault Set.empty o' cm
 
@@ -89,7 +94,7 @@ processBurst cm o' ps =
 
   in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool "test1" $ do
+        runPool pool' $ do
             let l' = Contents.formObjectLabel o'
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
 
@@ -113,15 +118,20 @@ parseMessage message' = do
 -- This takes *a* contents list, not *the* contents list, in other words
 -- this is just conveying the SourceDicts that are "new".
 --
-updateContents :: Map Origin (Set SourceDict) -> Origin -> Set SourceDict -> IO (Map Origin (Set SourceDict))
-updateContents cm0 o' new =
+updateContents
+    :: Map Origin (Set SourceDict)
+    -> Origin
+    -> Set SourceDict
+    -> ByteString
+    -> IO (Map Origin (Set SourceDict))
+updateContents cm0 o' new pool' =
   let
     st0 = Map.findWithDefault Set.empty o' cm0
 
     l' = Contents.formObjectLabel o'
   in do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool "test1" $ do
+        runPool pool' $ do
             withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
                 st1 <- if Set.null st0
                     then do
@@ -147,9 +157,9 @@ main :: IO ()
 main = do
     args <- getArgs
 
-    let broker = if length args == 1
-                    then head args
-                    else error "Specify broker hostname or IP address on command line"
+    let [broker,pool] = if length args == 2
+                    then take 2 args
+                    else error "usage: ingestd broker poolname"
 
     let cm = Map.empty
 
@@ -163,9 +173,9 @@ main = do
         telem <- socket Pub
         bind telem "tcp://*:5570"
 
-        loop pull ack telem cm
+        loop pull ack telem cm (S.pack pool)
   where
-        loop pull ack telem cm = do
+        loop pull ack telem cm pool' = do
             [envelope', delimiter', message'] <- receiveMulti pull
             t1 <- liftIO $ getCurrentTime
 
@@ -179,7 +189,7 @@ main = do
                     -- temporary, replace with zmq message part
                     let o' = origin $ head ps
 
-                    st <- processBurst cm o' ps
+                    st <- processBurst cm o' ps pool'
 
                     return $ (S.empty, o', st, length ps)
 
@@ -198,13 +208,13 @@ main = do
 
             cm2 <- if Set.null st
                 then return cm
-                else liftIO $ updateContents cm o' st
+                else liftIO $ updateContents cm o' st pool'
 
             t2 <- liftIO $ getCurrentTime
             let delta = diffUTCTime t2 t1
             send telem [] $ composeTelemetry delta num message'
 
-            loop pull ack telem cm2
+            loop pull ack telem cm2 pool'
 
 
 composeTelemetry :: NominalDiffTime -> Int -> ByteString -> ByteString
