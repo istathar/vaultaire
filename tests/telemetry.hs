@@ -12,33 +12,12 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE PackageImports     #-}
-{-# OPTIONS -fno-warn-unused-imports #-}
 
 module Main where
 
-import Codec.Compression.LZ4
-import Control.Applicative
-import Control.Monad (forever)
-import "mtl" Control.Monad.Error ()
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
-import Data.List.NonEmpty (fromList)
-import Data.Map (Map)
-import qualified Data.Map.Strict as Map
-import Data.Maybe (fromJust)
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Time.Clock
-import System.Environment (getArgs, getProgName)
-import System.Rados
-import System.ZMQ4.Monadic hiding (source)
-
-import Vaultaire.Conversion.Receiver
-import Vaultaire.Internal.CoreTypes
-import qualified Vaultaire.Persistence.BucketObject as Bucket
-import qualified Vaultaire.Persistence.ContentsObject as Contents
+import System.Environment (getArgs)
+import System.ZMQ4.Monadic
 
 main :: IO ()
 main = do
