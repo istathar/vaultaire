@@ -41,8 +41,6 @@ import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 
-
-
 {-
 groupBurst :: [Point] -> Either String (Map Origin [Point])
 groupBurst [] = Left "Zero length burst, ignoring"
@@ -141,12 +139,6 @@ updateContents cm0 o' new =
                         return cm0
 
 
-debugTime :: UTCTime -> IO ()
-debugTime t1 = do
-    t2 <- getCurrentTime
-    debug $ diffUTCTime t2 t1
-
-
 debug :: Show σ => σ -> IO ()
 debug x = putStrLn $ show x
 
@@ -168,28 +160,28 @@ main = do
         ack  <- socket Push
         connect ack  ("tcp://" ++ broker ++ ":5560")
 
-        loop pull ack cm
-  where
-        loop pull ack cm = do
-            [envelope', delimiter', message'] <- receiveMulti pull
-            t <- liftIO $ getCurrentTime
+        telem <- socket Pub
+        bind telem "tcp://*:5570"
 
-            (ok', o', st) <- liftIO $ case parseMessage message' of
+        loop pull ack telem cm
+  where
+        loop pull ack telem cm = do
+            [envelope', delimiter', message'] <- receiveMulti pull
+            t1 <- liftIO $ getCurrentTime
+
+            (ok', o', st, num) <- liftIO $ case parseMessage message' of
                 Left err -> do
                     -- temporary, replace with telemetry
                     debug err
 
-                    return $ (S.pack err, S.empty, Set.empty)
+                    return $ (S.pack err, S.empty, Set.empty, 0)
                 Right ps -> do
                     -- temporary, replace with zmq message part
                     let o' = origin $ head ps
 
                     st <- processBurst cm o' ps
 
-                    -- temporary, replace with telemetry
-                    debug $ length ps
-
-                    return $ (S.empty, o', st)
+                    return $ (S.empty, o', st, length ps)
 
 --
 -- We have to use sendMulti because we are manually following the rules of
@@ -208,7 +200,18 @@ main = do
                 then return cm
                 else liftIO $ updateContents cm o' st
 
-            liftIO $ debugTime t
+            t2 <- liftIO $ getCurrentTime
+            let delta = diffUTCTime t2 t1
+            send telem [] $ composeTelemetry delta num message'
 
-            loop pull ack cm2
+            loop pull ack telem cm2
+
+
+composeTelemetry :: NominalDiffTime -> Int -> ByteString -> ByteString
+composeTelemetry delta num message' =
+    S.intercalate " " [delta', num', size']
+  where
+    delta' = S.pack $ show delta
+    num'   = S.pack $ show num
+    size'  = S.pack $ show $ S.length message'
 

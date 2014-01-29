@@ -2,6 +2,7 @@ tags
 config.h
 ingestd
 vault
+telemetry
 dist/
 *.prof
 *.mem
