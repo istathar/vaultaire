@@ -50,7 +50,7 @@ groupBurst ps =
     Right $ foldl f Map.empty ps
   where
     f :: Map Origin [Point] -> Point -> Map Origin [Point]
-    f m p = Map.insertWith (++) (origin p) [p] m
+    f m p = Map.insertWith (\(x:[]) xs -> (x:xs)) (origin p) [p] m
 -}
 
 --

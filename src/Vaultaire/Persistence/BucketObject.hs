@@ -169,7 +169,7 @@ appendVaultPoints o' ps =
       let
         (label',encodedB) = bucket o' p
       in
-        Map.insertWith (mappend) label' encodedB m0
+        Map.insertWith mappend label' encodedB m0
 
   in {-# SCC "RADOS" #-} do
     asyncs <- sequenceA $ Map.foldrWithKey asyncAppend [] m

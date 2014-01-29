@@ -82,8 +82,9 @@ readVaultObject o' =
     ey' <- runObject l' readFull
 
     case ey' of
-        Left err        -> liftIO $ throwIO err
-        Right y'        -> either error return $ process y' Set.empty
+        Left (NoEntity _ _ _)   -> return Set.empty
+        Left err                -> liftIO $ throwIO err
+        Right y'                -> either error return $ process y' Set.empty
 
   where
 
