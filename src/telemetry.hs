@@ -15,6 +15,7 @@
 
 module Main where
 
+import Control.Monad (forever)
 import qualified Data.ByteString.Char8 as S
 import System.Environment (getArgs)
 import System.ZMQ4.Monadic
@@ -33,9 +34,8 @@ main = do
         connect telem  ("tcp://" ++ worker ++ ":5570")
         subscribe telem ""
 
-        loop telem
-  where
-        loop telem = do
+        forever $ do
             message' <- receive telem
 
             liftIO $ S.putStrLn message'
+

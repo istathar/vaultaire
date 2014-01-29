@@ -17,6 +17,8 @@
 module Main where
 
 import Codec.Compression.LZ4
+import Control.Concurrent (forkIO)
+import Control.Monad (forever, void)
 import "mtl" Control.Monad.Error ()
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
@@ -26,7 +28,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
-import System.Environment (getArgs)
+import Options.Applicative
 import System.Rados
 import System.ZMQ4.Monadic hiding (source)
 
@@ -144,19 +146,17 @@ updateContents cm0 o' new pool' =
                         return cm0
 
 
-debug :: Show σ => σ -> IO ()
-debug x = putStrLn $ show x
-
-
 main :: IO ()
 main = do
-    args <- getArgs
+    execParser commandLineParser >>= program
 
-    let [broker,pool] = if length args == 2
-                    then take 2 args
-                    else error "usage: ingestd broker poolname"
-
+program :: Options -> IO ()
+program (Options debug broker pool) = do
     let cm = Map.empty
+
+    if debug
+        then void $ forkIO printTelemetry
+        else return ()
 
     runZMQ $ do
         pull <- socket Pull
@@ -176,8 +176,6 @@ main = do
 
             (ok', o', st, num) <- liftIO $ case parseMessage message' of
                 Left err -> do
-                    -- temporary, replace with telemetry
-                    debug err
 
                     return $ (S.pack err, S.empty, Set.empty, 0)
                 Right ps -> do
@@ -194,6 +192,9 @@ main = do
 -- a multipart so that the downstream knows where to send acknowledgements to; you
 -- return the
 --
+            if S.null ok'
+                then return ()
+                else send telem [] ok'
 
             sendMulti ack (fromList [envelope', delimiter', ok'])
 
@@ -219,4 +220,50 @@ composeTelemetry delta num message' =
     delta' = S.pack $ show delta
     num'   = S.pack $ show num
     size'  = S.pack $ show $ S.length message'
+
+printTelemetry :: IO ()
+printTelemetry = do
+    runZMQ $ do
+        telem <- socket Sub
+        connect telem  ("tcp://127.0.0.1:5570")
+        subscribe telem ""
+
+        forever $ do
+            message' <- receive telem
+            liftIO $ S.putStrLn message'
+
+
+--
+-- Handle command line arguments properly. Copied from original
+-- implementation in vault.hs
+--
+
+data Options = Options {
+    optGlobalDebug :: Bool,
+    argBrokerHost  :: String,
+    argPoolName    :: String
+}
+
+
+toplevel :: Parser Options
+toplevel = Options
+    <$> switch
+            (long "debug" <>
+             short 'd' <>
+             help "Write debug telemetry to stdout")
+    <*> argument str
+            (metavar "BROKER" <>
+             help "Host name or IP address of broker to pull from")
+    <*> argument str
+            (metavar "POOL" <>
+             help "Name of the Ceph pool metrics will be written to")
+
+
+commandLineParser :: ParserInfo Options
+commandLineParser = info (helper <*> toplevel)
+            (fullDesc <>
+                progDesc "Ingestion worker to feed points into vault" <>
+                header "A data vault for metrics")
+
+
 
