@@ -17,8 +17,11 @@
 module Main where
 
 import Codec.Compression.LZ4
-import Control.Concurrent (forkIO)
-import Control.Monad (forever, void)
+import Control.Concurrent (threadDelay)
+import qualified Control.Concurrent.Async as Async
+import Control.Concurrent.MVar
+import Control.Concurrent.Chan
+import Control.Monad
 import "mtl" Control.Monad.Error ()
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
@@ -30,7 +33,7 @@ import qualified Data.Set as Set
 import Data.Time.Clock
 import Options.Applicative
 import System.Rados
-import System.ZMQ4.Monadic hiding (source)
+import System.ZMQ4.Monadic hiding (source, async)
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Internal.CoreTypes
@@ -69,11 +72,10 @@ processBurst
     :: Map Origin (Set SourceDict)
     -> Origin
     -> [Point]
-    -> ByteString
-    -> IO (Set SourceDict)
-processBurst _ _ [] _ =
+    -> Pool (Set SourceDict)
+processBurst _ _ [] =
     return Set.empty
-processBurst cm o' ps pool' =
+processBurst cm o' ps =
   let
     known = Map.findWithDefault Set.empty o' cm
 
@@ -90,13 +92,10 @@ processBurst cm o' ps pool' =
             else Set.insert s st
 
   in do
-    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ do
-            let l' = Contents.formObjectLabel o'
-            withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
-
-                -- returns the sources that are "new"
-                Bucket.appendVaultPoints o' ps
+    let l' = Contents.formObjectLabel o'
+    withSharedLock l' "name" "desc" "tag" (Just 10.0) $
+        -- returns the sources that are "new"
+        Bucket.appendVaultPoints o' ps
     return new
 
 
@@ -147,83 +146,113 @@ updateContents cm0 o' new pool' =
 
 
 main :: IO ()
-main = do
+main =
     execParser commandLineParser >>= program
 
-program :: Options -> IO ()
-program (Options debug broker pool) = do
-    let cm = Map.empty
 
-    if debug
-        then void $ forkIO printTelemetry
-        else return ()
-
-    runZMQ $ do
-        pull <- socket Pull
-        connect pull ("tcp://" ++ broker ++ ":5561")
-
-        ack  <- socket Push
-        connect ack  ("tcp://" ++ broker ++ ":5560")
-
-        telem <- socket Pub
-        bind telem "tcp://*:5570"
-
-        loop pull ack telem cm (S.pack pool)
+worker :: ByteString -> MVar [ByteString] -> MVar [ByteString] -> Chan ByteString -> IO ()
+worker pool' work ack telem_chan = do
+    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+        runPool pool' $ loop Map.empty
   where
-        loop pull ack telem cm pool' = do
-            [envelope', delimiter', message'] <- receiveMulti pull
-            t1 <- liftIO $ getCurrentTime
+    loop cm = do
+        [envelope', delimiter', message'] <- liftIO $ takeMVar work
+        t1 <- liftIO getCurrentTime
 
-            (ok', o', st, num) <- liftIO $ case parseMessage message' of
-                Left err -> do
+        (ok', o', st, num) <- case parseMessage message' of
+            Left err -> do
+                return $ (S.pack err, S.empty, Set.empty, 0)
+            Right ps -> do
+                -- temporary, replace with zmq message part
+                let o' = origin $ head ps
+                st <- processBurst cm o' ps
+                return $ (S.empty, o', st, length ps)
 
-                    return $ (S.pack err, S.empty, Set.empty, 0)
-                Right ps -> do
-                    -- temporary, replace with zmq message part
-                    let o' = origin $ head ps
+        cm2 <- if Set.null st
+            then return cm
+            else liftIO $ updateContents cm o' st pool'
 
-                    st <- processBurst cm o' ps pool'
-
-                    return $ (S.empty, o', st, length ps)
-
---
--- We have to use sendMulti because we are manually following the rules of
--- DEALER/ROUTER sockets which send along (one or more) "envelope" messages in
--- a multipart so that the downstream knows where to send acknowledgements to; you
--- return the
---
-            if S.null ok'
-                then return ()
-                else send telem [] ok'
-
-            sendMulti ack (fromList [envelope', delimiter', ok'])
-
---
--- Now, before looping, write updates to the contents list, if any.
---
-
-            cm2 <- if Set.null st
-                then return cm
-                else liftIO $ updateContents cm o' st pool'
-
-            t2 <- liftIO $ getCurrentTime
+        liftIO $ do
+            t2 <- getCurrentTime
             let delta = diffUTCTime t2 t1
+            sendTelemetries telem_chan delta num (S.length message')
+            putMVar ack [envelope', delimiter', ok']
 
-            sendTelemetries telem delta num (S.length message')
+        loop cm2
 
-            loop pull ack telem cm2 pool'
+    sendTelemetries chan delta num size =
+        let telems = [ "delta: " `showTelem` delta
+                     , "num: "   `showTelem` num
+                     , "size: "  `showTelem` size
+                     ] in mapM_ (writeChan chan) telems
 
-
-sendTelemetries :: (Show delta, Show number, Show length, Sender t)
-              => Socket z t -> delta -> number -> length -> ZMQ z ()
-sendTelemetries sock delta num size = do
-  let telems = [ "delta: " `showTelem` delta
-               , "num: "   `showTelem` num
-               , "size: "  `showTelem` size
-               ] in
-    mapM_ (send sock []) telems
-  where
     showTelem prefix = (prefix `S.append`) . S.pack . show
+
+
+transmitTelemetries :: Chan ByteString -> IO ()
+transmitTelemetries chan = do
+    runZMQ $ do
+        pub_sock <- socket Pub
+        bind pub_sock "tcp://*:5570"
+
+        forever $
+            (liftIO $ readChan chan) >>= send pub_sock []
+
+    
+recieveWork :: String -> MVar [ByteString] -> IO ()
+recieveWork broker mvar=
+    runZMQ $ do
+        pull_sock <- socket Pull
+        connect pull_sock ("tcp://" ++ broker ++ ":5561")
+
+        forever $ do
+            [incoming] <- poll (-1) [Sock pull_sock [In] Nothing]
+            when (In `elem` incoming) $ do
+                msg <- receiveMulti pull_sock
+                liftIO $ putMVar mvar msg
+
+transmitAcks :: String -> MVar [ByteString] -> IO ()
+transmitAcks broker mvar =
+    runZMQ $ do
+        push_sock <- socket Push
+        connect push_sock  ("tcp://" ++ broker ++ ":5560")
+        forever $
+            (liftIO $ takeMVar mvar) >>= sendMulti push_sock . fromList
+
+   
+program :: Options -> IO ()
+program (Options debug broker pool n_threads) = do
+    -- Incoming requests are given to worker threads via the work mvar
+    work_mvar <- newEmptyMVar
+    -- Replies from worker threads come back via the ack mvar
+    ack_mvar <- newEmptyMVar
+    -- Telemetries stream over this channel
+    telem_chan <- newChan
+
+    -- Initialize thread pool to requested size
+    replicateM_ (fromIntegral n_threads) $
+        linkThread $ worker (S.pack pool) work_mvar ack_mvar telem_chan
+    
+    -- Sometimes we want to print telemetries
+    when debug (linkThread $ printTelemetry)
+
+    -- And begin transmitting telemetries
+    linkThread $ transmitTelemetries telem_chan
+
+    -- Now read in work
+    linkThread $ recieveWork broker work_mvar
+
+    -- And send out acks
+    linkThread $ transmitAcks broker ack_mvar
+
+    -- Our work here is done
+    goToSleep
+  where
+    linkThread a = Async.async a >>= Async.link
+
+    goToSleep    = threadDelay maxBound >> goToSleep
+    
+    
 
 printTelemetry :: IO ()
 printTelemetry = do
@@ -243,7 +272,8 @@ printTelemetry = do
 data Options = Options {
     optGlobalDebug :: Bool,
     argBrokerHost  :: String,
-    argPoolName    :: String
+    argPoolName    :: String,
+    argThreads     :: Integer
 }
 
 
@@ -259,6 +289,10 @@ toplevel = Options
     <*> argument str
             (metavar "POOL" <>
              help "Name of the Ceph pool metrics will be written to")
+    <*> argument (auto :: String -> Maybe Integer)
+            (metavar "THREADS" <>
+             help "Number of worker threads")
+
 
 
 commandLineParser :: ParserInfo Options
