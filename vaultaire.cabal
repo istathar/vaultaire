@@ -30,6 +30,7 @@ executable           ingestd
                      type-level,
                      protobuf,
                      locators,
+                     optparse-applicative,
                      rados-haskell >= 2.0.0
 
   main-is:           ingestd.hs

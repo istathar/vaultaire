@@ -32,7 +32,6 @@ import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy as L
 import Data.ByteString.Lazy.Builder
 import Data.Char
-import Data.Foldable (traverse_)
 import Data.Locator
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -40,7 +39,6 @@ import Data.Monoid
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
-import Data.Traversable
 import Data.Word
 import System.Rados
 
@@ -172,9 +170,8 @@ appendVaultPoints o' ps =
         Map.insertWith mappend label' encodedB m0
 
   in {-# SCC "RADOS" #-} do
-    asyncs <- sequenceA $ Map.foldrWithKey asyncAppend [] m
-    traverse_ checkError asyncs
-
+    asyncs <- sequence $ Map.foldrWithKey asyncAppend [] m
+    mapM_ checkError asyncs
   where
     asyncAppend l' bB as = (runAsync . runObject l' $ append $ toByteString bB) : as
 

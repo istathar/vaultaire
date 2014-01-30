@@ -208,18 +208,22 @@ program (Options debug broker pool) = do
 
             t2 <- liftIO $ getCurrentTime
             let delta = diffUTCTime t2 t1
-            send telem [] $ composeTelemetry delta num message'
+
+            sendTelemetries telem delta num (S.length message')
 
             loop pull ack telem cm2 pool'
 
 
-composeTelemetry :: NominalDiffTime -> Int -> ByteString -> ByteString
-composeTelemetry delta num message' =
-    S.intercalate " " [delta', num', size']
+sendTelemetries :: (Show delta, Show number, Show length, Sender t)
+              => Socket z t -> delta -> number -> length -> ZMQ z ()
+sendTelemetries sock delta num size = do
+  let telems = [ "delta: " `showTelem` delta
+               , "num: "   `showTelem` num
+               , "size: "  `showTelem` size
+               ] in
+    mapM_ (send sock []) telems
   where
-    delta' = S.pack $ show delta
-    num'   = S.pack $ show num
-    size'  = S.pack $ show $ S.length message'
+    showTelem prefix = (prefix `S.append`) . S.pack . show
 
 printTelemetry :: IO ()
 printTelemetry = do
@@ -231,8 +235,6 @@ printTelemetry = do
         forever $ do
             message' <- receive telem
             liftIO $ S.putStrLn message'
-
-
 --
 -- Handle command line arguments properly. Copied from original
 -- implementation in vault.hs
