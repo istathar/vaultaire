@@ -118,31 +118,28 @@ updateContents
     :: Map Origin (Set SourceDict)
     -> Origin
     -> Set SourceDict
-    -> ByteString
-    -> IO (Map Origin (Set SourceDict))
-updateContents cm0 o' new pool' =
+    -> Pool (Map Origin (Set SourceDict))
+updateContents cm0 o' new  =
   let
     st0 = Map.findWithDefault Set.empty o' cm0
 
     l' = Contents.formObjectLabel o'
   in do
-    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ do
-            withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
-                st1 <- if Set.null st0
-                    then do
-                        Contents.readVaultObject l'
-                    else do
-                        return st0
+    withSharedLock l' "name" "desc" "tag" (Just 25.0) $ do
+        st1 <- if Set.null st0
+            then do
+                Contents.readVaultObject l'
+            else do
+                return st0
 
-                let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new
+        let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new
 
-                if Set.size st2 > Set.size st1
-                    then do
-                        Contents.appendVaultSource l' new
-                        return $ Map.insert o' st2 cm0
-                    else
-                        return cm0
+        if Set.size st2 > Set.size st1
+            then do
+                Contents.appendVaultSource l' new
+                return $ Map.insert o' st2 cm0
+            else
+                return cm0
 
 
 main :: IO ()
@@ -150,36 +147,38 @@ main =
     execParser commandLineParser >>= program
 
 
-worker :: ByteString -> MVar [ByteString] -> MVar [ByteString] -> Chan ByteString -> IO ()
-worker pool' work ack telem_chan = do
+worker :: ByteString -> MVar [ByteString] -> MVar [ByteString] -> MVar (Map Origin (Set SourceDict)) -> Chan ByteString -> IO ()
+worker pool' work ack cm_mvar telem_chan = do
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ loop Map.empty
+        runPool pool' $ forever $ do
+            [envelope', delimiter', message'] <- liftIO $ takeMVar work
+            t1 <- liftIO getCurrentTime
+
+            cm <- liftIO $ readMVar cm_mvar
+
+            (ok', o', st, num) <- case parseMessage message' of
+                Left err -> do
+                    return $ (S.pack err, S.empty, Set.empty, 0)
+                Right ps -> do
+                    -- temporary, replace with zmq message part
+                    let o' = origin $ head ps
+
+                    st <- processBurst cm o' ps
+                    return $ (S.empty, o', st, length ps)
+
+            unless (Set.null st) $ do
+                liftIO $ putStrLn "Updating origin sets"
+                cm1 <- liftIO $ takeMVar cm_mvar
+                cm2 <- updateContents cm1 o' st
+                liftIO $ putMVar cm_mvar cm2
+
+            liftIO $ do
+                t2 <- getCurrentTime
+                let delta = diffUTCTime t2 t1
+                sendTelemetries telem_chan delta num (S.length message')
+                putMVar ack [envelope', delimiter', ok']
+
   where
-    loop cm = do
-        [envelope', delimiter', message'] <- liftIO $ takeMVar work
-        t1 <- liftIO getCurrentTime
-
-        (ok', o', st, num) <- case parseMessage message' of
-            Left err -> do
-                return $ (S.pack err, S.empty, Set.empty, 0)
-            Right ps -> do
-                -- temporary, replace with zmq message part
-                let o' = origin $ head ps
-                st <- processBurst cm o' ps
-                return $ (S.empty, o', st, length ps)
-
-        cm2 <- if Set.null st
-            then return cm
-            else liftIO $ updateContents cm o' st pool'
-
-        liftIO $ do
-            t2 <- getCurrentTime
-            let delta = diffUTCTime t2 t1
-            sendTelemetries telem_chan delta num (S.length message')
-            putMVar ack [envelope', delimiter', ok']
-
-        loop cm2
-
     sendTelemetries chan delta num size =
         let telems = [ "delta: " `showTelem` delta
                      , "num: "   `showTelem` num
@@ -226,12 +225,15 @@ program (Options debug broker pool n_threads) = do
     work_mvar <- newEmptyMVar
     -- Replies from worker threads come back via the ack mvar
     ack_mvar <- newEmptyMVar
+
+    cm_mvar <- newMVar Map.empty
+
     -- Telemetries stream over this channel
     telem_chan <- newChan
 
     -- Initialize thread pool to requested size
     replicateM_ (fromIntegral n_threads) $
-        linkThread $ worker (S.pack pool) work_mvar ack_mvar telem_chan
+        linkThread $ worker (S.pack pool) work_mvar ack_mvar cm_mvar telem_chan
     
     -- Sometimes we want to print telemetries
     when debug (linkThread $ printTelemetry)
