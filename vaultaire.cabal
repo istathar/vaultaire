@@ -31,6 +31,7 @@ executable           ingestd
                      protobuf,
                      locators,
                      optparse-applicative,
+                     async,
                      rados-haskell >= 2.0.0
 
   main-is:           ingestd.hs
@@ -46,7 +47,7 @@ executable           ingestd
                      -fno-warn-missing-signatures
                      -fno-warn-unused-do-bind
 
-  ghc-prof-options:  -prof -fprof-auto-top
+  ghc-prof-options:  -prof -auto-all -caf-all
 
 executable           vault
   default-language:  Haskell2010
@@ -123,7 +124,7 @@ test-suite           check
 
   include-dirs:      .
 
-  ghc-prof-options:  -prof -fprof-auto-top
+  ghc-prof-options:  -prof -auto-all -caf-all
 
 
 source-repository    head
