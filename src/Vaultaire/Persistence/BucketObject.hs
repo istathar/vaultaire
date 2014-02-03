@@ -59,9 +59,9 @@ windowSize = fromIntegral __WINDOW_SIZE__
 -- Use the relevant information from a point to find out what bucket
 -- it belongs in.
 --
-formObjectLabel :: Origin -> SourceDict -> Word64 -> ByteString
+formObjectLabel :: Origin -> SourceDict -> Word64 -> Label
 formObjectLabel o' s t =
-    S.intercalate "_" [__EPOCH__, o', s', t']
+    Label $ S.intercalate "_" [__EPOCH__, o', s', t']
   where
     s' = hashSourceDict s
     t2 = t `div` (windowSize * nanoseconds)
@@ -133,7 +133,7 @@ instance Serialize Text where
 -- again.
 --
 
-bucket :: Origin -> Point -> (ByteString, Builder)
+bucket :: Origin -> Point -> (Label, Builder)
 bucket o' p =
   let
     p' = encodePoint p
@@ -147,9 +147,9 @@ bucket o' p =
     s  = source p
     t  = timestamp p
 
-    l' = formObjectLabel o' s t
+    l = formObjectLabel o' s t
   in
-    (l',bB)
+    (l,bB)
 
 
 --
@@ -159,21 +159,25 @@ bucket o' p =
 appendVaultPoints :: Origin -> [Point] -> Pool ()
 appendVaultPoints o' ps =
   let
-    m :: Map ByteString Builder
+    m :: Map Label Builder
     m = foldl f Map.empty ps
 
-    f :: Map ByteString Builder -> Point -> Map ByteString Builder
+    f :: Map Label Builder -> Point -> Map Label Builder
     f m0 p =
       let
-        (label',encodedB) = bucket o' p
+        (l,encodedB) = bucket o' p
       in
-        Map.insertWith mappend label' encodedB m0
+        Map.insertWith mappend l encodedB m0
 
   in {-# SCC "RADOS" #-} do
     asyncs <- sequence $ Map.foldrWithKey asyncAppend [] m
     mapM_ checkError asyncs
   where
-    asyncAppend l' bB as = (runAsync . runObject l' $ append $ toByteString bB) : as
+    asyncAppend l bB as =
+      let
+        l' = runLabel l
+      in
+        (runAsync . runObject l' $ append $ toByteString bB) : as
 
     checkError write_in_flight = do
         maybe_error <- waitSafe write_in_flight
@@ -195,7 +199,8 @@ readVaultObject
     -> Pool (Map Timestamp Point)
 readVaultObject o' s t =
     let
-        l' = formObjectLabel o' s t
+        l  = formObjectLabel o' s t
+        l' = runLabel l
 
     in do
         ey' <- runObject l' readFull    -- Pool (Either RadosError ByteString)

@@ -23,7 +23,8 @@ module Vaultaire.Internal.CoreTypes
     toHex,
     Origin,
     OriginMap(..),
-    ContentsList(..)
+    ContentsList(..),
+    Label(..)
 )
 where
 
@@ -105,4 +106,8 @@ newtype OriginMap = OriginMap {
 data ContentsList = ContentsList {
     sources :: Set SourceDict
 } deriving (Eq, Show)
+
+newtype Label = Label {
+    runLabel :: ByteString
+} deriving (Eq, Ord, Show)
 

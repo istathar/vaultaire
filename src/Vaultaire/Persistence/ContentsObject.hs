@@ -43,9 +43,9 @@ import qualified Vaultaire.Serialize.DiskFormat as Disk
 -- For each origin, we maintain a list of known sources. This is the name of
 -- the object we store it in
 --
-formObjectLabel :: Origin -> ByteString
+formObjectLabel :: Origin -> Label
 formObjectLabel o' =
-    S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
+    Label $ S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
 
 
 content :: SourceDict -> ByteString
@@ -58,10 +58,12 @@ content s =
   in
     b'
 
-appendVaultSource :: ByteString -> Set SourceDict -> Pool ()
-appendVaultSource l' st = do
+appendVaultSource :: Label -> Set SourceDict -> Pool ()
+appendVaultSource l st = do
     mapM_ action st
   where
+    l' = runLabel l
+
     action s =
       let
         b' = content s
@@ -73,10 +75,10 @@ appendVaultSource l' st = do
             Nothing     -> return ()
 
 
-readVaultObject :: Origin -> Pool (Set SourceDict)
-readVaultObject o' =
+readVaultObject :: Label -> Pool (Set SourceDict)
+readVaultObject l =
   let
-    l' = formObjectLabel o'
+    l' = runLabel l
 
   in do
     ey' <- runObject l' readFull

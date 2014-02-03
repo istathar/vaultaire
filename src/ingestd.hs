@@ -85,13 +85,13 @@ writer pool' c =
 
         let st = processBurst cm o' ps
 
-        let l' = Contents.formObjectLabel o'
-        cm2 <- withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
+        let l = Contents.formObjectLabel o'
+        cm2 <- withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
             Bucket.appendVaultPoints o' ps
 
             if (Set.null st)
                 then return cm
-                else updateContents cm o' st
+                else updateContents cm o' l st
 
         liftIO $ do
             writeChan ackC [envelope', delimiter', S.empty]
@@ -128,17 +128,16 @@ parseMessage message' = do
 updateContents
     :: Map Origin (Set SourceDict)
     -> Origin
+    -> Label
     -> Set SourceDict
     -> Pool (Map Origin (Set SourceDict))
-updateContents cm0 o' new  =
+updateContents cm0 o' l new  =
   let
     st0 = Map.findWithDefault Set.empty o' cm0
-
-    l' = Contents.formObjectLabel o'
   in do
     st1 <- if Set.null st0
         then do
-            Contents.readVaultObject l'
+            Contents.readVaultObject l
         else do
             return st0
 
@@ -146,11 +145,10 @@ updateContents cm0 o' new  =
 
     if Set.size st2 > Set.size st1
         then do
-            Contents.appendVaultSource l' new
+            Contents.appendVaultSource l new
             return $ Map.insert o' st2 cm0
         else
             return cm0
-
 
 
 processBurst
