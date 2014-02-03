@@ -30,7 +30,6 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
-import Debug.Trace
 import GHC.Conc
 import Options.Applicative
 import System.IO.Unsafe (unsafePerformIO)
@@ -121,21 +120,20 @@ updateContents cm0 o' new  =
 
     l' = Contents.formObjectLabel o'
   in do
-    withSharedLock l' "name" "desc" "tag" (Just 25.0) $ do
-        st1 <- if Set.null st0
-            then do
-                Contents.readVaultObject l'
-            else do
-                return st0
+    st1 <- if Set.null st0
+        then do
+            Contents.readVaultObject l'
+        else do
+            return st0
 
-        let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new
+    let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new
 
-        if Set.size st2 > Set.size st1
-            then do
-                Contents.appendVaultSource l' new
-                return $ Map.insert o' st2 cm0
-            else
-                return cm0
+    if Set.size st2 > Set.size st1
+        then do
+            Contents.appendVaultSource l' new
+            return $ Map.insert o' st2 cm0
+        else
+            return cm0
 
 
 
@@ -226,13 +224,11 @@ receiver broker msgV ackC telC d =
 
         _ <- async $ forever $ do
             x' <- liftIO $ readChan telC
-            liftIO $ putStrLn "readChan telC"
             when d $ liftIO $ S.putStrLn x'
             send tele [] x'
 
         _ <- async $ forever $ do
             msg <- receiveMulti work
-            liftIO $ putStrLn "putMVar msgV"
             liftIO $ putMVar msgV msg
 
         _ <- async $ forever $ do
@@ -259,14 +255,14 @@ program (Options d w broker pool) = do
 
     -- Initialize thread pool to requested size
     replicateM_ w $
-        forkIO $ worker msgV ackC telC storeC
+        linkThread $ worker msgV ackC telC storeC
 
     -- Startup writer thread
-    forkIO $ writer (S.pack pool) storeC
+    linkThread $ writer (S.pack pool) storeC
 
 
     -- Startup communications threads
-    forkIO $ receiver broker msgV ackC telC d
+    linkThread $ receiver broker msgV ackC telC d
 
     -- Our work here is done
     goToSleep
