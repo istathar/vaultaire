@@ -42,16 +42,6 @@ import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 
-{-
-groupBurst :: [Point] -> Either String (Map Origin [Point])
-groupBurst [] = Left "Zero length burst, ignoring"
-groupBurst ps =
-    Right $ foldl f Map.empty ps
-  where
-    f :: Map Origin [Point] -> Point -> Map Origin [Point]
-    f m p = Map.insertWith (\(x:[]) xs -> (x:xs)) (origin p) [p] m
--}
-
 --
 -- This will be refactored since the Origin value will soon be conveyed at
 -- the ØMQ level, rather than the current hack of an environment variable
