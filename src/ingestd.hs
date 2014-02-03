@@ -42,6 +42,13 @@ import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 
+data Channels = Channels {
+    inbound     :: !(MVar [ByteString]),
+    acknowledge :: !(Chan [ByteString]),
+    telemetry   :: !(Chan ByteString),
+    storage     :: !(Chan (Origin, UTCTime, ByteString, [Point]))
+}
+
 --
 -- This will be refactored since the Origin value will soon be conveyed at
 -- the ØMQ level, rather than the current hack of an environment variable
@@ -59,17 +66,22 @@ sanityCheck ps =
         else Right ps
 
 
-
 writer
     :: ByteString
-    -> Chan (Origin, [Point])
+    -> Channels
     -> IO ()
-writer pool' storeC =
+writer pool' c =
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool pool' $ loop Map.empty
   where
+    msgV = inbound c
+    ackC = acknowledge c
+    telC = telemetry c
+    storeC = storage c
+    delimiter' = S.empty
+
     loop cm = do
-        (o', ps) <- liftIO $ readChan storeC
+        (o', t1, envelope', ps) <- liftIO $ readChan storeC
 
         let st = processBurst cm o' ps
 
@@ -81,7 +93,21 @@ writer pool' storeC =
                 then return cm
                 else updateContents cm o' st
 
+        liftIO $ do
+            writeChan ackC [envelope', delimiter', S.empty]
+
+            t2 <- getCurrentTime
+            let delta = diffUTCTime t2 t1
+            sendTelemetries telC delta (length ps)
+
         loop cm2
+
+    sendTelemetries chan delta num =
+        let telems = [ "delta: " `showTelem` delta
+                     , "num: "   `showTelem` num
+                     ] in mapM_ (writeChan chan) telems
+
+    showTelem prefix = (prefix `S.append`) . S.pack . show
 
 
 parseMessage :: ByteString -> Either String [Point]
@@ -152,42 +178,25 @@ processBurst cm o' ps =
   in
     new
 
+worker :: Channels -> IO ()
+worker c =
+  let
+    msgV = inbound c
+    ackC = acknowledge c
+    storeC = storage c
+  in
+    forever $ do
+        [envelope', delimiter', message'] <- takeMVar msgV
+        t1 <- getCurrentTime
 
-worker
-    :: MVar [ByteString]
-    -> Chan [ByteString]
-    -> Chan ByteString
-    -> Chan (Origin, [Point])
-    -> IO ()
-worker msgV ackC telC storeC = forever $ do
-    [envelope', delimiter', message'] <- takeMVar msgV
-    t1 <- getCurrentTime
+        case parseMessage message' of
+            Left err -> do
+                writeChan ackC [envelope', delimiter', S.pack err]
+            Right ps -> do
+                -- temporary, replace with zmq message part
+                let o' = origin $ head ps
 
-    (ok', num) <- case parseMessage message' of
-        Left err -> do
-            return $ (S.pack err, 0)
-        Right ps -> do
-            -- temporary, replace with zmq message part
-            let o' = origin $ head ps
-
-            writeChan storeC (o', ps)
-
-            return $ (S.empty, length ps)
-
-    t2 <- getCurrentTime
-    let delta = diffUTCTime t2 t1
-    sendTelemetries telC delta num (S.length message')
-    writeChan ackC [envelope', delimiter', ok']
-
-  where
-    sendTelemetries chan delta num size =
-        let telems = [ "delta: " `showTelem` delta
-                     , "num: "   `showTelem` num
-                     , "size: "  `showTelem` size
-                     ] in mapM_ (writeChan chan) telems
-
-    showTelem prefix = (prefix `S.append`) . S.pack . show
-
+                writeChan storeC (o', t1, envelope', ps)
 
 
 --
@@ -196,12 +205,16 @@ worker msgV ackC telC storeC = forever $ do
 --
 receiver
     :: String
-    -> MVar [ByteString]
-    -> Chan [ByteString]
-    -> Chan ByteString
+    -> Channels
     -> Bool
     -> IO ()
-receiver broker msgV ackC telC d =
+receiver broker c d =
+  let
+    msgV = inbound c
+    ackC = acknowledge c
+    telC = telemetry c
+    storeC = storage c
+  in
     runZMQ $ do
         work <- socket Pull
         connect work ("tcp://" ++ broker ++ ":5561")
@@ -225,8 +238,6 @@ receiver broker msgV ackC telC d =
             as <- liftIO $ readChan ackC
             sendMulti ackn (fromList as)
 
-
-
         return ()
 
 
@@ -243,16 +254,23 @@ program (Options d w broker pool) = do
 
     storeC <- newChan
 
+    let c = Channels {
+        inbound = msgV,
+        acknowledge = ackC,
+        telemetry = telC,
+        storage = storeC
+    }
+
     -- Initialize thread pool to requested size
     replicateM_ w $
-        linkThread $ worker msgV ackC telC storeC
+        linkThread $ worker c
 
     -- Startup writer thread
-    linkThread $ writer (S.pack pool) storeC
+    linkThread $ writer (S.pack pool) c
 
 
     -- Startup communications threads
-    linkThread $ receiver broker msgV ackC telC d
+    linkThread $ receiver broker c d
 
     -- Our work here is done
     goToSleep
