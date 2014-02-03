@@ -17,10 +17,9 @@
 module Main where
 
 import Codec.Compression.LZ4
-import Control.Concurrent (threadDelay)
 import qualified Control.Concurrent.Async as Async
-import Control.Concurrent.MVar
 import Control.Concurrent.Chan
+import Control.Concurrent.MVar
 import Control.Monad
 import "mtl" Control.Monad.Error ()
 import Data.ByteString (ByteString)
@@ -31,9 +30,11 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
+import GHC.Conc
 import Options.Applicative
+import System.IO.Unsafe (unsafePerformIO)
 import System.Rados
-import System.ZMQ4.Monadic hiding (source, async)
+import System.ZMQ4.Monadic hiding (async, source)
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Internal.CoreTypes
@@ -197,7 +198,7 @@ transmitTelemetries chan = do
         forever $
             (liftIO $ readChan chan) >>= send pub_sock []
 
-    
+
 recieveWork :: String -> MVar [ByteString] -> IO ()
 recieveWork broker mvar=
     runZMQ $ do
@@ -218,9 +219,9 @@ transmitAcks broker mvar =
         forever $
             (liftIO $ takeMVar mvar) >>= sendMulti push_sock . fromList
 
-   
+
 program :: Options -> IO ()
-program (Options debug broker pool n_threads) = do
+program (Options d w broker pool) = do
     -- Incoming requests are given to worker threads via the work mvar
     work_mvar <- newEmptyMVar
     -- Replies from worker threads come back via the ack mvar
@@ -232,19 +233,16 @@ program (Options debug broker pool n_threads) = do
     telem_chan <- newChan
 
     -- Initialize thread pool to requested size
-    replicateM_ (fromIntegral n_threads) $
+    replicateM_ w $
         linkThread $ worker (S.pack pool) work_mvar ack_mvar cm_mvar telem_chan
-    
+
     -- Sometimes we want to print telemetries
-    when debug (linkThread $ printTelemetry)
+    when d (linkThread $ printTelemetry)
 
     -- And begin transmitting telemetries
     linkThread $ transmitTelemetries telem_chan
 
     -- Now read in work
-    linkThread $ recieveWork broker work_mvar
-
-    -- And send out acks
     linkThread $ transmitAcks broker ack_mvar
 
     -- Our work here is done
@@ -253,8 +251,7 @@ program (Options debug broker pool n_threads) = do
     linkThread a = Async.async a >>= Async.link
 
     goToSleep    = threadDelay maxBound >> goToSleep
-    
-    
+
 
 printTelemetry :: IO ()
 printTelemetry = do
@@ -272,10 +269,10 @@ printTelemetry = do
 --
 
 data Options = Options {
-    optGlobalDebug :: Bool,
-    argBrokerHost  :: String,
-    argPoolName    :: String,
-    argThreads     :: Integer
+    optGlobalDebug   :: Bool,
+    optGlobalWorkers :: Int,
+    argBrokerHost    :: String,
+    argPoolName      :: String
 }
 
 
@@ -285,22 +282,27 @@ toplevel = Options
             (long "debug" <>
              short 'd' <>
              help "Write debug telemetry to stdout")
+    <*> option
+            (long "workers" <>
+             short 'w' <>
+             value num <>
+             showDefault <>
+             help "Number of bursts to process simultaneously")
     <*> argument str
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
     <*> argument str
             (metavar "POOL" <>
              help "Name of the Ceph pool metrics will be written to")
-    <*> argument (auto :: String -> Maybe Integer)
-            (metavar "THREADS" <>
-             help "Number of worker threads")
+  where
+    num = unsafePerformIO $ GHC.Conc.getNumCapabilities
 
 
 
 commandLineParser :: ParserInfo Options
 commandLineParser = info (helper <*> toplevel)
             (fullDesc <>
-                progDesc "Ingestion worker to feed points into vault" <>
+                progDesc "Ingestion worker to feed points into the vault" <>
                 header "A data vault for metrics")
 
 
