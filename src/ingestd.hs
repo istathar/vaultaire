@@ -30,11 +30,12 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
+import Debug.Trace
 import GHC.Conc
 import Options.Applicative
 import System.IO.Unsafe (unsafePerformIO)
 import System.Rados
-import System.ZMQ4.Monadic hiding (async, source)
+import System.ZMQ4.Monadic hiding (source)
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Internal.CoreTypes
@@ -69,35 +70,29 @@ sanityCheck ps =
         else Right ps
 
 
-processBurst
-    :: Map Origin (Set SourceDict)
-    -> Origin
-    -> [Point]
-    -> Pool (Set SourceDict)
-processBurst _ _ [] =
-    return Set.empty
-processBurst cm o' ps =
-  let
-    known = Map.findWithDefault Set.empty o' cm
 
-    new :: Set SourceDict
-    new = foldl g Set.empty ps
+writer
+    :: ByteString
+    -> Chan (Origin, [Point])
+    -> IO ()
+writer pool' storeC =
+    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+        runPool pool' $ loop Map.empty
+  where
+    loop cm = do
+        (o', ps) <- liftIO $ readChan storeC
 
-    g :: Set SourceDict -> Point -> Set SourceDict
-    g st p =
-      let
-        s = source p
-      in
-        if Set.member s known
-            then st
-            else Set.insert s st
+        let st = processBurst cm o' ps
 
-  in do
-    let l' = Contents.formObjectLabel o'
-    withSharedLock l' "name" "desc" "tag" (Just 10.0) $
-        -- returns the sources that are "new"
-        Bucket.appendVaultPoints o' ps
-    return new
+        let l' = Contents.formObjectLabel o'
+        cm2 <- withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
+            Bucket.appendVaultPoints o' ps
+
+            if (Set.null st)
+                then return cm
+                else updateContents cm o' st
+
+        loop cm2
 
 
 parseMessage :: ByteString -> Either String [Point]
@@ -143,41 +138,58 @@ updateContents cm0 o' new  =
                 return cm0
 
 
-main :: IO ()
-main =
-    execParser commandLineParser >>= program
+
+processBurst
+    :: Map Origin (Set SourceDict)
+    -> Origin
+    -> [Point]
+    -> Set SourceDict
+processBurst _ _ [] =
+    Set.empty
+processBurst cm o' ps =
+  let
+    known = Map.findWithDefault Set.empty o' cm
+
+    new :: Set SourceDict
+    new = foldl g Set.empty ps
+
+    g :: Set SourceDict -> Point -> Set SourceDict
+    g st p =
+      let
+        s = source p
+      in
+        if Set.member s known
+            then st
+            else Set.insert s st
+  in
+    new
 
 
-worker :: ByteString -> MVar [ByteString] -> MVar [ByteString] -> MVar (Map Origin (Set SourceDict)) -> Chan ByteString -> IO ()
-worker pool' work ack cm_mvar telem_chan = do
-    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ forever $ do
-            [envelope', delimiter', message'] <- liftIO $ takeMVar work
-            t1 <- liftIO getCurrentTime
+worker
+    :: MVar [ByteString]
+    -> Chan [ByteString]
+    -> Chan ByteString
+    -> Chan (Origin, [Point])
+    -> IO ()
+worker msgV ackC telC storeC = forever $ do
+    [envelope', delimiter', message'] <- takeMVar msgV
+    t1 <- getCurrentTime
 
-            cm <- liftIO $ readMVar cm_mvar
+    (ok', num) <- case parseMessage message' of
+        Left err -> do
+            return $ (S.pack err, 0)
+        Right ps -> do
+            -- temporary, replace with zmq message part
+            let o' = origin $ head ps
 
-            (ok', o', st, num) <- case parseMessage message' of
-                Left err -> do
-                    return $ (S.pack err, S.empty, Set.empty, 0)
-                Right ps -> do
-                    -- temporary, replace with zmq message part
-                    let o' = origin $ head ps
+            writeChan storeC (o', ps)
 
-                    st <- processBurst cm o' ps
-                    return $ (S.empty, o', st, length ps)
+            return $ (S.empty, length ps)
 
-            unless (Set.null st) $ do
-                liftIO $ putStrLn "Updating origin sets"
-                cm1 <- liftIO $ takeMVar cm_mvar
-                cm2 <- updateContents cm1 o' st
-                liftIO $ putMVar cm_mvar cm2
-
-            liftIO $ do
-                t2 <- getCurrentTime
-                let delta = diffUTCTime t2 t1
-                sendTelemetries telem_chan delta num (S.length message')
-                putMVar ack [envelope', delimiter', ok']
+    t2 <- getCurrentTime
+    let delta = diffUTCTime t2 t1
+    sendTelemetries telC delta num (S.length message')
+    writeChan ackC [envelope', delimiter', ok']
 
   where
     sendTelemetries chan delta num size =
@@ -189,61 +201,72 @@ worker pool' work ack cm_mvar telem_chan = do
     showTelem prefix = (prefix `S.append`) . S.pack . show
 
 
-transmitTelemetries :: Chan ByteString -> IO ()
-transmitTelemetries chan = do
+
+--
+-- See documentation for System.ZMQ4.Monadic's async; apparently this is
+-- arranged such that the runZMQ scope does not end until the child Asyncs do.
+--
+receiver
+    :: String
+    -> MVar [ByteString]
+    -> Chan [ByteString]
+    -> Chan ByteString
+    -> Bool
+    -> IO ()
+receiver broker msgV ackC telC d =
     runZMQ $ do
-        pub_sock <- socket Pub
-        bind pub_sock "tcp://*:5570"
+        work <- socket Pull
+        connect work ("tcp://" ++ broker ++ ":5561")
 
-        forever $
-            (liftIO $ readChan chan) >>= send pub_sock []
+        ackn <- socket Push
+        connect ackn ("tcp://" ++ broker ++ ":5560")
+
+        tele <- socket Pub
+        bind tele "tcp://*:5570"
+
+        _ <- async $ forever $ do
+            x' <- liftIO $ readChan telC
+            liftIO $ putStrLn "readChan telC"
+            when d $ liftIO $ S.putStrLn x'
+            send tele [] x'
+
+        _ <- async $ forever $ do
+            msg <- receiveMulti work
+            liftIO $ putStrLn "putMVar msgV"
+            liftIO $ putMVar msgV msg
+
+        _ <- async $ forever $ do
+            as <- liftIO $ readChan ackC
+            sendMulti ackn (fromList as)
 
 
-recieveWork :: String -> MVar [ByteString] -> IO ()
-recieveWork broker mvar=
-    runZMQ $ do
-        pull_sock <- socket Pull
-        connect pull_sock ("tcp://" ++ broker ++ ":5561")
 
-        forever $ do
-            [incoming] <- poll (-1) [Sock pull_sock [In] Nothing]
-            when (In `elem` incoming) $ do
-                msg <- receiveMulti pull_sock
-                liftIO $ putMVar mvar msg
-
-transmitAcks :: String -> MVar [ByteString] -> IO ()
-transmitAcks broker mvar =
-    runZMQ $ do
-        push_sock <- socket Push
-        connect push_sock  ("tcp://" ++ broker ++ ":5560")
-        forever $
-            (liftIO $ takeMVar mvar) >>= sendMulti push_sock . fromList
+        return ()
 
 
 program :: Options -> IO ()
 program (Options d w broker pool) = do
     -- Incoming requests are given to worker threads via the work mvar
-    work_mvar <- newEmptyMVar
+    msgV <- newEmptyMVar
+
     -- Replies from worker threads come back via the ack mvar
-    ack_mvar <- newEmptyMVar
+    ackC <- newChan
 
-    cm_mvar <- newMVar Map.empty
+    -- Telemetry streams over this channel
+    telC <- newChan
 
-    -- Telemetries stream over this channel
-    telem_chan <- newChan
+    storeC <- newChan
 
     -- Initialize thread pool to requested size
     replicateM_ w $
-        linkThread $ worker (S.pack pool) work_mvar ack_mvar cm_mvar telem_chan
+        forkIO $ worker msgV ackC telC storeC
 
-    -- Sometimes we want to print telemetries
-    when d (linkThread $ printTelemetry)
+    -- Startup writer thread
+    forkIO $ writer (S.pack pool) storeC
 
-    -- And begin transmitting telemetries
-    linkThread $ transmitTelemetries telem_chan
 
-    -- Now read in work
-    linkThread $ transmitAcks broker ack_mvar
+    -- Startup communications threads
+    forkIO $ receiver broker msgV ackC telC d
 
     -- Our work here is done
     goToSleep
@@ -253,16 +276,6 @@ program (Options d w broker pool) = do
     goToSleep    = threadDelay maxBound >> goToSleep
 
 
-printTelemetry :: IO ()
-printTelemetry = do
-    runZMQ $ do
-        telem <- socket Sub
-        connect telem  ("tcp://127.0.0.1:5570")
-        subscribe telem ""
-
-        forever $ do
-            message' <- receive telem
-            liftIO $ S.putStrLn message'
 --
 -- Handle command line arguments properly. Copied from original
 -- implementation in vault.hs
@@ -306,4 +319,6 @@ commandLineParser = info (helper <*> toplevel)
                 header "A data vault for metrics")
 
 
-
+main :: IO ()
+main =
+    execParser commandLineParser >>= program
