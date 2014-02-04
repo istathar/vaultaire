@@ -12,6 +12,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE BangPatterns     #-}
 {-# LANGUAGE PackageImports     #-}
 
 module Main where
@@ -223,20 +224,29 @@ receiver broker c d =
         tele <- socket Pub
         bind tele "tcp://*:5570"
 
-        _ <- async $ forever $ do
+        a1 <- async $ forever $ do
             x' <- liftIO $ readChan telC
             when d $ liftIO $ S.putStrLn x'
             send tele [] x'
 
-        _ <- async $ forever $ do
+        linkThread a1
+
+        a2 <- async $ forever $ do
             msg <- receiveMulti work
             liftIO $ putMVar msgV msg
 
-        _ <- async $ forever $ do
+        linkThread a2
+
+        a3 <- async $ forever $ do
             as <- liftIO $ readChan ackC
             sendMulti ackn (fromList as)
 
+        linkThread a3
+
         return ()
+  where
+    linkThread a = liftIO $ Async.link a
+    {-# INLINE linkThread #-}
 
 
 program :: Options -> IO ()
@@ -274,6 +284,7 @@ program (Options d w broker pool) = do
     goToSleep
   where
     linkThread a = Async.async a >>= Async.link
+    {-# INLINE linkThread #-}
 
     goToSleep    = threadDelay maxBound >> goToSleep
 

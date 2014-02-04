@@ -43,19 +43,19 @@ import Text.Printf
 type Timestamp = Word64
 
 data Point = Point {
-    origin    :: ByteString,
-    source    :: SourceDict,
-    timestamp :: Timestamp,
-    payload   :: Value
+    origin    :: !ByteString,
+    source    :: !SourceDict,
+    timestamp :: !Timestamp,
+    payload   :: !Value
 } deriving (Eq)
 
 
 data Value
     = Empty
-    | Numeric Int64
-    | Measurement Double
-    | Textual Text
-    | Blob ByteString
+    | Numeric !Int64
+    | Measurement !Double
+    | Textual !Text
+    | Blob !ByteString
     deriving (Eq, Show)
 
 

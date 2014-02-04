@@ -39,6 +39,7 @@ GHC=ghc \
 	-Wall \
 	-fwarn-tabs \
 	-fno-warn-missing-signatures \
+	-funbox-strict-fields \
 	-fno-warn-unused-binds
 
 #
