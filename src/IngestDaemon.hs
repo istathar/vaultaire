@@ -59,7 +59,7 @@ data Mutexes = Mutexes {
     acknowledge :: !(Chan [ByteString]),
     telemetry   :: !(Chan ByteString),
     storage     :: !(Chan (Origin, UTCTime, Int, Envelope, Set SourceDict, Map Label Builder)),
-    contents    :: !(MVar Contents)
+    directory   :: !(MVar Directory)
 }
 
 --
@@ -78,32 +78,70 @@ sanityCheck ps =
         then Left "Empty origin value, discarding burst"
         else Right ps
 
+--
+-- This takes *a* contents list, not *the* contents list, in other words
+-- this is just conveying the SourceDicts that are "new".
+--
+updateContents
+    :: Directory
+    -> Origin
+    -> Label
+    -> Set SourceDict
+    -> Pool (Directory)
+updateContents d o' l st  =
+  let
+    known :: Map SourceDict ByteString
+    known = getSourcesMap d o'
+
+    st0 = Map.keysSet known
+  in do
+    st1 <- if Map.null known
+        then do
+            Contents.readVaultObject l
+        else do
+            return st0
+
+    let new = Set.foldl (\acc s -> if Set.member s st1
+                                        then acc
+                                        else Set.insert s acc) Set.empty st
+
+    if Set.size new > 0
+        then do
+            Contents.appendVaultSource l new
+            return $ insertIntoDirectory d o' new
+        else
+            return d
+
 
 writer
     :: ByteString
     -> Mutexes
     -> IO ()
-writer pool' chan =
+writer pool' u =
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ loop nullContents
+        runPool pool' $ loop
   where
-    msgV = inbound chan
-    ackC = acknowledge chan
-    telC = telemetry chan
-    storeC = storage chan
+    msgV = inbound u
+    ackC = acknowledge u
+    telC = telemetry u
+    storeC = storage u
+    dV = directory u
+
     delimiter' = S.empty
 
-    loop c = do
+    loop = do
         (o', t1, num, envelope', st, pm) <- liftIO $ readChan storeC
 
         let l = Contents.formObjectLabel o'
 
-        c2 <- withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
+        withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
             Bucket.appendVaultPoints pm
 
-            if (Set.null st)
-                then return c
-                else updateContents c o' l st
+            unless (Set.null st) $ do
+                d1 <- liftIO $ takeMVar dV
+                d2 <- updateContents d1 o' l st
+                liftIO $ putMVar dV d2
+
 
         liftIO $ do
             writeChan ackC [envelope', delimiter', S.empty]
@@ -112,8 +150,7 @@ writer pool' chan =
             let delta = diffUTCTime t2 t1
             sendTelemetries telC delta num
 
-        loop c2
-
+        loop
 
 
     sendTelemetries chan delta num =
@@ -135,38 +172,6 @@ parseMessage message' = do
     sanityCheck ps
 
 
---
--- This takes *a* contents list, not *the* contents list, in other words
--- this is just conveying the SourceDicts that are "new".
---
-updateContents
-    :: Contents
-    -> Origin
-    -> Label
-    -> Set SourceDict
-    -> Pool (Contents)
-updateContents c o' l new  =
-  let
-    sm0 :: Map SourceDict ByteString
-    sm0 = getSourcesMap c o'
-    st0 = Map.keysSet sm0
-  in do
-    st1 <- if Set.null st0
-        then do
-            Contents.readVaultObject l
-        else do
-            return st0
-
-    let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new -- FIXME add membership test
-
-    if Set.size st2 > Set.size st1
-        then do
-            Contents.appendVaultSource l new
-
-            return $ insertIntoContents c o' st2
-        else
-            return c
-
 
 --
 -- We express as a VaultPoint protobuf, serialize to bytes, then prepend a
@@ -174,8 +179,8 @@ updateContents c o' l new  =
 -- again.
 --
 
-bucket :: Origin -> Point -> (Label, Builder)
-bucket o' p =
+bucket :: Origin -> ByteString -> Point -> (Label, Builder)
+bucket o' s' p =
   let
     p' = encodePoint p
     pB = fromByteString p'
@@ -185,25 +190,19 @@ bucket o' p =
 
     bB = mappend rB pB
 
-    s  = source p
     t  = timestamp p
 
-    l = Bucket.formObjectLabel o' s t
+    l = Bucket.formObjectLabel o' s' t
   in
     (l,bB)
 
 
-processBurst
-    :: Contents
-    -> Origin
+identifyUnknown
+    :: Map SourceDict ByteString
     -> [Point]
-    -> (Set SourceDict, Map Label Builder)
-processBurst _ _  [] = (Set.empty, Map.empty)
-processBurst c o' ps = (new, pm)
+    -> Set SourceDict
+identifyUnknown known ps = new
   where
-    known :: Map SourceDict ByteString
-    known = getSourcesMap c o'
-
     g :: Set SourceDict -> Point -> Set SourceDict
     g st p =
       let
@@ -217,44 +216,76 @@ processBurst c o' ps = (new, pm)
     new = foldl g Set.empty ps
 
 
+processBurst
+    :: Directory
+    -> Origin
+    -> [Point]
+    -> (Map Label Builder)
+processBurst d o' ps = build
+  where
+    known = getSourcesMap d o'
+
     f :: Map Label Builder -> Point -> Map Label Builder
     f m0 p =
       let
-        (l,encodedB) = bucket o' p
+        s  = source p
+        s' = case Map.lookup s known of
+            Just hash'  -> hash'
+            Nothing     -> error "No hash found"
+
+        (l,encodedB) = bucket o' s' p
       in
         Map.insertWith mappend l encodedB m0
 
     -- FIXME change seed to shared accumulator
-    pm :: Map Label Builder
-    pm = foldl f Map.empty ps
+    build :: Map Label Builder
+    build = foldl f Map.empty ps
 
 
+{-
+
+            return $ insertIntoContents c o' st2
+-}
 
 worker :: Mutexes -> IO ()
-worker chan =
+worker u =
   let
-    msgV = inbound chan
-    ackC = acknowledge chan
-    storeC = storage chan
-    cV = contents chan
+    msgV = inbound u
+    ackC = acknowledge u
+    storeC = storage u
+    dV = directory u
   in
     forever $ do
         [envelope', delimiter', message'] <- takeMVar msgV
         t1 <- getCurrentTime
-        c  <- readMVar cV
 
         case parseMessage message' of
             Left err -> do
                 writeChan ackC [envelope', delimiter', S.pack err]
 
-            Right ps ->
-              let
+            Right ps -> do
                 -- temporary, replace with zmq message part
-                o' = origin $ head ps
+                let o' = origin $ head ps
 
-                (st, pm) = processBurst c o' ps
-              in do
+                d1 <- readMVar dV
+
+                let known = getSourcesMap d1 o'
+                    st = identifyUnknown known ps
+                    d2 = if Set.null st
+                            then d1
+                            else insertIntoDirectory d1 o' st
+
+                    pm = processBurst d2 o' ps
+
+--
+-- we do NOT write d2 back to the MVar here. It means duplicate work for it to
+-- happen again down in updateContents, but it's the only way to ensure that
+-- the data in the Directory is actually on disk.
+--
+
                 writeChan storeC (o', t1, length ps, envelope', st, pm)
+
+
 
 
 --
@@ -321,14 +352,14 @@ program (Options d w broker pool) = do
 
     storeC <- newChan
 
-    contentsV <- newMVar nullContents
+    dV <- newMVar nullDirectory
 
     let u = Mutexes {
         inbound = msgV,
         acknowledge = ackC,
         telemetry = telC,
         storage = storeC,
-        contents = contentsV
+        directory = dV
     }
 
     -- Initialize thread pool to requested size

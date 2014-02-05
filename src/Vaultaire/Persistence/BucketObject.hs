@@ -12,7 +12,6 @@
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
-{-# OPTIONS -fno-warn-orphans #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
 module Vaultaire.Persistence.BucketObject (
@@ -35,8 +34,6 @@ import Data.Locator
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Serialize
-import Data.Text (Text)
-import qualified Data.Text.Encoding as T
 import Data.Word
 import System.Rados
 
@@ -56,11 +53,10 @@ windowSize = fromIntegral __WINDOW_SIZE__
 -- Use the relevant information from a point to find out what bucket
 -- it belongs in.
 --
-formObjectLabel :: Origin -> SourceDict -> Timestamp -> Label
-formObjectLabel o' s t =
+formObjectLabel :: Origin -> ByteString -> Timestamp -> Label
+formObjectLabel o' s' t =
     Label $ S.intercalate "_" [__EPOCH__, o', s', t']
   where
-    s' = hashSourceDict s
     t2 = t `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t2 * windowSize)
 
@@ -82,45 +78,6 @@ hashOriginName :: ByteString -> ByteString
 hashOriginName o' =
     hashStringToLocator16a 6 o'
 
-
---
--- | The source dictionary portion of the bucket label is formed as follows:
---
--- 1. Sources are in a Data.Map which is a sorted map, per Ord order.
--- 2. Map is serialized to bytes by __cereal__'s "Data.Serialize.encode"
--- 3. The bytes are hashed with SHA1
--- 4. The hash is converted to 27 digits of base62
---
-hashSourceDict :: SourceDict -> ByteString
-hashSourceDict s =
-  let
-    m' = encode s
-  in
-    hashStringToBase62 27 m'
-
-
-instance Serialize SourceDict where
---  put :: a -> Put
-    put x =
-      let
-        m = runSourceDict x
-      in
-        put m
-
---  get :: Get a
-    get = do
-        m <- get
-        return $ SourceDict (m :: Map Text Text)
-
-
-instance Serialize Text where
---  put :: Text -> Put
-    put t = putByteString $ T.encodeUtf8 t
-
---  get :: Get Text
-    get = do
-        x' <- getByteString 0
-        return $ T.decodeUtf8 x'
 
 
 --
@@ -161,7 +118,8 @@ readVaultObject
     -> Pool (Map Timestamp Point)
 readVaultObject o' s t =
     let
-        l  = formObjectLabel o' s t
+        s' = hashSourceDict s           -- FIXME lookup from Directory
+        l  = formObjectLabel o' s' t
         l' = runLabel l
 
     in do

@@ -13,6 +13,7 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# OPTIONS -fno-warn-orphans #-}
 
 module Vaultaire.Internal.CoreTypes
 (
@@ -26,10 +27,11 @@ module Vaultaire.Internal.CoreTypes
     Value(..),
     toHex,
     Origin,
-    Contents,
-    nullContents,
+    Directory,
+    nullDirectory,
     getSourcesMap,
-    insertIntoContents,
+    insertIntoDirectory,
+    hashSourceDict,
     Label(..)
 )
 where
@@ -38,12 +40,15 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Int (Int64)
 import Data.List (intercalate)
+import Data.Locator
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
 import Text.Printf
 
@@ -106,38 +111,38 @@ toHex x =
 --
 type Origin = ByteString
 
-newtype Contents = Contents {
-    runContents :: Map Origin (Map SourceDict ByteString)
+newtype Directory = Directory {
+    runDirectory :: Map Origin (Map SourceDict ByteString)
 } deriving (Eq, Show)
 
-nullContents :: Contents
-nullContents = Contents $ Map.empty
+nullDirectory :: Directory
+nullDirectory = Directory $ Map.empty
 
-getSourcesMap :: Contents -> Origin -> Map SourceDict ByteString
-getSourcesMap c o' =
+getSourcesMap :: Directory -> Origin -> Map SourceDict ByteString
+getSourcesMap d o' =
   let
-    om = runContents c
+    om = runDirectory d
     sm = Map.findWithDefault Map.empty o' om
   in
     sm
 
-insertIntoContents :: Contents -> Origin -> Set SourceDict -> Contents
-insertIntoContents c o' st =
+insertIntoDirectory :: Directory -> Origin -> Set SourceDict -> Directory
+insertIntoDirectory d o' st =
   let
-    om = runContents c
+    om = runDirectory d
     sm1 = Map.findWithDefault Map.empty o' om
 
 
     f :: Map SourceDict ByteString -> SourceDict -> Map SourceDict ByteString
-    f acc s = Map.insert s "FIXME hash" acc
+    f acc s = Map.insert s (hashSourceDict s) acc
 
     sm2 = Set.foldl f sm1 st
   in
-    Contents (Map.insert o' sm2 om)
+    Directory (Map.insert o' sm2 om)
 
 
 {-
-getDictionary :: Contents -> Map Text Text
+getDictionary :: Directory -> Map Text Text
 getDictionary s =
     underlying s
 
@@ -145,6 +150,46 @@ getHashBase62 :: SourceDict -> ByteString
 getHashBase62 s =
     hashBase62 s
 -}
+--
+--
+-- | The source dictionary portion of the bucket label is formed as follows:
+--
+-- 1. Sources are in a Data.Map which is a sorted map, per Ord order.
+-- 2. Map is serialized to bytes by __cereal__'s "Data.Serialize.encode"
+-- 3. The bytes are hashed with SHA1
+-- 4. The hash is converted to 27 digits of base62
+--
+hashSourceDict :: SourceDict -> ByteString
+hashSourceDict s =
+  let
+    m' = encode s
+  in
+    hashStringToBase62 27 m'
+
+
+instance Serialize SourceDict where
+--  put :: a -> Put
+    put x =
+      let
+        m = runSourceDict x
+      in
+        put m
+
+--  get :: Get a
+    get = do
+        m <- get
+        return $ SourceDict (m :: Map Text Text)
+
+
+instance Serialize Text where
+--  put :: Text -> Put
+    put t = putByteString $ T.encodeUtf8 t
+
+--  get :: Get Text
+    get = do
+        x' <- getByteString 0
+        return $ T.decodeUtf8 x'
+
 
 newtype Label = Label {
     runLabel :: ByteString
