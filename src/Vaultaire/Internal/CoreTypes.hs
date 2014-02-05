@@ -20,10 +20,6 @@ module Vaultaire.Internal.CoreTypes
     Point(..),
     Timestamp,
     SourceDict(..),
-{-
-    getDictionary,
-    getHashBase62,
--}
     Value(..),
     toHex,
     Origin,
@@ -31,7 +27,7 @@ module Vaultaire.Internal.CoreTypes
     getSourcesMap,
     insertIntoDirectory,
     hashSourceDict,
-    Label(..)
+    Label
 )
 where
 

@@ -180,8 +180,8 @@ program (Options verbose cmd) =
 --
 -- Determine the appropriate object label, then see if it exists
 --
-
-            debug verbose $ Bucket.formObjectLabel o' s t
+            let s' = hashSourceDict s
+            debug verbose $ Bucket.formObjectLabel o' s' t
 
             m <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
                 runPool "test1" $ do
