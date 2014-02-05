@@ -55,7 +55,7 @@ windowSize = fromIntegral __WINDOW_SIZE__
 --
 formObjectLabel :: Origin -> ByteString -> Timestamp -> Label
 formObjectLabel o' s' t =
-    Label $ S.intercalate "_" [__EPOCH__, o', s', t']
+    S.intercalate "_" [__EPOCH__, o', s', t']
   where
     t2 = t `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t2 * windowSize)
@@ -94,10 +94,7 @@ appendVaultPoints m = do
     asyncs <- sequence $ Map.foldrWithKey asyncAppend [] m
     mapM_ checkError asyncs
   where
-    asyncAppend l bB as =
-      let
-        l' = runLabel l
-      in
+    asyncAppend l' bB as =
         (runAsync . runObject l' $ append $ toByteString bB) : as
 
     checkError write_in_flight = do
@@ -119,8 +116,7 @@ readVaultObject
 readVaultObject o' s t =
     let
         s' = hashSourceDict s           -- FIXME lookup from Directory
-        l  = formObjectLabel o' s' t
-        l' = runLabel l
+        l' = formObjectLabel o' s' t
 
     in do
         ey' <- runObject l' readFull    -- Pool (Either RadosError ByteString)

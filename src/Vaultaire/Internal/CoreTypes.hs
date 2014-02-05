@@ -180,7 +180,4 @@ instance Serialize Text where
         return $ T.decodeUtf8 x'
 
 
-newtype Label = Label {
-    runLabel :: ByteString
-} deriving (Eq, Ord, Show)
-
+type Label = ByteString

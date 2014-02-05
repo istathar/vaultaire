@@ -55,7 +55,8 @@ data Options = Options {
 -- This is how the broker will know to route all the way back to the client,
 -- and how the client will know which message we are referencing.
 data Ident = Ident {
-    envelope   :: !ByteString, -- handled for us by the router socket, opaque.
+    envelope  :: !ByteString, -- handled for us by the router socket, opaque.
+    mystery   :: !ByteString, -- handled for us by the router socket, opaque.
     messageID :: !ByteString  -- a uint16_t, but opaque to us.
 }
 
@@ -65,22 +66,17 @@ data Ack = Ack {
 }
 
 data Storage = Storage {
-    storageOrigin  :: !Origin,
-    storageTime    :: !UTCTime,
-    storageCount   :: !Int,
-    storageIdent   :: !Ident,
-    storageSources :: !(Set SourceDict),
-    storageLabels  :: !(Map Label Builder)
+    pendingWrites  :: !(Map Label Builder),
+    pendingSources :: !(Set SourceDict),
+    pendingAcks    :: ![Ack]
 }
-
-
-
 
 data Mutexes = Mutexes {
     inbound     :: !(MVar [ByteString]),
-    acknowledge :: !(Chan Ack), 
+    acknowledge :: !(Chan Ack),
     telemetry   :: !(Chan ByteString),
-    storage     :: !(Chan Storage),
+    storage     :: !(MVar Storage),
+    pending     :: !(MVar ()),
     directory   :: !(MVar Directory)
 }
 
@@ -141,39 +137,34 @@ writer
     -> IO ()
 writer pool' Mutexes{..} =
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ loop
-  where
-    loop = do
-        --(o', t1, num, envelope', st, pm) <- liftIO $ readChan storage
-        Storage{..} <- liftIO $ readChan storage
+        runPool pool' $ forever $ do
+            -- block until signalled to wake up
+            liftIO $ takeMVar pending
 
-        let l = Contents.formObjectLabel storageOrigin
+            t1 <- liftIO $ getCurrentTime
 
-        withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
-            Bucket.appendVaultPoints storageLabels
+            Storage pm st as <- liftIO $ takeMVar storage
+            liftIO $ putMVar storage (Storage Map.empty Set.empty [])
 
-            unless (Set.null storageSources) $ do
-                d1 <- liftIO $ takeMVar directory
-                d2 <- updateContents d1 storageOrigin l storageSources
-                liftIO $ putMVar directory d2
+            withSharedLock "global_lock" "name" "desc" "tag" (Just 10.0) $ do
+                Bucket.appendVaultPoints pm
 
-
-        liftIO $ do
-            writeChan acknowledge (Ack storageIdent "")
-
-            t2 <- getCurrentTime
-            let delta = diffUTCTime t2 storageTime
-            sendTelemetries telemetry delta storageCount
-
-        loop
+                unless (Set.null st) $ do
+                    d1 <- liftIO $ takeMVar directory
+                    -- FIXME
+                    {-
+                    d2 <- updateContents d1 storageOrigin l storageSources
+                    -}
+                    let d2 = d1
+                    liftIO $ putMVar directory d2
 
 
-    sendTelemetries chan delta num =
-        let telems = [ "delta: " `showTelem` delta
-                     , "points: "   `showTelem` num
-                     ] in mapM_ (writeChan chan) telems
+            liftIO $ mapM_ (writeChan acknowledge) as
 
-    showTelem prefix = (prefix `S.append`) . S.pack . show
+            t2 <- liftIO $ getCurrentTime
+
+            let delta = diffUTCTime t2 t1
+            liftIO $ writeChan telemetry $ S.append "delta: " (S.pack $ show delta)
 
 
 parseMessage :: ByteString -> Either String [Point]
@@ -259,9 +250,8 @@ processBurst d o' ps = build
 worker :: Mutexes -> IO ()
 worker Mutexes{..} =
     forever $ do
-        [envelope', msg_id', message'] <- takeMVar inbound
-        let ident = Ident envelope' msg_id'
-        t1 <- getCurrentTime
+        [envelope', mystery', msg_id', message'] <- takeMVar inbound
+        let ident = Ident envelope' mystery' msg_id'
 
         case parseMessage message' of
             Left err -> do
@@ -274,20 +264,36 @@ worker Mutexes{..} =
                 d1 <- readMVar directory
 
                 let known = getSourcesMap d1 o'
-                    st = identifyUnknown known ps
-                    d2 = if Set.null st
+                let st = identifyUnknown known ps
+                let d2 = if Set.null st
                             then d1
                             else insertIntoDirectory d1 o' st
 
-                    pm = processBurst d2 o' ps
+                let pm = processBurst d2 o' ps
+
+                requestWrite storage pm st (Ack ident S.empty)
+                void $ tryPutMVar pending ()
 
 --
--- we do NOT write d2 back to the MVar here. It means duplicate work for it to
+-- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
 -- happen again down in updateContents, but it's the only way to ensure that
--- the data in the Directory is actually on disk.
+-- the data in the Directory is actually on disk)
 --
 
-                writeChan storage $ Storage o' t1 (length ps) ident st pm
+
+
+requestWrite :: MVar Storage -> Map Label Builder -> Set SourceDict -> Ack -> IO ()
+requestWrite storage writes new a = do
+    (Storage pm st as) <- takeMVar storage
+
+    let pm2 = Map.foldlWithKey f pm writes
+    let st2 = Set.union st new
+
+    putMVar storage (Storage pm2 st2 (a:as))
+
+  where
+    f acc label' encodedB = Map.insertWith mappend label' encodedB acc
+
 
 
 
@@ -324,7 +330,7 @@ receiver broker Mutexes{..} d =
 
         a3 <- async $ forever $ do
             Ack ident failure <- liftIO $ readChan acknowledge
-            let reply = [ envelope ident, messageID ident, failure ]
+            let reply = [ envelope ident, mystery ident, messageID ident, failure ]
             sendMulti router (fromList reply)
 
         linkThread a3
@@ -346,7 +352,9 @@ program (Options d w broker pool) = do
     -- Telemetry streams over this channel
     telC <- newChan
 
-    storeC <- newChan
+    storeV <- newMVar (Storage Map.empty Set.empty [])
+
+    pendingV <- newEmptyMVar
 
     dV <- newMVar Map.empty
 
@@ -354,7 +362,8 @@ program (Options d w broker pool) = do
         inbound = msgV,
         acknowledge = ackC,
         telemetry = telC,
-        storage = storeC,
+        storage = storeV,
+        pending = pendingV,
         directory = dV
     }
 
