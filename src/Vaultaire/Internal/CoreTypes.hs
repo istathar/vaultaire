@@ -1,7 +1,7 @@
 --
 -- Data vault for metrics
 --
--- Copyright © 2013-     Anchor Systems, Pty Ltd and Others
+-- Copyright © 2013-2014 Anchor Systems, Pty Ltd and Others
 --
 -- The code in this file, and the program it is a part of, is
 -- made available to you by its authors as open source software:
@@ -19,11 +19,17 @@ module Vaultaire.Internal.CoreTypes
     Point(..),
     Timestamp,
     SourceDict(..),
+{-
+    getDictionary,
+    getHashBase62,
+-}
     Value(..),
     toHex,
     Origin,
-    OriginMap(..),
-    ContentsList(..),
+    Contents,
+    nullContents,
+    getSourcesMap,
+    insertIntoContents,
     Label(..)
 )
 where
@@ -35,6 +41,7 @@ import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word64)
@@ -99,13 +106,45 @@ toHex x =
 --
 type Origin = ByteString
 
-newtype OriginMap = OriginMap {
-    contents :: Map Origin ContentsList
+newtype Contents = Contents {
+    runContents :: Map Origin (Map SourceDict ByteString)
 } deriving (Eq, Show)
 
-data ContentsList = ContentsList {
-    sources :: Set SourceDict
-} deriving (Eq, Show)
+nullContents :: Contents
+nullContents = Contents $ Map.empty
+
+getSourcesMap :: Contents -> Origin -> Map SourceDict ByteString
+getSourcesMap c o' =
+  let
+    om = runContents c
+    sm = Map.findWithDefault Map.empty o' om
+  in
+    sm
+
+insertIntoContents :: Contents -> Origin -> Set SourceDict -> Contents
+insertIntoContents c o' st =
+  let
+    om = runContents c
+    sm1 = Map.findWithDefault Map.empty o' om
+
+
+    f :: Map SourceDict ByteString -> SourceDict -> Map SourceDict ByteString
+    f acc s = Map.insert s "FIXME hash" acc
+
+    sm2 = Set.foldl f sm1 st
+  in
+    Contents (Map.insert o' sm2 om)
+
+
+{-
+getDictionary :: Contents -> Map Text Text
+getDictionary s =
+    underlying s
+
+getHashBase62 :: SourceDict -> ByteString
+getHashBase62 s =
+    hashBase62 s
+-}
 
 newtype Label = Label {
     runLabel :: ByteString

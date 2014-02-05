@@ -24,18 +24,16 @@ module Vaultaire.Persistence.BucketObject (
     tidyOriginName
 ) where
 
+import Blaze.ByteString.Builder
 import Control.Exception
 import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import qualified Data.ByteString.Lazy as L
-import Data.ByteString.Lazy.Builder
 import Data.Char
 import Data.Locator
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Monoid
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
@@ -43,7 +41,6 @@ import Data.Word
 import System.Rados
 
 import Vaultaire.Conversion.Reader
-import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Serialize.DiskFormat as Disk
@@ -59,7 +56,7 @@ windowSize = fromIntegral __WINDOW_SIZE__
 -- Use the relevant information from a point to find out what bucket
 -- it belongs in.
 --
-formObjectLabel :: Origin -> SourceDict -> Word64 -> Label
+formObjectLabel :: Origin -> SourceDict -> Timestamp -> Label
 formObjectLabel o' s t =
     Label $ S.intercalate "_" [__EPOCH__, o', s', t']
   where
@@ -128,48 +125,15 @@ instance Serialize Text where
 
 --
 -- | Given a collection of points in the same source, write them down to Ceph.
--- We express as a VaultPoint protobuf, serialize to bytes, then prepend a
--- VaultPrefix in order to store the size necessary to be able to read it back
--- again.
 --
-
-bucket :: Origin -> Point -> (Label, Builder)
-bucket o' p =
-  let
-    p' = encodePoint p
-    pB = byteString p'
-    r  = createDiskPrefix (fromIntegral $ S.length p')
-    r' = encode r
-    rB = byteString r'
-
-    bB = mappend rB pB
-
-    s  = source p
-    t  = timestamp p
-
-    l = formObjectLabel o' s t
-  in
-    (l,bB)
 
 
 --
 -- The origin contents file is locked before entering here. Build a map of
 -- labels to encoded points, then construct a list of asynchronous appends.
 --
-appendVaultPoints :: Origin -> [Point] -> Pool ()
-appendVaultPoints o' ps =
-  let
-    m :: Map Label Builder
-    m = foldl f Map.empty ps
-
-    f :: Map Label Builder -> Point -> Map Label Builder
-    f m0 p =
-      let
-        (l,encodedB) = bucket o' p
-      in
-        Map.insertWith mappend l encodedB m0
-
-  in {-# SCC "RADOS" #-} do
+appendVaultPoints :: Map Label Builder -> Pool ()
+appendVaultPoints m = do
     asyncs <- sequence $ Map.foldrWithKey asyncAppend [] m
     mapM_ checkError asyncs
   where
@@ -184,8 +148,6 @@ appendVaultPoints o' ps =
         case maybe_error of
             Just err    -> liftIO $ throwIO err
             Nothing     -> return ()
-
-    toByteString = S.concat . L.toChunks . toLazyByteString
 
 {-
     This whole thing is a bit crazy. We should just merge it all into a single

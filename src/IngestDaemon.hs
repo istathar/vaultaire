@@ -16,6 +16,7 @@
 
 module IngestDaemon where
 
+import Blaze.ByteString.Builder
 import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.Chan
@@ -27,6 +28,7 @@ import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import Data.Serialize (encode)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
@@ -37,10 +39,12 @@ import System.Rados
 import System.ZMQ4.Monadic hiding (source)
 
 import Vaultaire.Conversion.Receiver
+import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
+type Envelope = ByteString
 
 data Options = Options {
     optGlobalDebug   :: !Bool,
@@ -50,11 +54,12 @@ data Options = Options {
 }
 
 
-data Channels = Channels {
+data Mutexes = Mutexes {
     inbound     :: !(MVar [ByteString]),
     acknowledge :: !(Chan [ByteString]),
     telemetry   :: !(Chan ByteString),
-    storage     :: !(Chan (Origin, UTCTime, ByteString, [Point]))
+    storage     :: !(Chan (Origin, UTCTime, Int, Envelope, Set SourceDict, Map Label Builder)),
+    contents    :: !(MVar Contents)
 }
 
 --
@@ -76,39 +81,40 @@ sanityCheck ps =
 
 writer
     :: ByteString
-    -> Channels
+    -> Mutexes
     -> IO ()
-writer pool' c =
+writer pool' chan =
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ loop Map.empty
+        runPool pool' $ loop nullContents
   where
-    msgV = inbound c
-    ackC = acknowledge c
-    telC = telemetry c
-    storeC = storage c
+    msgV = inbound chan
+    ackC = acknowledge chan
+    telC = telemetry chan
+    storeC = storage chan
     delimiter' = S.empty
 
-    loop cm = do
-        (o', t1, envelope', ps) <- liftIO $ readChan storeC
-
-        let st = processBurst cm o' ps
+    loop c = do
+        (o', t1, num, envelope', st, pm) <- liftIO $ readChan storeC
 
         let l = Contents.formObjectLabel o'
-        cm2 <- withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
-            Bucket.appendVaultPoints o' ps
+
+        c2 <- withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
+            Bucket.appendVaultPoints pm
 
             if (Set.null st)
-                then return cm
-                else updateContents cm o' l st
+                then return c
+                else updateContents c o' l st
 
         liftIO $ do
             writeChan ackC [envelope', delimiter', S.empty]
 
             t2 <- getCurrentTime
             let delta = diffUTCTime t2 t1
-            sendTelemetries telC delta (length ps)
+            sendTelemetries telC delta num
 
-        loop cm2
+        loop c2
+
+
 
     sendTelemetries chan delta num =
         let telems = [ "delta: " `showTelem` delta
@@ -134,14 +140,16 @@ parseMessage message' = do
 -- this is just conveying the SourceDicts that are "new".
 --
 updateContents
-    :: Map Origin (Set SourceDict)
+    :: Contents
     -> Origin
     -> Label
     -> Set SourceDict
-    -> Pool (Map Origin (Set SourceDict))
-updateContents cm0 o' l new  =
+    -> Pool (Contents)
+updateContents c o' l new  =
   let
-    st0 = Map.findWithDefault Set.empty o' cm0
+    sm0 :: Map SourceDict ByteString
+    sm0 = getSourcesMap c o'
+    st0 = Map.keysSet sm0
   in do
     st1 <- if Set.null st0
         then do
@@ -149,60 +157,104 @@ updateContents cm0 o' l new  =
         else do
             return st0
 
-    let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new
+    let st2 = Set.foldl (\acc s -> Set.insert s acc) st1 new -- FIXME add membership test
 
     if Set.size st2 > Set.size st1
         then do
             Contents.appendVaultSource l new
-            return $ Map.insert o' st2 cm0
+
+            return $ insertIntoContents c o' st2
         else
-            return cm0
+            return c
+
+
+--
+-- We express as a VaultPoint protobuf, serialize to bytes, then prepend a
+-- VaultPrefix in order to store the size necessary to be able to read it back
+-- again.
+--
+
+bucket :: Origin -> Point -> (Label, Builder)
+bucket o' p =
+  let
+    p' = encodePoint p
+    pB = fromByteString p'
+    r  = createDiskPrefix (fromIntegral $ S.length p')
+    r' = encode r
+    rB = fromByteString r'
+
+    bB = mappend rB pB
+
+    s  = source p
+    t  = timestamp p
+
+    l = Bucket.formObjectLabel o' s t
+  in
+    (l,bB)
 
 
 processBurst
-    :: Map Origin (Set SourceDict)
+    :: Contents
     -> Origin
     -> [Point]
-    -> Set SourceDict
-processBurst _ _ [] =
-    Set.empty
-processBurst cm o' ps =
-  let
-    known = Map.findWithDefault Set.empty o' cm
-
-    new :: Set SourceDict
-    new = foldl g Set.empty ps
+    -> (Set SourceDict, Map Label Builder)
+processBurst _ _  [] = (Set.empty, Map.empty)
+processBurst c o' ps = (new, pm)
+  where
+    known :: Map SourceDict ByteString
+    known = getSourcesMap c o'
 
     g :: Set SourceDict -> Point -> Set SourceDict
     g st p =
       let
         s = source p
       in
-        if Set.member s known
+        if Map.member s known
             then st
             else Set.insert s st
-  in
-    new
 
-worker :: Channels -> IO ()
-worker c =
+    new :: Set SourceDict
+    new = foldl g Set.empty ps
+
+
+    f :: Map Label Builder -> Point -> Map Label Builder
+    f m0 p =
+      let
+        (l,encodedB) = bucket o' p
+      in
+        Map.insertWith mappend l encodedB m0
+
+    -- FIXME change seed to shared accumulator
+    pm :: Map Label Builder
+    pm = foldl f Map.empty ps
+
+
+
+worker :: Mutexes -> IO ()
+worker chan =
   let
-    msgV = inbound c
-    ackC = acknowledge c
-    storeC = storage c
+    msgV = inbound chan
+    ackC = acknowledge chan
+    storeC = storage chan
+    cV = contents chan
   in
     forever $ do
         [envelope', delimiter', message'] <- takeMVar msgV
         t1 <- getCurrentTime
+        c  <- readMVar cV
 
         case parseMessage message' of
             Left err -> do
                 writeChan ackC [envelope', delimiter', S.pack err]
-            Right ps -> do
-                -- temporary, replace with zmq message part
-                let o' = origin $ head ps
 
-                writeChan storeC (o', t1, envelope', ps)
+            Right ps ->
+              let
+                -- temporary, replace with zmq message part
+                o' = origin $ head ps
+
+                (st, pm) = processBurst c o' ps
+              in do
+                writeChan storeC (o', t1, length ps, envelope', st, pm)
 
 
 --
@@ -211,15 +263,15 @@ worker c =
 --
 receiver
     :: String
-    -> Channels
+    -> Mutexes
     -> Bool
     -> IO ()
-receiver broker c d =
+receiver broker chan d =
   let
-    msgV = inbound c
-    ackC = acknowledge c
-    telC = telemetry c
-    storeC = storage c
+    msgV = inbound chan
+    ackC = acknowledge chan
+    telC = telemetry chan
+    storeC = storage chan
   in
     runZMQ $ do
         work <- socket Pull
@@ -269,23 +321,26 @@ program (Options d w broker pool) = do
 
     storeC <- newChan
 
-    let c = Channels {
+    contentsV <- newMVar nullContents
+
+    let u = Mutexes {
         inbound = msgV,
         acknowledge = ackC,
         telemetry = telC,
-        storage = storeC
+        storage = storeC,
+        contents = contentsV
     }
 
     -- Initialize thread pool to requested size
     replicateM_ w $
-        linkThread $ worker c
+        linkThread $ worker u
 
     -- Startup writer thread
-    linkThread $ writer (S.pack pool) c
+    linkThread $ writer (S.pack pool) u
 
 
     -- Startup communications threads
-    linkThread $ receiver broker c d
+    linkThread $ receiver broker u d
 
     -- Our work here is done
     goToSleep
