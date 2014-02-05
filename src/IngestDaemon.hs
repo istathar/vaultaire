@@ -13,6 +13,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE PackageImports     #-}
+{-# LANGUAGE RecordWildCards    #-}
 
 module IngestDaemon where
 
@@ -44,8 +45,6 @@ import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
-type Envelope = ByteString
-
 data Options = Options {
     optGlobalDebug   :: !Bool,
     optGlobalWorkers :: !Int,
@@ -53,12 +52,35 @@ data Options = Options {
     argPoolName      :: !String
 }
 
+-- This is how the broker will know to route all the way back to the client,
+-- and how the client will know which message we are referencing.
+data Ident = Ident {
+    envelope   :: !ByteString, -- handled for us by the router socket, opaque.
+    messageID :: !ByteString  -- a uint16_t, but opaque to us.
+}
+
+data Ack = Ack {
+    ident   :: Ident,
+    failure :: !ByteString -- possible failure, empty for success
+}
+
+data Storage = Storage {
+    storageOrigin  :: !Origin,
+    storageTime    :: !UTCTime,
+    storageCount   :: !Int,
+    storageIdent   :: !Ident,
+    storageSources :: !(Set SourceDict),
+    storageLabels  :: !(Map Label Builder)
+}
+
+
+
 
 data Mutexes = Mutexes {
     inbound     :: !(MVar [ByteString]),
-    acknowledge :: !(Chan [ByteString]),
+    acknowledge :: !(Chan Ack), 
     telemetry   :: !(Chan ByteString),
-    storage     :: !(Chan (Origin, UTCTime, Int, Envelope, Set SourceDict, Map Label Builder)),
+    storage     :: !(Chan Storage),
     directory   :: !(MVar Directory)
 }
 
@@ -117,38 +139,31 @@ writer
     :: ByteString
     -> Mutexes
     -> IO ()
-writer pool' u =
+writer pool' Mutexes{..} =
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
         runPool pool' $ loop
   where
-    msgV = inbound u
-    ackC = acknowledge u
-    telC = telemetry u
-    storeC = storage u
-    dV = directory u
-
-    delimiter' = S.empty
-
     loop = do
-        (o', t1, num, envelope', st, pm) <- liftIO $ readChan storeC
+        --(o', t1, num, envelope', st, pm) <- liftIO $ readChan storage
+        Storage{..} <- liftIO $ readChan storage
 
-        let l = Contents.formObjectLabel o'
+        let l = Contents.formObjectLabel storageOrigin
 
         withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
-            Bucket.appendVaultPoints pm
+            Bucket.appendVaultPoints storageLabels
 
-            unless (Set.null st) $ do
-                d1 <- liftIO $ takeMVar dV
-                d2 <- updateContents d1 o' l st
-                liftIO $ putMVar dV d2
+            unless (Set.null storageSources) $ do
+                d1 <- liftIO $ takeMVar directory
+                d2 <- updateContents d1 storageOrigin l storageSources
+                liftIO $ putMVar directory d2
 
 
         liftIO $ do
-            writeChan ackC [envelope', delimiter', S.empty]
+            writeChan acknowledge (Ack storageIdent "")
 
             t2 <- getCurrentTime
-            let delta = diffUTCTime t2 t1
-            sendTelemetries telC delta num
+            let delta = diffUTCTime t2 storageTime
+            sendTelemetries telemetry delta storageCount
 
         loop
 
@@ -256,12 +271,13 @@ worker u =
     dV = directory u
   in
     forever $ do
-        [envelope', delimiter', message'] <- takeMVar msgV
+        [envelope', msg_id', message'] <- takeMVar msgV
+        let ident = Ident envelope' msg_id'
         t1 <- getCurrentTime
 
         case parseMessage message' of
             Left err -> do
-                writeChan ackC [envelope', delimiter', S.pack err]
+                writeChan ackC $ Ack ident (S.pack err)
 
             Right ps -> do
                 -- temporary, replace with zmq message part
@@ -283,7 +299,7 @@ worker u =
 -- the data in the Directory is actually on disk.
 --
 
-                writeChan storeC (o', t1, length ps, envelope', st, pm)
+                writeChan storeC $ Storage o' t1 (length ps) ident st pm
 
 
 
@@ -297,39 +313,31 @@ receiver
     -> Mutexes
     -> Bool
     -> IO ()
-receiver broker chan d =
-  let
-    msgV = inbound chan
-    ackC = acknowledge chan
-    telC = telemetry chan
-    storeC = storage chan
-  in
+receiver broker Mutexes{..} d =
     runZMQ $ do
-        work <- socket Pull
-        connect work ("tcp://" ++ broker ++ ":5561")
-
-        ackn <- socket Push
-        connect ackn ("tcp://" ++ broker ++ ":5560")
+        router <- socket Router
+        connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- socket Pub
         bind tele "tcp://*:5570"
 
         a1 <- async $ forever $ do
-            x' <- liftIO $ readChan telC
+            x' <- liftIO $ readChan telemetry
             when d $ liftIO $ S.putStrLn x'
             send tele [] x'
 
         linkThread a1
 
         a2 <- async $ forever $ do
-            msg <- receiveMulti work
-            liftIO $ putMVar msgV msg
+            msg <- receiveMulti router
+            liftIO $ putMVar inbound msg
 
         linkThread a2
 
         a3 <- async $ forever $ do
-            as <- liftIO $ readChan ackC
-            sendMulti ackn (fromList as)
+            Ack ident failure <- liftIO $ readChan acknowledge
+            let reply = [ envelope ident, messageID ident, failure ]
+            sendMulti router (fromList reply)
 
         linkThread a3
 
