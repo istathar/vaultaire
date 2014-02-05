@@ -28,7 +28,6 @@ module Vaultaire.Internal.CoreTypes
     toHex,
     Origin,
     Directory,
-    nullDirectory,
     getSourcesMap,
     insertIntoDirectory,
     hashSourceDict,
@@ -111,34 +110,24 @@ toHex x =
 --
 type Origin = ByteString
 
-newtype Directory = Directory {
-    runDirectory :: Map Origin (Map SourceDict ByteString)
-} deriving (Eq, Show)
-
-nullDirectory :: Directory
-nullDirectory = Directory $ Map.empty
+type Directory = Map Origin (Map SourceDict ByteString)
 
 getSourcesMap :: Directory -> Origin -> Map SourceDict ByteString
 getSourcesMap d o' =
-  let
-    om = runDirectory d
-    sm = Map.findWithDefault Map.empty o' om
-  in
-    sm
+    Map.findWithDefault Map.empty o' d
+
 
 insertIntoDirectory :: Directory -> Origin -> Set SourceDict -> Directory
 insertIntoDirectory d o' st =
   let
-    om = runDirectory d
-    sm1 = Map.findWithDefault Map.empty o' om
-
+    known = getSourcesMap d o'
 
     f :: Map SourceDict ByteString -> SourceDict -> Map SourceDict ByteString
     f acc s = Map.insert s (hashSourceDict s) acc
 
-    sm2 = Set.foldl f sm1 st
+    sm = Set.foldl f known st
   in
-    Directory (Map.insert o' sm2 om)
+    Map.insert o' sm d
 
 
 {-

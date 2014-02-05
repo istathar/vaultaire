@@ -252,38 +252,26 @@ processBurst d o' ps = build
       in
         Map.insertWith mappend l encodedB m0
 
-    -- FIXME change seed to shared accumulator
     build :: Map Label Builder
     build = foldl f Map.empty ps
 
 
-{-
-
-            return $ insertIntoContents c o' st2
--}
-
 worker :: Mutexes -> IO ()
-worker u =
-  let
-    msgV = inbound u
-    ackC = acknowledge u
-    storeC = storage u
-    dV = directory u
-  in
+worker Mutexes{..} =
     forever $ do
-        [envelope', msg_id', message'] <- takeMVar msgV
+        [envelope', msg_id', message'] <- takeMVar inbound
         let ident = Ident envelope' msg_id'
         t1 <- getCurrentTime
 
         case parseMessage message' of
             Left err -> do
-                writeChan ackC $ Ack ident (S.pack err)
+                writeChan acknowledge $ Ack ident (S.pack err)
 
             Right ps -> do
                 -- temporary, replace with zmq message part
                 let o' = origin $ head ps
 
-                d1 <- readMVar dV
+                d1 <- readMVar directory
 
                 let known = getSourcesMap d1 o'
                     st = identifyUnknown known ps
@@ -299,7 +287,7 @@ worker u =
 -- the data in the Directory is actually on disk.
 --
 
-                writeChan storeC $ Storage o' t1 (length ps) ident st pm
+                writeChan storage $ Storage o' t1 (length ps) ident st pm
 
 
 
@@ -360,7 +348,7 @@ program (Options d w broker pool) = do
 
     storeC <- newChan
 
-    dV <- newMVar nullDirectory
+    dV <- newMVar Map.empty
 
     let u = Mutexes {
         inbound = msgV,
