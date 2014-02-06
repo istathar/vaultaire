@@ -22,12 +22,12 @@ module Vaultaire.Internal.CoreTypes
     SourceDict(..),
     Value(..),
     toHex,
-    Origin,
+    Origin(..),
     Directory,
     getSourcesMap,
     insertIntoDirectory,
     hashSourceDict,
-    Label
+    Label(..)
 )
 where
 
@@ -50,7 +50,7 @@ import Text.Printf
 type Timestamp = Word64
 
 data Point = Point {
-    origin    :: !ByteString,
+    origin    :: !Origin,
     source    :: !SourceDict,
     timestamp :: !Timestamp,
     payload   :: !Value
@@ -104,26 +104,26 @@ toHex x =
 --
 --
 --
-type Origin = ByteString
+newtype Origin = Origin ByteString deriving (Eq, Ord, Show)
 
 type Directory = Map Origin (Map SourceDict ByteString)
 
 getSourcesMap :: Directory -> Origin -> Map SourceDict ByteString
-getSourcesMap d o' =
-    Map.findWithDefault Map.empty o' d
+getSourcesMap d o =
+    Map.findWithDefault Map.empty o d
 
 
 insertIntoDirectory :: Directory -> Origin -> Set SourceDict -> Directory
-insertIntoDirectory d o' st =
+insertIntoDirectory d o st =
   let
-    known = getSourcesMap d o'
+    known = getSourcesMap d o
 
     f :: Map SourceDict ByteString -> SourceDict -> Map SourceDict ByteString
     f acc s = Map.insert s (hashSourceDict s) acc
 
     sm = Set.foldl f known st
   in
-    Map.insert o' sm d
+    Map.insert o sm d
 
 
 {-
@@ -176,4 +176,4 @@ instance Serialize Text where
         return $ T.decodeUtf8 x'
 
 
-type Label = ByteString
+newtype Label = Label ByteString deriving (Eq, Ord, Show)

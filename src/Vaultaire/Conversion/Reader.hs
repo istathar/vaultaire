@@ -53,7 +53,7 @@ convertToMapEntry tag =
 -}
 
 convertToPoint :: Core.Origin -> Core.SourceDict -> Protobuf.VaultPoint -> Core.Point
-convertToPoint o' s pb =
+convertToPoint o s pb =
   let
     v = case (getField $ Protobuf.payload pb) of
         Protobuf.EMPTY   -> Core.Empty
@@ -64,7 +64,7 @@ convertToPoint o' s pb =
     (Fixed m) = getField (Protobuf.timestamp pb)
   in
     Core.Point {
-        Core.origin = o',
+        Core.origin = o,
         Core.source = s,
         Core.timestamp = m,
         Core.payload = v

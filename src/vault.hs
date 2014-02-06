@@ -165,7 +165,7 @@ program :: Options -> IO ()
 program (Options verbose cmd) =
     case cmd of
         ReadCommand o0 s0 t0   -> do
-            let o' = S.pack o0
+            let o = Origin (S.pack o0)
 
             let s = handleSourceArgument s0
 
@@ -181,11 +181,11 @@ program (Options verbose cmd) =
 -- Determine the appropriate object label, then see if it exists
 --
             let s' = hashSourceDict s
-            debug verbose $ Bucket.formObjectLabel o' s' t
+            debug verbose $ Bucket.formObjectLabel o s' t
 
             m <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
                 runPool "test1" $ do
-                    Bucket.readVaultObject o' s t
+                    Bucket.readVaultObject o s t
 
 --
 -- Fold over m, print the timestamps + values
@@ -196,12 +196,12 @@ program (Options verbose cmd) =
 
         ContentsCommand o0   ->
           let
-            o' = S.pack o0
-            l' = Contents.formObjectLabel o'
+            o = Origin (S.pack o0)
+            l = Contents.formObjectLabel o
           in do
             e <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
                 runPool "test1" $ do
-                    Contents.readVaultObject l'
+                    Contents.readVaultObject l
 
             traverse_ displaySource e
 

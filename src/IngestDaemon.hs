@@ -91,7 +91,7 @@ data Mutexes = Mutexes {
 sanityCheck :: [Point] -> Either String [Point]
 sanityCheck ps =
   let
-    o' = origin $ head ps
+    (Origin o') = origin $ head ps
   in
     if S.null o'
         then Left "Empty origin value, discarding burst"
@@ -106,12 +106,12 @@ updateContents
     -> Origin
     -> Set SourceDict
     -> Pool (Directory)
-updateContents d o' st  =
+updateContents d o st  =
   let
     known :: Map SourceDict ByteString
-    known = getSourcesMap d o'
+    known = getSourcesMap d o
 
-    l' = Contents.formObjectLabel o'
+    l' = Contents.formObjectLabel o
 
     st0 = Map.keysSet known
   in do
@@ -128,7 +128,7 @@ updateContents d o' st  =
     if Set.size new > 0
         then do
             Contents.appendVaultSource l' new
-            return $ insertIntoDirectory d o' new
+            return $ insertIntoDirectory d o new
         else
             return d
 

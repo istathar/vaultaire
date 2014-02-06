@@ -54,9 +54,11 @@ windowSize = fromIntegral __WINDOW_SIZE__
 -- it belongs in.
 --
 formObjectLabel :: Origin -> ByteString -> Timestamp -> Label
-formObjectLabel o' s' t =
-    S.intercalate "_" [__EPOCH__, o', s', t']
+formObjectLabel o s' t =
+    Label l'
   where
+    l' = S.intercalate "_" [__EPOCH__, o', s', t']
+    (Origin o') = o
     t2 = t `div` (windowSize * nanoseconds)
     t' = S.pack $ show (t2 * windowSize)
 
@@ -94,7 +96,7 @@ appendVaultPoints m = do
     asyncs <- sequence $ Map.foldrWithKey asyncAppend [] m
     mapM_ checkError asyncs
   where
-    asyncAppend l' bB as =
+    asyncAppend (Label l') bB as =
         (runAsync . runObject l' $ append $ toByteString bB) : as
 
     checkError write_in_flight = do
@@ -113,10 +115,11 @@ readVaultObject
     -> SourceDict
     -> Timestamp
     -> Pool (Map Timestamp Point)
-readVaultObject o' s t =
+readVaultObject o s t =
     let
         s' = hashSourceDict s           -- FIXME lookup from Directory
-        l' = formObjectLabel o' s' t
+        l  = formObjectLabel o s' t
+        Label l' = l
 
     in do
         ey' <- runObject l' readFull    -- Pool (Either RadosError ByteString)
@@ -152,7 +155,7 @@ readVaultObject o' s t =
         readPoint2 :: ByteString -> Either String (Point, ByteString)
         readPoint2 x' = do
             ((VaultRecord _ pb), remainder') <- runGetState get x' 0
-            return (convertToPoint o' s pb, remainder')
+            return (convertToPoint o s pb, remainder')
 
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultPoint
