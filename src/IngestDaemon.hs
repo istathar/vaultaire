@@ -42,6 +42,7 @@ import System.ZMQ4.Monadic hiding (source)
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
+import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
@@ -67,7 +68,7 @@ data Ack = Ack {
 
 data Storage = Storage {
     pendingWrites  :: !(Map Label Builder),
-    pendingSources :: !(Set SourceDict),
+    pendingSources :: !(Map Origin (Set SourceDict)),
     pendingAcks    :: ![Ack]
 }
 
@@ -103,19 +104,20 @@ sanityCheck ps =
 updateContents
     :: Directory
     -> Origin
-    -> Label
     -> Set SourceDict
     -> Pool (Directory)
-updateContents d o' l st  =
+updateContents d o' st  =
   let
     known :: Map SourceDict ByteString
     known = getSourcesMap d o'
+
+    l' = Contents.formObjectLabel o'
 
     st0 = Map.keysSet known
   in do
     st1 <- if Map.null known
         then do
-            Contents.readVaultObject l
+            Contents.readVaultObject l'
         else do
             return st0
 
@@ -125,11 +127,13 @@ updateContents d o' l st  =
 
     if Set.size new > 0
         then do
-            Contents.appendVaultSource l new
+            Contents.appendVaultSource l' new
             return $ insertIntoDirectory d o' new
         else
             return d
 
+
+global_lock = S.intercalate "_" [__EPOCH__, "global"]
 
 writer
     :: ByteString
@@ -143,19 +147,22 @@ writer pool' Mutexes{..} =
 
             t1 <- liftIO $ getCurrentTime
 
-            Storage pm st as <- liftIO $ takeMVar storage
-            liftIO $ putMVar storage (Storage Map.empty Set.empty [])
+            Storage pm sm as <- liftIO $ takeMVar storage
+            liftIO $ putMVar storage (Storage Map.empty Map.empty [])
 
-            withSharedLock "global_lock" "name" "desc" "tag" (Just 10.0) $ do
+--
+-- This is, obviously, a total hack. And horrible. But it is the necessary
+-- guard until we roll out atomic compare and set care of the new operations
+-- API in the next Ceph version.
+--
+
+            withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
                 Bucket.appendVaultPoints pm
 
-                unless (Set.null st) $ do
+                unless (Map.null sm) $ do
                     d1 <- liftIO $ takeMVar directory
-                    -- FIXME
-                    {-
-                    d2 <- updateContents d1 storageOrigin l storageSources
-                    -}
-                    let d2 = d1
+                    let os = Map.toList sm
+                    d2 <- foldM (\d (o',st) -> updateContents d o' st) d1 os
                     liftIO $ putMVar directory d2
 
 
@@ -268,28 +275,28 @@ worker Mutexes{..} =
                 let d2 = if Set.null st
                             then d1
                             else insertIntoDirectory d1 o' st
-
-                let pm = processBurst d2 o' ps
-
-                requestWrite storage pm st (Ack ident S.empty)
-                void $ tryPutMVar pending ()
-
 --
 -- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
 -- happen again down in updateContents, but it's the only way to ensure that
 -- the data in the Directory is actually on disk)
 --
+                let pm = processBurst d2 o' ps
+
+                requestWrite storage pm o' st (Ack ident S.empty)
+                void $ tryPutMVar pending ()
 
 
-
-requestWrite :: MVar Storage -> Map Label Builder -> Set SourceDict -> Ack -> IO ()
-requestWrite storage writes new a = do
-    (Storage pm st as) <- takeMVar storage
+requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> IO ()
+requestWrite storage writes o' new a = do
+    (Storage pm sm as) <- takeMVar storage
 
     let pm2 = Map.foldlWithKey f pm writes
-    let st2 = Set.union st new
 
-    putMVar storage (Storage pm2 st2 (a:as))
+    let sm2 = case Map.lookup o' sm of
+                Just st -> Map.insert o' (Set.union st new) sm
+                Nothing -> Map.singleton o' new
+
+    putMVar storage (Storage pm2 sm2 (a:as))
 
   where
     f acc label' encodedB = Map.insertWith mappend label' encodedB acc
@@ -352,7 +359,7 @@ program (Options d w broker pool) = do
     -- Telemetry streams over this channel
     telC <- newChan
 
-    storeV <- newMVar (Storage Map.empty Set.empty [])
+    storeV <- newMVar (Storage Map.empty Map.empty [])
 
     pendingV <- newEmptyMVar
 

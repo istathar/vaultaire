@@ -194,12 +194,14 @@ program (Options verbose cmd) =
             traverse_ displayPoint m
 
 
-        ContentsCommand o0   -> do
-            let o' = S.pack o0
-
+        ContentsCommand o0   ->
+          let
+            o' = S.pack o0
+            l' = Contents.formObjectLabel o'
+          in do
             e <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
                 runPool "test1" $ do
-                    Contents.readVaultObject o'
+                    Contents.readVaultObject l'
 
             traverse_ displaySource e
 
