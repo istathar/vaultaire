@@ -108,7 +108,7 @@ readVaultObject l =
     readSource :: ByteString -> Either String (SourceDict, ByteString)
     readSource x' = do
         ((VaultRecord _ sb), z') <- runGetState get x' 0
-        return (convertToSource sb, z')
+        return (convertVaultToSource sb, z')
 
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultContent

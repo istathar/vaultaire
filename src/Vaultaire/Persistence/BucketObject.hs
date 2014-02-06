@@ -155,7 +155,7 @@ readVaultObject o s t =
         readPoint2 :: ByteString -> Either String (Point, ByteString)
         readPoint2 x' = do
             ((VaultRecord _ pb), remainder') <- runGetState get x' 0
-            return (convertToPoint o s pb, remainder')
+            return (convertVaultToPoint o s pb, remainder')
 
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultPoint
