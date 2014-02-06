@@ -24,6 +24,7 @@ import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad
 import "mtl" Control.Monad.Error ()
+import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
@@ -38,12 +39,13 @@ import Options.Applicative
 import System.IO.Unsafe (unsafePerformIO)
 import System.Rados
 import System.ZMQ4.Monadic hiding (source)
+import Text.Printf
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
-import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 data Options = Options {
@@ -69,13 +71,14 @@ data Ack = Ack {
 data Storage = Storage {
     pendingWrites  :: !(Map Label Builder),
     pendingSources :: !(Map Origin (Set SourceDict)),
-    pendingAcks    :: ![Ack]
+    pendingAcks    :: ![Ack],
+    pendingCount   :: !Int
 }
 
 data Mutexes = Mutexes {
     inbound     :: !(MVar [ByteString]),
     acknowledge :: !(Chan Ack),
-    telemetry   :: !(Chan ByteString),
+    telemetry   :: !(Chan (String,String)),
     storage     :: !(MVar Storage),
     pending     :: !(MVar ()),
     directory   :: !(MVar Directory)
@@ -147,9 +150,10 @@ writer pool' Mutexes{..} =
 
             t1 <- liftIO $ getCurrentTime
 
-            Storage pm sm as <- liftIO $ takeMVar storage
-            liftIO $ putMVar storage (Storage Map.empty Map.empty [])
+            Storage pm sm as n <- liftIO $ takeMVar storage
+            liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
 
+            output telemetry "writing" (printf "%5d" n)
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
 -- guard until we roll out atomic compare and set care of the new operations
@@ -171,8 +175,13 @@ writer pool' Mutexes{..} =
             t2 <- liftIO $ getCurrentTime
 
             let delta = diffUTCTime t2 t1
-            liftIO $ writeChan telemetry $ S.append "delta: " (S.pack $ show delta)
+            let v = printf "%5.3f" ((fromRational $ toRational delta) :: Float)
+            output telemetry "delta" v
 
+
+output :: MonadIO ω => Chan (String,String) -> String -> String -> ω ()
+output telemetry k v = liftIO $ do
+    writeChan telemetry (k, v)
 
 parseMessage :: ByteString -> Either String [Point]
 parseMessage message' = do
@@ -266,40 +275,45 @@ worker Mutexes{..} =
 
             Right ps -> do
                 -- temporary, replace with zmq message part
-                let o' = origin $ head ps
+                let n = length ps
+                output telemetry "received" (printf "%5d" n)
+
+                let o = origin $ head ps
 
                 d1 <- readMVar directory
 
-                let known = getSourcesMap d1 o'
+                let known = getSourcesMap d1 o
                 let st = identifyUnknown known ps
                 let d2 = if Set.null st
                             then d1
-                            else insertIntoDirectory d1 o' st
+                            else insertIntoDirectory d1 o st
 --
 -- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
 -- happen again down in updateContents, but it's the only way to ensure that
 -- the data in the Directory is actually on disk)
 --
-                let pm = processBurst d2 o' ps
+                let pm = processBurst d2 o ps
 
-                requestWrite storage pm o' st (Ack ident S.empty)
+                requestWrite storage pm o st (Ack ident S.empty) n
                 void $ tryPutMVar pending ()
 
 
-requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> IO ()
-requestWrite storage writes o' new a = do
-    (Storage pm sm as) <- takeMVar storage
+requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> Int -> IO ()
+requestWrite storage writes o new a n0 = do
+    (Storage pm sm as n) <- takeMVar storage
 
     let pm2 = Map.foldlWithKey f pm writes
 
-    let sm2 = case Map.lookup o' sm of
-                Just st -> Map.insert o' (Set.union st new) sm
-                Nothing -> Map.singleton o' new
+    let sm2 = case Map.lookup o sm of
+                Just st -> Map.insert o (Set.union st new) sm
+                Nothing -> Map.singleton o new
 
-    putMVar storage (Storage pm2 sm2 (a:as))
+    let n1 = n0 + n
+
+    putMVar storage (Storage pm2 sm2 (a:as) n1)
 
   where
-    f acc label' encodedB = Map.insertWith mappend label' encodedB acc
+    f acc label encodedB = Map.insertWith mappend label encodedB acc
 
 
 
@@ -323,9 +337,10 @@ receiver broker Mutexes{..} d =
         bind tele "tcp://*:5570"
 
         a1 <- async $ forever $ do
-            x' <- liftIO $ readChan telemetry
-            when d $ liftIO $ S.putStrLn x'
-            send tele [] x'
+            (k,v) <- liftIO $ readChan telemetry
+            when d $ liftIO $ putStrLn $ printf "%-10s %-8s" (k ++ ":") v
+            let reply = [S.pack k, S.pack v]
+            sendMulti tele (fromList reply)
 
         linkThread a1
 
@@ -359,7 +374,7 @@ program (Options d w broker pool) = do
     -- Telemetry streams over this channel
     telC <- newChan
 
-    storeV <- newMVar (Storage Map.empty Map.empty [])
+    storeV <- newMVar (Storage Map.empty Map.empty [] 0)
 
     pendingV <- newEmptyMVar
 
