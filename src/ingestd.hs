@@ -11,10 +11,13 @@
 
 module Main where
 
+import GHC.Conc
 import Options.Applicative (execParser)
 
 import IngestDaemon (commandLineParser, program)
 
 main :: IO ()
-main =
+main = do
+    n <- getNumProcessors
+    setNumCapabilities n
     execParser commandLineParser >>= program

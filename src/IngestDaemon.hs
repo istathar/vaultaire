@@ -437,7 +437,7 @@ toplevel = Options
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
   where
-    num = unsafePerformIO $ GHC.Conc.getNumCapabilities
+    num = unsafePerformIO $ getNumCapabilities
 
 
 
