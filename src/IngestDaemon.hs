@@ -175,7 +175,7 @@ writer pool' Mutexes{..} =
             t2 <- liftIO $ getCurrentTime
 
             let delta = diffUTCTime t2 t1
-            let v = printf "%5.3f" ((fromRational $ toRational delta) :: Float)
+            let v = printf "%9.3f" ((fromRational $ toRational delta) :: Float)
             output telemetry "delta" v
 
 
