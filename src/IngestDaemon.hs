@@ -143,7 +143,7 @@ writer
     -> Mutexes
     -> IO ()
 writer pool' Mutexes{..} =
-    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+    runConnect (Just "vaultaire") (parseConfig "/etc/ceph/ceph.conf") $
         runPool pool' $ forever $ do
             -- block until signalled to wake up
             liftIO $ takeMVar pending

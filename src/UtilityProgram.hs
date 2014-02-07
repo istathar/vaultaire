@@ -183,7 +183,7 @@ program (Options verbose cmd) =
             let s' = hashSourceDict s
             debug verbose $ Bucket.formObjectLabel o s' t
 
-            m <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+            m <- runConnect (Just "vaultaire") (parseConfig "/etc/ceph/ceph.conf") $
                 runPool "test1" $ do
                     Bucket.readVaultObject o s t
 
@@ -199,7 +199,7 @@ program (Options verbose cmd) =
             o = Origin (S.pack o0)
             l = Contents.formObjectLabel o
           in do
-            e <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+            e <- runConnect (Just "vaultaire") (parseConfig "/etc/ceph/ceph.conf") $
                 runPool "test1" $ do
                     Contents.readVaultObject l
 
