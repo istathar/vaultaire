@@ -20,16 +20,16 @@ module Vaultaire.Serialize.Common
 ) where
 
 
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S
 import Data.ProtocolBuffers hiding (field)
-import Data.Text (Text)
-import qualified Data.Text as T
 import Data.TypeLevel (D1, D2)
 import GHC.Generics (Generic)
 
 
 data SourceTag = SourceTag {
-    field :: Required D1 (Value Text),
-    value :: Required D2 (Value Text)
+    field :: Required D1 (Value ByteString),
+    value :: Required D2 (Value ByteString)
 } deriving (Generic, Eq)
 
 instance Encode SourceTag
@@ -39,8 +39,8 @@ instance Show SourceTag where
     show x =
         k ++ ":" ++ v
       where
-        k = T.unpack $ getField $ field x
-        v = T.unpack $ getField $ value x
+        k = S.unpack $ getField $ field x
+        v = S.unpack $ getField $ value x
 
 
 data ValueType

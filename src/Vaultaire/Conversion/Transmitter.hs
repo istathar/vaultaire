@@ -27,13 +27,13 @@ module Vaultaire.Conversion.Transmitter (
 -- Code begins
 --
 
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
-import Data.Text (Text)
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Serialize.WireFormat as Protobuf
@@ -120,7 +120,7 @@ originToField p =
         else putField (Just o')
 
 
-createSourceTag :: Text -> Text -> Protobuf.SourceTag
+createSourceTag :: ByteString -> ByteString -> Protobuf.SourceTag
 createSourceTag k v =
     Protobuf.SourceTag {
         Protobuf.field = putField k,

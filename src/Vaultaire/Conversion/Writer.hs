@@ -32,7 +32,6 @@ import qualified Data.Map.Strict as Map
 import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
-import Data.Text (Text)
 
 import qualified Vaultaire.Internal.CoreTypes as Core
 import qualified Vaultaire.Serialize.DiskFormat as Protobuf
@@ -121,7 +120,7 @@ createDiskPoint p =
             }
 
 
-createSourceTag :: Text -> Text -> Protobuf.SourceTag
+createSourceTag :: ByteString -> ByteString -> Protobuf.SourceTag
 createSourceTag k v =
     Protobuf.SourceTag {
         Protobuf.field = putField k,

@@ -287,7 +287,7 @@ testFormBucketLabel =
     it "correctly forms an object label" $ do
         let (Core.Label l') = Bucket.formObjectLabel o s1' t1
         assertEqual "Incorrect label"
-            (S.pack "01_XK9Y10_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l'
+            (S.pack "01_XK9Y10_Oo5MwCFNdpkWlPTTWh2bFyLrXYM_1387900000") l'
 
     it "two labels in same mark match" $ do
         let l1 = Bucket.formObjectLabel o s1' t1

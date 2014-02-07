@@ -29,7 +29,6 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
-import Data.Text (Text)
 import qualified Data.Text as T
 
 import qualified Vaultaire.Internal.CoreTypes as Core
@@ -52,7 +51,7 @@ convertToPoint x =
         Protobuf.TEXT    -> Core.Textual (fromMaybe T.empty $ getField $ Protobuf.valueTextual x)
         Protobuf.BINARY  -> Core.Blob (fromMaybe S.empty $ getField $ Protobuf.valueBlob x)
     ss = getField $ Protobuf.source x          :: [Protobuf.SourceTag]
-    as = map convertToMapEntry ss              :: [(Text,Text)]
+    as = map convertToMapEntry ss              :: [(ByteString,ByteString)]
     (Fixed m) = getField (Protobuf.timestamp x)
     o' = fromMaybe "" $ getField (Protobuf.origin x)
   in
@@ -64,7 +63,7 @@ convertToPoint x =
     }
 
 
-convertToMapEntry :: Protobuf.SourceTag -> (Text,Text)
+convertToMapEntry :: Protobuf.SourceTag -> (ByteString,ByteString)
 convertToMapEntry tag =
   let
     k = getField $ Protobuf.field tag

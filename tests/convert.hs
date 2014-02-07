@@ -54,11 +54,12 @@ main = do
             ("epoch", "1")]
 
     let o' = hashStringToLocator16a 6 "perf_data/bletchley"
+    let o  = Origin o'
 
     let t = 1386931666289201468
 
     let p = Point {
-        origin = o',
+        origin = o,
         source = s,
         timestamp = t,
         payload = Numeric 201468
@@ -66,6 +67,8 @@ main = do
 --      payload = Measurement 45.9
 --      payload = Blob (B.pack [0x01, 0x0f, 0x5a])
     }
+
+    let s' = hashSourceDict s
 
     let pb = createDataFrame p
 
@@ -79,5 +82,6 @@ main = do
     putStrLn $ toHex p'
 
     putStrLn ""
-    S.putStrLn $ Bucket.formObjectLabel o' s t
+    let (Label l') = Bucket.formObjectLabel o s' t
+    S.putStrLn l'
 

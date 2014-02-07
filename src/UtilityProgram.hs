@@ -120,8 +120,8 @@ handleSourceArgument arg =
   in
     SourceDict $ Map.fromList pairs
   where
-    toTag :: [ByteString] -> (Text, Text)
-    toTag [k',v'] = (T.pack $ S.unpack k', T.pack $ S.unpack v')
+    toTag :: [ByteString] -> (ByteString, ByteString)
+    toTag [k',v'] = (k',v')
     toTag _ = error "invalid source argument"
 
 

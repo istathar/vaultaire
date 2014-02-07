@@ -33,6 +33,7 @@ where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as S
 import Data.Int (Int64)
 import Data.List (intercalate)
 import Data.Locator
@@ -43,7 +44,6 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
 import Text.Printf
 
@@ -80,7 +80,7 @@ instance Show Point where
 
 
 newtype SourceDict = SourceDict {
-    runSourceDict :: Map Text Text
+    runSourceDict :: Map ByteString ByteString
 } deriving (Eq, Ord)
 
 
@@ -91,7 +91,7 @@ instance Show SourceDict where
         m  = runSourceDict x
         ss = Map.toList m
 
-        ps = map (\(k,v) -> (T.unpack k) ++ ":" ++ (T.unpack v)) ss
+        ps = map (\(k,v) -> (S.unpack k) ++ ":" ++ (S.unpack v)) ss
 
 toHex :: ByteString -> String
 toHex x =
@@ -163,17 +163,7 @@ instance Serialize SourceDict where
 --  get :: Get a
     get = do
         m <- get
-        return $ SourceDict (m :: Map Text Text)
-
-
-instance Serialize Text where
---  put :: Text -> Put
-    put t = putByteString $ T.encodeUtf8 t
-
---  get :: Get Text
-    get = do
-        x' <- getByteString 0
-        return $ T.decodeUtf8 x'
+        return $ SourceDict (m :: Map ByteString ByteString)
 
 
 newtype Label = Label ByteString deriving (Eq, Ord, Show)
