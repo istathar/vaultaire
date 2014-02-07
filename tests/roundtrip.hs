@@ -92,7 +92,7 @@ main = do
     putStrLn ""
     putStrLn $ toHex p'
 
-    m <- runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
+    m <- runConnect (Just "vaultaire") (parseConfig "/etc/ceph/ceph.conf") $
         runPool "test1" $ do
             Bucket.appendVaultPoints o' [p]
             Contents.appendVaultSource o' st
