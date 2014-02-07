@@ -13,6 +13,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE PackageImports     #-}
+{-# LANGUAGE RecordWildCards    #-}
 
 module IngestDaemon where
 
@@ -23,6 +24,7 @@ import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad
 import "mtl" Control.Monad.Error ()
+import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
@@ -37,14 +39,14 @@ import Options.Applicative
 import System.IO.Unsafe (unsafePerformIO)
 import System.Rados
 import System.ZMQ4.Monadic hiding (source)
+import Text.Printf
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
-
-type Envelope = ByteString
 
 data Options = Options {
     optGlobalDebug   :: !Bool,
@@ -53,12 +55,32 @@ data Options = Options {
     argPoolName      :: !String
 }
 
+-- This is how the broker will know to route all the way back to the client,
+-- and how the client will know which message we are referencing.
+data Ident = Ident {
+    envelope  :: !ByteString, -- handled for us by the router socket, opaque.
+    mystery   :: !ByteString, -- handled for us by the router socket, opaque.
+    messageID :: !ByteString  -- a uint16_t, but opaque to us.
+}
+
+data Ack = Ack {
+    ident   :: Ident,
+    failure :: !ByteString -- possible failure, empty for success
+}
+
+data Storage = Storage {
+    pendingWrites  :: !(Map Label Builder),
+    pendingSources :: !(Map Origin (Set SourceDict)),
+    pendingAcks    :: ![Ack],
+    pendingCount   :: !Int
+}
 
 data Mutexes = Mutexes {
     inbound     :: !(MVar [ByteString]),
-    acknowledge :: !(Chan [ByteString]),
-    telemetry   :: !(Chan ByteString),
-    storage     :: !(Chan (Origin, UTCTime, Int, Envelope, Set SourceDict, Map Label Builder)),
+    acknowledge :: !(Chan Ack),
+    telemetry   :: !(Chan (String,String)),
+    storage     :: !(MVar Storage),
+    pending     :: !(MVar ()),
     directory   :: !(MVar Directory)
 }
 
@@ -72,7 +94,7 @@ data Mutexes = Mutexes {
 sanityCheck :: [Point] -> Either String [Point]
 sanityCheck ps =
   let
-    o' = origin $ head ps
+    (Origin o') = origin $ head ps
   in
     if S.null o'
         then Left "Empty origin value, discarding burst"
@@ -85,19 +107,20 @@ sanityCheck ps =
 updateContents
     :: Directory
     -> Origin
-    -> Label
     -> Set SourceDict
     -> Pool (Directory)
-updateContents d o' l st  =
+updateContents d o st  =
   let
     known :: Map SourceDict ByteString
-    known = getSourcesMap d o'
+    known = getSourcesMap d o
+
+    l' = Contents.formObjectLabel o
 
     st0 = Map.keysSet known
   in do
     st1 <- if Map.null known
         then do
-            Contents.readVaultObject l
+            Contents.readVaultObject l'
         else do
             return st0
 
@@ -107,59 +130,58 @@ updateContents d o' l st  =
 
     if Set.size new > 0
         then do
-            Contents.appendVaultSource l new
-            return $ insertIntoDirectory d o' new
+            Contents.appendVaultSource l' new
+            return $ insertIntoDirectory d o new
         else
             return d
 
+
+global_lock = S.intercalate "_" [__EPOCH__, "global"]
 
 writer
     :: ByteString
     -> Mutexes
     -> IO ()
-writer pool' u =
+writer pool' Mutexes{..} =
     runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ loop
-  where
-    msgV = inbound u
-    ackC = acknowledge u
-    telC = telemetry u
-    storeC = storage u
-    dV = directory u
+        runPool pool' $ forever $ do
+            -- block until signalled to wake up
+            liftIO $ takeMVar pending
 
-    delimiter' = S.empty
+            t1 <- liftIO $ getCurrentTime
 
-    loop = do
-        (o', t1, num, envelope', st, pm) <- liftIO $ readChan storeC
+            Storage pm sm as n <- liftIO $ takeMVar storage
+            liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
 
-        let l = Contents.formObjectLabel o'
+            output telemetry "writing" (printf "%5d" n)
+--
+-- This is, obviously, a total hack. And horrible. But it is the necessary
+-- guard until we roll out atomic compare and set care of the new operations
+-- API in the next Ceph version.
+--
 
-        withSharedLock (runLabel l) "name" "desc" "tag" (Just 10.0) $ do
-            Bucket.appendVaultPoints pm
+            withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
+                Bucket.appendVaultPoints pm
 
-            unless (Set.null st) $ do
-                d1 <- liftIO $ takeMVar dV
-                d2 <- updateContents d1 o' l st
-                liftIO $ putMVar dV d2
+                unless (Map.null sm) $ do
+                    d1 <- liftIO $ takeMVar directory
+                    let os = Map.toList sm
+                    d2 <- foldM (\d (o',st) -> updateContents d o' st) d1 os
+                    liftIO $ putMVar directory d2
 
 
-        liftIO $ do
-            writeChan ackC [envelope', delimiter', S.empty]
+            liftIO $ mapM_ (writeChan acknowledge) as
 
-            t2 <- getCurrentTime
+            t2 <- liftIO $ getCurrentTime
+
             let delta = diffUTCTime t2 t1
-            sendTelemetries telC delta num
+            let v = printf "%9.3f" ((fromRational $ toRational delta) :: Float)
+            output telemetry "delta" v
 
-        loop
 
-
-    sendTelemetries chan delta num =
-        let telems = [ "delta: " `showTelem` delta
-                     , "points: "   `showTelem` num
-                     ] in mapM_ (writeChan chan) telems
-
-    showTelem prefix = (prefix `S.append`) . S.pack . show
-
+output :: MonadIO ω => Chan (String,String) -> String -> String -> ω ()
+output telemetry k v = liftIO $ do
+    writeChan telemetry (k, v)
 
 parseMessage :: ByteString -> Either String [Point]
 parseMessage message' = do
@@ -237,53 +259,62 @@ processBurst d o' ps = build
       in
         Map.insertWith mappend l encodedB m0
 
-    -- FIXME change seed to shared accumulator
     build :: Map Label Builder
     build = foldl f Map.empty ps
 
 
-{-
-
-            return $ insertIntoContents c o' st2
--}
-
 worker :: Mutexes -> IO ()
-worker u =
-  let
-    msgV = inbound u
-    ackC = acknowledge u
-    storeC = storage u
-    dV = directory u
-  in
+worker Mutexes{..} =
     forever $ do
-        [envelope', delimiter', message'] <- takeMVar msgV
-        t1 <- getCurrentTime
+        [envelope', mystery', msg_id', message'] <- takeMVar inbound
+        let ident = Ident envelope' mystery' msg_id'
 
         case parseMessage message' of
             Left err -> do
-                writeChan ackC [envelope', delimiter', S.pack err]
+                writeChan acknowledge $ Ack ident (S.pack err)
 
             Right ps -> do
                 -- temporary, replace with zmq message part
-                let o' = origin $ head ps
+                let n = length ps
+                output telemetry "received" (printf "%5d" n)
 
-                d1 <- readMVar dV
+                let o = origin $ head ps
 
-                let known = getSourcesMap d1 o'
-                    st = identifyUnknown known ps
-                    d2 = if Set.null st
+                d1 <- readMVar directory
+
+                let known = getSourcesMap d1 o
+                let st = identifyUnknown known ps
+                let d2 = if Set.null st
                             then d1
-                            else insertIntoDirectory d1 o' st
-
-                    pm = processBurst d2 o' ps
-
+                            else insertIntoDirectory d1 o st
 --
--- we do NOT write d2 back to the MVar here. It means duplicate work for it to
+-- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
 -- happen again down in updateContents, but it's the only way to ensure that
--- the data in the Directory is actually on disk.
+-- the data in the Directory is actually on disk)
 --
+                let pm = processBurst d2 o ps
 
-                writeChan storeC (o', t1, length ps, envelope', st, pm)
+                requestWrite storage pm o st (Ack ident S.empty) n
+                void $ tryPutMVar pending ()
+
+
+requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> Int -> IO ()
+requestWrite storage writes o new a n0 = do
+    (Storage pm sm as n) <- takeMVar storage
+
+    let pm2 = Map.foldlWithKey f pm writes
+
+    let sm2 = case Map.lookup o sm of
+                Just st -> Map.insert o (Set.union st new) sm
+                Nothing -> Map.singleton o new
+
+    let n1 = n0 + n
+
+    putMVar storage (Storage pm2 sm2 (a:as) n1)
+
+  where
+    f acc label encodedB = Map.insertWith mappend label encodedB acc
+
 
 
 
@@ -297,39 +328,32 @@ receiver
     -> Mutexes
     -> Bool
     -> IO ()
-receiver broker chan d =
-  let
-    msgV = inbound chan
-    ackC = acknowledge chan
-    telC = telemetry chan
-    storeC = storage chan
-  in
+receiver broker Mutexes{..} d =
     runZMQ $ do
-        work <- socket Pull
-        connect work ("tcp://" ++ broker ++ ":5561")
-
-        ackn <- socket Push
-        connect ackn ("tcp://" ++ broker ++ ":5560")
+        router <- socket Router
+        connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- socket Pub
         bind tele "tcp://*:5570"
 
         a1 <- async $ forever $ do
-            x' <- liftIO $ readChan telC
-            when d $ liftIO $ S.putStrLn x'
-            send tele [] x'
+            (k,v) <- liftIO $ readChan telemetry
+            when d $ liftIO $ putStrLn $ printf "%-10s %-8s" (k ++ ":") v
+            let reply = [S.pack k, S.pack v]
+            sendMulti tele (fromList reply)
 
         linkThread a1
 
         a2 <- async $ forever $ do
-            msg <- receiveMulti work
-            liftIO $ putMVar msgV msg
+            msg <- receiveMulti router
+            liftIO $ putMVar inbound msg
 
         linkThread a2
 
         a3 <- async $ forever $ do
-            as <- liftIO $ readChan ackC
-            sendMulti ackn (fromList as)
+            Ack ident failure <- liftIO $ readChan acknowledge
+            let reply = [ envelope ident, mystery ident, messageID ident, failure ]
+            sendMulti router (fromList reply)
 
         linkThread a3
 
@@ -350,15 +374,18 @@ program (Options d w broker pool) = do
     -- Telemetry streams over this channel
     telC <- newChan
 
-    storeC <- newChan
+    storeV <- newMVar (Storage Map.empty Map.empty [] 0)
 
-    dV <- newMVar nullDirectory
+    pendingV <- newEmptyMVar
+
+    dV <- newMVar Map.empty
 
     let u = Mutexes {
         inbound = msgV,
         acknowledge = ackC,
         telemetry = telC,
-        storage = storeC,
+        storage = storeV,
+        pending = pendingV,
         directory = dV
     }
 

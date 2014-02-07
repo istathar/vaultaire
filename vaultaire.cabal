@@ -32,6 +32,7 @@ executable           ingestd
                      locators,
                      optparse-applicative,
                      async,
+                     blaze-builder,
                      rados-haskell >= 2.0.0
 
   main-is:           ingestd.hs
@@ -66,6 +67,7 @@ executable           vault
                      type-level,
                      protobuf,
                      locators,
+                     blaze-builder,
                      rados-haskell >= 2.0.0
 
   main-is:           vault.hs

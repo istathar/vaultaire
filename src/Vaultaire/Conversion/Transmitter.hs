@@ -113,7 +113,7 @@ createDataFrame p =
 --
 originToField p =
   let
-    o' = Core.origin p
+    (Core.Origin o') = Core.origin p
   in
     if S.null o'
         then mempty

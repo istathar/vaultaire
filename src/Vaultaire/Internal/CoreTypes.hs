@@ -20,15 +20,10 @@ module Vaultaire.Internal.CoreTypes
     Point(..),
     Timestamp,
     SourceDict(..),
-{-
-    getDictionary,
-    getHashBase62,
--}
     Value(..),
     toHex,
-    Origin,
+    Origin(..),
     Directory,
-    nullDirectory,
     getSourcesMap,
     insertIntoDirectory,
     hashSourceDict,
@@ -55,7 +50,7 @@ import Text.Printf
 type Timestamp = Word64
 
 data Point = Point {
-    origin    :: !ByteString,
+    origin    :: !Origin,
     source    :: !SourceDict,
     timestamp :: !Timestamp,
     payload   :: !Value
@@ -109,36 +104,26 @@ toHex x =
 --
 --
 --
-type Origin = ByteString
+newtype Origin = Origin ByteString deriving (Eq, Ord, Show)
 
-newtype Directory = Directory {
-    runDirectory :: Map Origin (Map SourceDict ByteString)
-} deriving (Eq, Show)
-
-nullDirectory :: Directory
-nullDirectory = Directory $ Map.empty
+type Directory = Map Origin (Map SourceDict ByteString)
 
 getSourcesMap :: Directory -> Origin -> Map SourceDict ByteString
-getSourcesMap d o' =
-  let
-    om = runDirectory d
-    sm = Map.findWithDefault Map.empty o' om
-  in
-    sm
+getSourcesMap d o =
+    Map.findWithDefault Map.empty o d
+
 
 insertIntoDirectory :: Directory -> Origin -> Set SourceDict -> Directory
-insertIntoDirectory d o' st =
+insertIntoDirectory d o st =
   let
-    om = runDirectory d
-    sm1 = Map.findWithDefault Map.empty o' om
-
+    known = getSourcesMap d o
 
     f :: Map SourceDict ByteString -> SourceDict -> Map SourceDict ByteString
     f acc s = Map.insert s (hashSourceDict s) acc
 
-    sm2 = Set.foldl f sm1 st
+    sm = Set.foldl f known st
   in
-    Directory (Map.insert o' sm2 om)
+    Map.insert o sm d
 
 
 {-
@@ -191,7 +176,4 @@ instance Serialize Text where
         return $ T.decodeUtf8 x'
 
 
-newtype Label = Label {
-    runLabel :: ByteString
-} deriving (Eq, Ord, Show)
-
+newtype Label = Label ByteString deriving (Eq, Ord, Show)

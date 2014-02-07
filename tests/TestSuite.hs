@@ -116,7 +116,7 @@ testConvertPoint =
             ("metric", "runtime")]
 
     msg = Core.Point {
-        Core.origin = S.empty,
+        Core.origin = Core.Origin S.empty,
         Core.source = s,
         Core.timestamp = 1388482381430911607,
         Core.payload = Core.Measurement 8.461049696649084
@@ -139,7 +139,7 @@ testReadFrame =
             ("metric", "runtime")]
 
     msg = Core.Point {
-        Core.origin = S.empty,
+        Core.origin = Core.Origin S.empty,
         Core.source = s,
         Core.timestamp = 1388482381430911607,
         Core.payload = Core.Measurement 8.461049696649084
@@ -213,11 +213,12 @@ testSerializeVaultPoint =
             ("epoch", "1")]
 
     o' = "FXM47K"
+    o  = Core.Origin o'
 
     t = 1386931666289201468
 
     p1 = Core.Point {
-        Core.origin = o',
+        Core.origin = o,
         Core.source = s,
         Core.timestamp = t,
         Core.payload = Core.Numeric 201468
@@ -240,7 +241,7 @@ testSerializeVaultPoint =
 
                 let cb2 = undefined
 
-                let p2 = convertVaultToPoint o' s pb2
+                let p2 = convertVaultToPoint o s pb2
 
                 pendingWith "Define VaultContents conversion code"
                 assertEqual "Point object converted not equal to original object" p1 p2
@@ -248,7 +249,8 @@ testSerializeVaultPoint =
 
 testFormBucketLabel =
   let
-    o'  = hashStringToLocator16a 6 "arithmetic/127.0.0.1"
+    o' = hashStringToLocator16a 6 "arithmetic/127.0.0.1"
+    o  = Core.Origin o'
 
     s1 = Core.SourceDict $ Map.fromList
            [("hostname", "web01.example.com"),
@@ -258,7 +260,7 @@ testFormBucketLabel =
     t1 = 1387929601271828182        -- 25 Dec + e
 
     p1 = Core.Point {
-        Core.origin = o',
+        Core.origin = o,
         Core.source = s1,
         Core.timestamp = t1,
         Core.payload = Core.Measurement 2.718281    -- e
@@ -272,21 +274,24 @@ testFormBucketLabel =
     t2 = 1387929601314159265        -- 25 Dec + pi
 
     p2 = Core.Point {
-        Core.origin = o',
+        Core.origin = o,
         Core.source = s2,
         Core.timestamp = t2,
         Core.payload = Core.Measurement 3.141592    -- pi
     }
 
+    s1' = Core.hashSourceDict s1
+    s2' = Core.hashSourceDict s2
+
   in do
     it "correctly forms an object label" $ do
-        let l1 = Bucket.formObjectLabel o' s1 t1
+        let (Core.Label l') = Bucket.formObjectLabel o s1' t1
         assertEqual "Incorrect label"
-            (S.pack "01_XK9Y10_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l1
+            (S.pack "01_XK9Y10_5uzXcmefmp7RtQKcPqVLiAQgAUB_1387900000") l'
 
     it "two labels in same mark match" $ do
-        let l1 = Bucket.formObjectLabel o' s1 t1
-        let l2 = Bucket.formObjectLabel o' s2 t2
+        let l1 = Bucket.formObjectLabel o s1' t1
+        let l2 = Bucket.formObjectLabel o s2' t2
         assertEqual "Map should be sorted, time mark div 10^6" l1 l2
 
 

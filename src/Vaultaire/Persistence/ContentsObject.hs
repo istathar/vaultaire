@@ -44,8 +44,11 @@ import qualified Vaultaire.Serialize.DiskFormat as Disk
 -- the object we store it in
 --
 formObjectLabel :: Origin -> Label
-formObjectLabel o' =
-    Label $ S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
+formObjectLabel o =
+    Label l'
+  where
+    l' = S.intercalate "_" [__EPOCH__, o', __CONTENTS__]
+    (Origin o') = o
 
 
 content :: SourceDict -> ByteString
@@ -62,11 +65,10 @@ appendVaultSource :: Label -> Set SourceDict -> Pool ()
 appendVaultSource l st = do
     mapM_ action st
   where
-    l' = runLabel l
-
     action s =
       let
         b' = content s
+        (Label l') = l
       in do
         em <- runObject l' $ append b'
 
@@ -78,8 +80,7 @@ appendVaultSource l st = do
 readVaultObject :: Label -> Pool (Set SourceDict)
 readVaultObject l =
   let
-    l' = runLabel l
-
+    (Label l') = l
   in do
     ey' <- runObject l' readFull
 
@@ -107,7 +108,7 @@ readVaultObject l =
     readSource :: ByteString -> Either String (SourceDict, ByteString)
     readSource x' = do
         ((VaultRecord _ sb), z') <- runGetState get x' 0
-        return (convertToSource sb, z')
+        return (convertVaultToSource sb, z')
 
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultContent

@@ -14,9 +14,9 @@
 {-# LANGUAGE OverloadedStrings  #-}
 
 module Vaultaire.Conversion.Reader (
-    convertToPoint,
+    convertVaultToPoint,
     decodeSingle,
-    convertToSource,
+    convertVaultToSource,
 ) where
 
 import qualified Data.ByteString.Char8 as S
@@ -52,8 +52,8 @@ convertToMapEntry tag =
     (k,v)
 -}
 
-convertToPoint :: Core.Origin -> Core.SourceDict -> Protobuf.VaultPoint -> Core.Point
-convertToPoint o' s pb =
+convertVaultToPoint :: Core.Origin -> Core.SourceDict -> Protobuf.VaultPoint -> Core.Point
+convertVaultToPoint o s pb =
   let
     v = case (getField $ Protobuf.payload pb) of
         Protobuf.EMPTY   -> Core.Empty
@@ -64,7 +64,7 @@ convertToPoint o' s pb =
     (Fixed m) = getField (Protobuf.timestamp pb)
   in
     Core.Point {
-        Core.origin = o',
+        Core.origin = o,
         Core.source = s,
         Core.timestamp = m,
         Core.payload = v
@@ -80,20 +80,20 @@ convertToPoint o' s pb =
 
 
 decodeSingle :: Core.Origin -> Core.SourceDict -> S.ByteString -> Either String Core.Point
-decodeSingle o' s y' =
+decodeSingle o s y' =
   let
     ey = runGet decodeMessage y' :: Either String Protobuf.VaultPoint
   in
     case ey of
         Left err    -> Left err
-        Right y     -> Right $ convertToPoint o' s y
+        Right y     -> Right $ convertVaultToPoint o s y
 
 {-
     Contents
 -}
 
-convertToSource :: Protobuf.VaultContent -> Core.SourceDict
-convertToSource x =
+convertVaultToSource :: Protobuf.VaultContent -> Core.SourceDict
+convertVaultToSource x =
   let
     ss = getField $ Protobuf.source x          :: [Protobuf.SourceTag]
     as = map convertToMapEntry ss              :: [(Text,Text)]

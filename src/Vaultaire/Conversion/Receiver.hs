@@ -54,10 +54,10 @@ convertToPoint x =
     ss = getField $ Protobuf.source x          :: [Protobuf.SourceTag]
     as = map convertToMapEntry ss              :: [(Text,Text)]
     (Fixed m) = getField (Protobuf.timestamp x)
-    o = fromMaybe "" $ getField (Protobuf.origin x)
+    o' = fromMaybe "" $ getField (Protobuf.origin x)
   in
     Core.Point {
-        Core.origin = o,
+        Core.origin = Core.Origin o',
         Core.source = Core.SourceDict $ Map.fromList as,
         Core.timestamp = m,
         Core.payload = v
