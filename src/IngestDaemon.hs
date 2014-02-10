@@ -310,7 +310,10 @@ requestWrite storage writes o new a n0 = do
 
     let n1 = n0 + n
 
-    putMVar storage (Storage pm2 sm2 (a:as) n1)
+    putMVar storage Storage { pendingWrites  = pm2
+                            , pendingSources = sm2
+                            , pendingAcks    = (a:as)
+                            , pendingCount   = n1 }
 
   where
     f acc label encodedB = Map.insertWith mappend label encodedB acc
