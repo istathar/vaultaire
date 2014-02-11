@@ -276,7 +276,7 @@ worker Mutexes{..} =
             Right ps -> do
                 -- temporary, replace with zmq message part
                 let n = length ps
-                output telemetry "received" (printf "%5d" n)
+                output telemetry "worker" (printf "%5d" n)
 
                 let o = origin $ head ps
 
