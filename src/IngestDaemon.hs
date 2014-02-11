@@ -14,6 +14,7 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE PackageImports     #-}
 {-# LANGUAGE RecordWildCards    #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module IngestDaemon where
 
@@ -335,6 +336,7 @@ receiver
 receiver broker Mutexes{..} d =
     runZMQ $ do
         router <- socket Router
+        setReceiveHighWM (restrict 0) router
         connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- socket Pub

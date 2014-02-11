@@ -14,9 +14,9 @@ module Main where
 import GHC.Conc
 import Options.Applicative (execParser)
 
-import System.Posix.Signals
 import Control.Concurrent.MVar
 import IngestDaemon (commandLineParser, program)
+import System.Posix.Signals
 
 main :: IO ()
 main = do
