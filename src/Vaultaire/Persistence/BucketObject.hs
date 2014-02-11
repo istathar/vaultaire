@@ -100,7 +100,7 @@ appendVaultPoints m = do
         (runAsync . runObject l' $ append $ toByteString bB) : as
 
     checkError write_in_flight = do
-        maybe_error <- waitSafe write_in_flight
+        maybe_error <- waitComplete write_in_flight
         case maybe_error of
             Just err    -> liftIO $ throwIO err
             Nothing     -> return ()
