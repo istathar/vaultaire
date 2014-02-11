@@ -358,8 +358,8 @@ receiver broker Mutexes{..} d =
     linkThread a = async a >>= liftIO . Async.link
 
 
-program :: Options -> IO ()
-program (Options d w pool broker) = do
+program :: Options -> MVar () -> IO ()
+program (Options d w pool broker) quit_mvar = do
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
@@ -396,11 +396,12 @@ program (Options d w pool broker) = do
     linkThread $ receiver broker u d
 
     -- Our work here is done
-    goToSleep
+    takeMVar quit_mvar
+
+    -- TODO, graceful shutdown
+    putStrLn "vaultaire stopping"
   where
     linkThread a = Async.async a >>= Async.link
-
-    goToSleep    = threadDelay maxBound >> goToSleep
 
 
 --

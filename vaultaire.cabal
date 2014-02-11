@@ -32,6 +32,7 @@ executable           ingestd
                      locators,
                      optparse-applicative,
                      async,
+                     unix,
                      blaze-builder,
                      rados-haskell >= 2.0.0
 
