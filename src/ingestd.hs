@@ -15,6 +15,7 @@ import GHC.Conc
 import Options.Applicative (execParser)
 
 import Control.Concurrent.MVar
+import Control.Monad (void)
 import IngestDaemon (commandLineParser, program)
 import System.Posix.Signals
 
@@ -27,8 +28,8 @@ main = do
     options <- execParser commandLineParser
     quit_mvar <- newEmptyMVar
 
-    installHandler sigINT (quitHandler quit_mvar) Nothing
-    installHandler sigTERM (quitHandler quit_mvar) Nothing
+    void $ installHandler sigINT (quitHandler quit_mvar) Nothing
+    void $ installHandler sigTERM (quitHandler quit_mvar) Nothing
 
     program options quit_mvar
 
