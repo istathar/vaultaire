@@ -310,7 +310,10 @@ requestWrite storage writes o new a n0 = do
 
     let n1 = n0 + n
 
-    putMVar storage (Storage pm2 sm2 (a:as) n1)
+    putMVar storage Storage { pendingWrites  = pm2
+                            , pendingSources = sm2
+                            , pendingAcks    = (a:as)
+                            , pendingCount   = n1 }
 
   where
     f acc label encodedB = Map.insertWith mappend label encodedB acc
@@ -321,7 +324,8 @@ requestWrite storage writes o new a n0 = do
 
 --
 -- See documentation for System.ZMQ4.Monadic's async; apparently this is
--- arranged such that the runZMQ scope does not end until the child Asyncs do.
+-- arranged such that the runZMQ scope does not end until the child Asyncs do
+-- (via reference counting)
 --
 receiver
     :: String
@@ -336,35 +340,26 @@ receiver broker Mutexes{..} d =
         tele <- socket Pub
         bind tele "tcp://*:5570"
 
-        a1 <- async $ forever $ do
+        linkThread . forever $ do
             (k,v) <- liftIO $ readChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-8s" (k ++ ":") v
             let reply = [S.pack k, S.pack v]
             sendMulti tele (fromList reply)
 
-        linkThread a1
-
-        a2 <- async $ forever $ do
+        linkThread . forever $ do
             msg <- receiveMulti router
             liftIO $ putMVar inbound msg
 
-        linkThread a2
-
-        a3 <- async $ forever $ do
+        linkThread . forever $ do
             Ack ident failure <- liftIO $ readChan acknowledge
             let reply = [ envelope ident, mystery ident, messageID ident, failure ]
             sendMulti router (fromList reply)
-
-        linkThread a3
-
-        return ()
   where
-    linkThread a = liftIO $ Async.link a
-    {-# INLINE linkThread #-}
+    linkThread a = async a >>= liftIO . Async.link
 
 
-program :: Options -> IO ()
-program (Options d w pool broker) = do
+program :: Options -> MVar () -> IO ()
+program (Options d w pool broker) quit_mvar = do
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
@@ -401,12 +396,12 @@ program (Options d w pool broker) = do
     linkThread $ receiver broker u d
 
     -- Our work here is done
-    goToSleep
+    takeMVar quit_mvar
+
+    -- TODO, graceful shutdown
+    putStrLn "vaultaire stopping"
   where
     linkThread a = Async.async a >>= Async.link
-    {-# INLINE linkThread #-}
-
-    goToSleep    = threadDelay maxBound >> goToSleep
 
 
 --

@@ -14,10 +14,22 @@ module Main where
 import GHC.Conc
 import Options.Applicative (execParser)
 
+import System.Posix.Signals
+import Control.Concurrent.MVar
 import IngestDaemon (commandLineParser, program)
 
 main :: IO ()
 main = do
     n <- getNumProcessors
     setNumCapabilities n
-    execParser commandLineParser >>= program
+
+
+    options <- execParser commandLineParser
+    quit_mvar <- newEmptyMVar
+
+    installHandler sigINT (quitHandler quit_mvar) Nothing
+    installHandler sigTERM (quitHandler quit_mvar) Nothing
+
+    program options quit_mvar
+
+  where quitHandler mv = Catch $ putMVar mv ()
