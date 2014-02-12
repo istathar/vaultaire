@@ -32,4 +32,5 @@ main = do
 
     program options quit_mvar
 
-  where quitHandler mv = Catch $ putMVar mv ()
+  where
+    quitHandler mv = Catch $ putMVar mv ()

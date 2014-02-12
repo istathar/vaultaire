@@ -9,10 +9,6 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE OverloadedStrings  #-}
-
 module Main where
 
 import Options.Applicative (execParser)
