@@ -11,11 +11,11 @@
 
 module Main where
 
-import GHC.Conc
-import Options.Applicative (execParser)
 import Control.Concurrent.MVar
 import Control.Monad (void)
+import GHC.Conc
 import IngestDaemon (commandLineParser, program)
+import Options.Applicative (execParser)
 import System.Posix.Signals
 
 main :: IO ()
