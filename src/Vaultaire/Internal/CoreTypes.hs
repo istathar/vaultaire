@@ -27,7 +27,8 @@ module Vaultaire.Internal.CoreTypes
     getSourcesMap,
     insertIntoDirectory,
     hashSourceDict,
-    Label(..)
+    Label(..),
+    Request(..)
 )
 where
 
@@ -167,3 +168,15 @@ instance Serialize SourceDict where
 
 
 newtype Label = Label ByteString deriving (Eq, Ord, Show)
+
+
+--
+--
+--
+data Request = Request {
+    qOrigin :: ByteString,
+    qSource :: SourceDict,
+    qAlpha  :: Timestamp,
+    qOmega  :: Maybe Timestamp
+} deriving (Eq, Show)
+

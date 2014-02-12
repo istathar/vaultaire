@@ -1,5 +1,6 @@
 message RequestMulti {
-        repeated RequestSource  sources = 1;
+        required bytes          unique   = 2;
+        repeated RequestSource  requests = 1;
 }
 
 message RequestSource {
