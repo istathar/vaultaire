@@ -53,7 +53,7 @@ data Options = Options {
     optGlobalDebug    :: !Bool,
     optGlobalWorkers  :: !Int,
     argGlobalPoolName :: !String,
-    argGlobalUserName :: !String,
+    optGlobalUserName :: !String,
     argBrokerHost     :: !String
 }
 
@@ -145,7 +145,7 @@ writer
     -> ByteString
     -> Mutexes
     -> IO ()
-writer pool' user' Mutexes{..} =
+writer pool' user' Mutexes{..} = 
     runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
         runPool pool' $ forever $ do
             -- block until signalled to wake up
@@ -363,7 +363,7 @@ receiver broker Mutexes{..} d =
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d w pool broker user) quit_mvar = do
+program (Options d w pool user broker) quit_mvar = do
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
