@@ -53,6 +53,7 @@ data Options = Options {
     optGlobalDebug    :: !Bool,
     optGlobalWorkers  :: !Int,
     argGlobalPoolName :: !String,
+    argGlobalUserName :: !String,
     argBrokerHost     :: !String
 }
 
@@ -141,10 +142,11 @@ global_lock = S.intercalate "_" [__EPOCH__, "global"]
 
 writer
     :: ByteString
+    -> ByteString
     -> Mutexes
     -> IO ()
-writer pool' Mutexes{..} =
-    runConnect (Just "vaultaire") (parseConfig "/etc/ceph/ceph.conf") $
+writer pool' user' Mutexes{..} =
+    runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
         runPool pool' $ forever $ do
             -- block until signalled to wake up
             liftIO $ takeMVar pending
@@ -361,7 +363,7 @@ receiver broker Mutexes{..} d =
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d w pool broker) quit_mvar = do
+program (Options d w pool broker user) quit_mvar = do
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
@@ -391,7 +393,7 @@ program (Options d w pool broker) quit_mvar = do
         linkThread $ worker u
 
     -- Startup writer thread
-    linkThread $ writer (S.pack pool) u
+    linkThread $ writer (S.pack pool) (S.pack user) u
 
 
     -- Startup communications threads
@@ -430,6 +432,13 @@ toplevel = Options
              value "vaultaire" <>
              showDefault <>
              help "Name of the Ceph pool metrics will be written to")
+    <*> strOption
+            (long "user" <>
+             short 'u' <>
+             metavar "USER" <>
+             value "vaultaire" <>
+             showDefault <>
+             help "Username to use when authenticating to the Ceph cluster")
     <*> argument str
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
