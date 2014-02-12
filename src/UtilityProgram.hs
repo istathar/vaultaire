@@ -43,6 +43,7 @@ import qualified Vaultaire.Persistence.ContentsObject as Contents
 data Options = Options {
     optGlobalQuiet    :: Bool,
     optGlobalPoolName :: String,
+    optGlobalUserName :: String,
     optCommand        :: Command
 }
 
@@ -70,6 +71,13 @@ toplevel = Options
              value "vaultaire" <>
              showDefault <>
              help "Name of the Ceph pool metrics will be written to")
+    <*> strOption
+            (long "user" <>
+             short 'u' <>
+             metavar "USER" <>
+             value "vaultaire" <>
+             showDefault <>
+             help "Username to use when authenticating to the Ceph cluster")
     <*> subparser
             (command "read" readParser <>
              command "contents" contentsParser)
@@ -170,9 +178,10 @@ debug verbose x =
 -- Handle the different modes of operation
 --
 program :: Options -> IO ()
-program (Options verbose pool cmd) =
+program (Options verbose pool user cmd) =
   let
     pool' = S.pack pool
+    user' = S.pack user
   in
     case cmd of
         ReadCommand o0 s0 t0   -> do
@@ -194,7 +203,7 @@ program (Options verbose pool cmd) =
             let s' = hashSourceDict s
             debug verbose $ Bucket.formObjectLabel o s' t
 
-            m <- runConnect (Just "vaultaire") (parseConfig "/etc/ceph/ceph.conf") $
+            m <- runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
                 runPool pool' $ do
                     Bucket.readVaultObject o s t
 
@@ -210,7 +219,7 @@ program (Options verbose pool cmd) =
             o = Origin (S.pack o0)
             l = Contents.formObjectLabel o
           in do
-            e <- runConnect (Just "vaultaire") (parseConfig "/etc/ceph/ceph.conf") $
+            e <- runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
                 runPool pool' $ do
                     Contents.readVaultObject l
 
