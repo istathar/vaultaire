@@ -13,7 +13,6 @@ module Main where
 
 import GHC.Conc
 import Options.Applicative (execParser)
-
 import Control.Concurrent.MVar
 import Control.Monad (void)
 import IngestDaemon (commandLineParser, program)
