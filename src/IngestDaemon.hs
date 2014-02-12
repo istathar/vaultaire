@@ -145,7 +145,7 @@ writer
     -> ByteString
     -> Mutexes
     -> IO ()
-writer pool' user' Mutexes{..} = 
+writer pool' user' Mutexes{..} =
     runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
         runPool pool' $ forever $ do
             -- block until signalled to wake up
