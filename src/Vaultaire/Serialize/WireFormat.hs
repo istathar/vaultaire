@@ -101,7 +101,7 @@ instance Encode RequestSource
 instance Decode RequestSource
 
 data RequestMulti = RequestMulti {
-    multiUniqueField ::   Required D2 (Value ByteString),
+    multiUniqueField   :: Required D2 (Value ByteString),
     multiRequestsField :: Repeated D1 (Message RequestSource)
 } deriving (Generic, Eq, Show)
 

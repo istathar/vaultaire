@@ -342,7 +342,7 @@ receiver broker Mutexes{..} d =
         connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- socket Pub
-        bind tele "tcp://*:5570"
+        bind tele "tcp://*:5569"
 
         linkThread . forever $ do
             (k,v) <- liftIO $ readChan telemetry

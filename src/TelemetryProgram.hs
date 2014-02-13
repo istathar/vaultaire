@@ -51,7 +51,7 @@ program :: Options -> IO ()
 program (Options daemon) = do
     runZMQ $ do
         telem <- socket Sub
-        connect telem  ("tcp://" ++ daemon ++ ":5570")
+        connect telem  ("tcp://" ++ daemon ++ ":5569")
         subscribe telem S.empty
 
         forever $ do
