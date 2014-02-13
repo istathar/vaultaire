@@ -1,4 +1,4 @@
-all: ingestd
+all: ingestd vault telemetry
 
 #
 # The name of the binary(ies) you want to build if `make` is invoked without an
