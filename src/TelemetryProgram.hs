@@ -55,19 +55,20 @@ program (Options daemon) = do
         subscribe telem S.empty
 
         forever $ do
-            [k',v'] <- receiveMulti telem
+            [k',v',u'] <- receiveMulti telem
             let k = S.unpack k'
             let v = S.unpack v'
+            let u = S.unpack u'
 
             t <- liftIO $ getTimestamp
 
-            liftIO $ putStrLn $ printf "%s  %-10s %-8s" t (k ++ ":") v
+            liftIO $ putStrLn $ printf "%s  %-10s %-9s  %s" t (k ++ ":") v u
 
 
 toplevel :: Parser Options
 toplevel = Options
     <$> argument str
-            (metavar "BROKER" <>
+            (metavar "DAEMON" <>
              help "Host name or IP address of ingestd to follow")
 
 
