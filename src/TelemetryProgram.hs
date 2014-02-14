@@ -30,7 +30,8 @@ import Text.Printf
 
 
 data Options = Options {
-    argDaemonHost :: !String
+    argDaemonHost :: !String,
+    argFields     :: !([String])
 }
 
 
@@ -48,11 +49,12 @@ getTimestamp = do
 
 
 program :: Options -> IO ()
-program (Options daemon) = do
+program (Options daemon fields) = do
     runZMQ $ do
         telem <- socket Sub
         connect telem  ("tcp://" ++ daemon ++ ":5570")
-        subscribe telem S.empty
+        forM_ fields (\field -> do
+            subscribe telem (S.pack field))
 
         forever $ do
             [k',v',u'] <- receiveMulti telem
@@ -70,6 +72,10 @@ toplevel = Options
     <$> argument str
             (metavar "DAEMON" <>
              help "Host name or IP address of ingestd to follow")
+    <*> (some (argument str
+            (metavar "FIELDS" <>
+             help "Fields you wish to subscribe to (if unspecified then all fields)"))
+                <|> pure [""])
 
 
 commandLineParser :: ParserInfo Options
