@@ -38,7 +38,7 @@ import Data.Time.Clock
 import GHC.Conc
 import Options.Applicative
 import System.IO.Unsafe (unsafePerformIO)
-import System.Rados
+import System.Rados hiding (async)
 import System.ZMQ4.Monadic hiding (source)
 import Text.Printf
 
