@@ -12,14 +12,15 @@
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
+{-# LANGUAGE BangPatterns      #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
     appendVaultPoints,
     readVaultObject,
-
     -- for testing
+    hashOriginName,
     tidyOriginName
 ) where
 
@@ -139,7 +140,7 @@ readVaultObject o s t =
 --
 
         process :: ByteString -> Map Timestamp Point -> Either String (Map Timestamp Point)
-        process y' m1 =
+        process y' !m1 =
             if S.null y'
                 then return m1
                 else do
