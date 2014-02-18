@@ -11,6 +11,7 @@
 
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS -fno-warn-orphans #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
@@ -92,7 +93,7 @@ readVaultObject l =
   where
 
     process :: ByteString -> Set SourceDict -> Either String (Set SourceDict)
-    process y' e1 =
+    process y' !e1 =
         if S.null y'
             then return e1
             else do
