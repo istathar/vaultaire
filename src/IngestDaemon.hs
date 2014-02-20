@@ -38,8 +38,9 @@ import Data.Time.Clock
 import GHC.Conc
 import Options.Applicative
 import System.IO.Unsafe (unsafePerformIO)
-import System.Rados
-import System.ZMQ4.Monadic hiding (source)
+import System.Rados (Pool)
+import qualified System.Rados as Rados
+import qualified System.ZMQ4.Monadic as Zero
 import Text.Printf
 
 import Vaultaire.Conversion.Receiver
@@ -80,7 +81,7 @@ data Storage = Storage {
 data Mutexes = Mutexes {
     inbound     :: !(MVar [ByteString]),
     acknowledge :: !(Chan Ack),
-    telemetry   :: !(Chan (String,String)),
+    telemetry   :: !(Chan (String,String,String)),
     storage     :: !(MVar Storage),
     pending     :: !(MVar ()),
     directory   :: !(MVar Directory)
@@ -146,8 +147,8 @@ writer
     -> Mutexes
     -> IO ()
 writer pool' user' Mutexes{..} =
-    runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ forever $ do
+    Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
+        Rados.runPool pool' $ forever $ do
             -- block until signalled to wake up
             liftIO $ takeMVar pending
 
@@ -156,14 +157,14 @@ writer pool' user' Mutexes{..} =
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
 
-            output telemetry "writing" (printf "%5d" n)
+            output telemetry "writing" (printf "%5d" n) ""
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
 -- guard until we roll out atomic compare and set care of the new operations
 -- API in the next Ceph version.
 --
 
-            withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
+            Rados.withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
                 Bucket.appendVaultPoints pm
 
                 unless (Map.null sm) $ do
@@ -178,13 +179,19 @@ writer pool' user' Mutexes{..} =
             t2 <- liftIO $ getCurrentTime
 
             let delta = diffUTCTime t2 t1
-            let v = printf "%9.3f" ((fromRational $ toRational delta) :: Float)
-            output telemetry "delta" v
+            let deltaFloat = (fromRational $ toRational delta) :: Float
+            let deltaPadded = printf "%9.3f" deltaFloat
+            output telemetry "delta" deltaPadded "s"
+
+            let countFloat = (fromRational . toRational) n
+            let rateFloat = countFloat / deltaFloat
+            let ratePadded = printf "%7.1f" rateFloat
+            output telemetry "rate" ratePadded "p/s"
 
 
-output :: MonadIO ω => Chan (String,String) -> String -> String -> ω ()
-output telemetry k v = liftIO $ do
-    writeChan telemetry (k, v)
+output :: MonadIO ω => Chan (String,String,String) -> String -> String -> String -> ω ()
+output telemetry k v u = liftIO $ do
+    writeChan telemetry (k, v, u)
 
 parseMessage :: ByteString -> Either String [Point]
 parseMessage message' = do
@@ -279,7 +286,7 @@ worker Mutexes{..} =
             Right ps -> do
                 -- temporary, replace with zmq message part
                 let n = length ps
-                output telemetry "worker" (printf "%5d" n)
+                output telemetry "worker" (printf "%5d" n) ""
 
                 let o = origin $ head ps
 
@@ -336,30 +343,30 @@ receiver
     -> Bool
     -> IO ()
 receiver broker Mutexes{..} d =
-    runZMQ $ do
-        router <- socket Router
-        setReceiveHighWM (restrict 0) router
-        connect router ("tcp://" ++ broker ++ ":5561")
+    Zero.runZMQ $ do
+        router <- Zero.socket Zero.Router
+        Zero.setReceiveHighWM (Zero.restrict 0) router
+        Zero.connect router ("tcp://" ++ broker ++ ":5561")
 
-        tele <- socket Pub
-        bind tele "tcp://*:5569"
-
-        linkThread . forever $ do
-            (k,v) <- liftIO $ readChan telemetry
-            when d $ liftIO $ putStrLn $ printf "%-10s %-8s" (k ++ ":") v
-            let reply = [S.pack k, S.pack v]
-            sendMulti tele (fromList reply)
+        tele <- Zero.socket Zero.Pub
+        Zero.bind tele "tcp://*:5569"
 
         linkThread . forever $ do
-            msg <- receiveMulti router
+            (k,v,u) <- liftIO $ readChan telemetry
+            when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
+            let reply = [S.pack k, S.pack v, S.pack u]
+            Zero.sendMulti tele (fromList reply)
+
+        linkThread . forever $ do
+            msg <- Zero.receiveMulti router
             liftIO $ putMVar inbound msg
 
         linkThread . forever $ do
             Ack ident failure <- liftIO $ readChan acknowledge
             let reply = [ envelope ident, mystery ident, messageID ident, failure ]
-            sendMulti router (fromList reply)
+            Zero.sendMulti router (fromList reply)
   where
-    linkThread a = async a >>= liftIO . Async.link
+    linkThread a = Zero.async a >>= liftIO . Async.link
 
 
 program :: Options -> MVar () -> IO ()
