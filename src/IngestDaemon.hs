@@ -38,8 +38,9 @@ import Data.Time.Clock
 import GHC.Conc
 import Options.Applicative
 import System.IO.Unsafe (unsafePerformIO)
-import System.Rados
-import System.ZMQ4.Monadic hiding (source)
+import System.Rados (Pool)
+import qualified System.Rados as Rados
+import qualified System.ZMQ4.Monadic as Zero
 import Text.Printf
 
 import Vaultaire.Conversion.Receiver
@@ -146,8 +147,8 @@ writer
     -> Mutexes
     -> IO ()
 writer pool' user' Mutexes{..} =
-    runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
-        runPool pool' $ forever $ do
+    Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
+        Rados.runPool pool' $ forever $ do
             -- block until signalled to wake up
             liftIO $ takeMVar pending
 
@@ -163,7 +164,7 @@ writer pool' user' Mutexes{..} =
 -- API in the next Ceph version.
 --
 
-            withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
+            Rados.withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
                 Bucket.appendVaultPoints pm
 
                 unless (Map.null sm) $ do
@@ -342,30 +343,30 @@ receiver
     -> Bool
     -> IO ()
 receiver broker Mutexes{..} d =
-    runZMQ $ do
-        router <- socket Router
-        setReceiveHighWM (restrict 0) router
-        connect router ("tcp://" ++ broker ++ ":5561")
+    Zero.runZMQ $ do
+        router <- Zero.socket Zero.Router
+        Zero.setReceiveHighWM (Zero.restrict 0) router
+        Zero.connect router ("tcp://" ++ broker ++ ":5561")
 
-        tele <- socket Pub
-        bind tele "tcp://*:5570"
+        tele <- Zero.socket Zero.Pub
+        Zero.bind tele "tcp://*:5570"
 
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
             let reply = [S.pack k, S.pack v, S.pack u]
-            sendMulti tele (fromList reply)
+            Zero.sendMulti tele (fromList reply)
 
         linkThread . forever $ do
-            msg <- receiveMulti router
+            msg <- Zero.receiveMulti router
             liftIO $ putMVar inbound msg
 
         linkThread . forever $ do
             Ack ident failure <- liftIO $ readChan acknowledge
             let reply = [ envelope ident, mystery ident, messageID ident, failure ]
-            sendMulti router (fromList reply)
+            Zero.sendMulti router (fromList reply)
   where
-    linkThread a = async a >>= liftIO . Async.link
+    linkThread a = Zero.async a >>= liftIO . Async.link
 
 
 program :: Options -> MVar () -> IO ()
