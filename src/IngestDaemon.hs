@@ -83,9 +83,22 @@ data Mutexes = Mutexes {
     telemetry   :: !(Chan (String,String,String)),
     storage     :: !(MVar Storage),
     pending     :: !(MVar ()),
-    directory   :: !(MVar Directory)
+    directory   :: !(MVar Directory),
+    runMetrics  :: !(MVar (Map String Double))
 }
 
+--
+-- metricAdder returns a function on a map suitable for passing to
+-- modifyMVar_; it adds addend to the value of metric, creating it if it
+-- doesn't exist.
+--
+metricAdder :: String -> Double -> ((Map String Double) -> IO (Map String Double))
+metricAdder metric addend =
+    (\m -> (return (Map.insert metric (maybeAdd (Map.lookup metric m) addend) m)))
+    where
+        maybeAdd :: (Maybe Double) -> Double -> Double
+        maybeAdd Nothing v = v
+        maybeAdd (Just x) v = x + v
 --
 -- This will be refactored since the Origin value will soon be conveyed at
 -- the ØMQ level, rather than the current hack of an environment variable
@@ -156,7 +169,11 @@ writer pool' user' Mutexes{..} =
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
 
+            liftIO $ modifyMVar_ runMetrics (metricAdder "writes" (fromIntegral n))
             output telemetry "writing" (printf "%5d" n) ""
+            metricMap <- liftIO $ (readMVar runMetrics)
+            output telemetry "writes" (printf "%f" (Map.findWithDefault (0.0::Double) ("writes"::String) metricMap)) ""
+
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
 -- guard until we roll out atomic compare and set care of the new operations
@@ -385,13 +402,16 @@ program (Options d w pool user broker) quit_mvar = do
 
     dV <- newMVar Map.empty
 
+    runMetricsV <- newMVar Map.empty
+
     let u = Mutexes {
         inbound = msgV,
         acknowledge = ackC,
         telemetry = telC,
         storage = storeV,
         pending = pendingV,
-        directory = dV
+        directory = dV,
+        runMetrics = runMetricsV
     }
 
     -- Initialize thread pool to requested size
