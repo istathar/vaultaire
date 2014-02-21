@@ -93,13 +93,6 @@ data Metrics = Metrics {
 }
 
 --
--- metricAdder returns a function on a map suitable for passing to
--- modifyMVar_; it adds addend to the value of metric, creating it if it
--- doesn't exist.
---
-metricAdder :: String -> Double -> ((Map String Double) -> IO (Map String Double))
-metricAdder metric addend = return . Map.insertWith (+) metric addend
---
 -- This will be refactored since the Origin value will soon be conveyed at
 -- the ØMQ level, rather than the current hack of an environment variable
 -- passed to libmarquise. But at the moment this is a simple enough check
@@ -168,13 +161,7 @@ writer pool' user' Mutexes{..} =
 
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
-{-
-            liftIO $ modifyMVar_ metrics (metricAdder "writes" (fromIntegral n))
-            output telemetry "writing" (printf "%5d" n) ""
-            metricMap <- liftIO $ (readMVar metrics)
-            let writeCount = Map.findWithDefault (0.0::Double) ("writes"::String) metricMap
-            output telemetry "metric_writes" (printf "%f" writeCount) ""
--}
+
             Metrics{..} <- liftIO $ takeMVar metrics
             liftIO $ putMVar metrics $ Metrics (metricWrites + n)
 
