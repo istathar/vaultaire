@@ -84,7 +84,7 @@ data Mutexes = Mutexes {
     storage     :: !(MVar Storage),
     pending     :: !(MVar ()),
     directory   :: !(MVar Directory),
-    runMetrics  :: !(MVar (Map String Double))
+    runtimeMetrics  :: !(MVar (Map String Double))
 }
 
 --
@@ -164,10 +164,11 @@ writer pool' user' Mutexes{..} =
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
 
-            liftIO $ modifyMVar_ runMetrics (metricAdder "writes" (fromIntegral n))
+            liftIO $ modifyMVar_ runtimeMetrics (metricAdder "writes" (fromIntegral n))
             output telemetry "writing" (printf "%5d" n) ""
-            metricMap <- liftIO $ (readMVar runMetrics)
-            output telemetry "writes" (printf "%f" (Map.findWithDefault (0.0::Double) ("writes"::String) metricMap)) ""
+            metricMap <- liftIO $ (readMVar runtimeMetrics)
+            let writeCount = Map.findWithDefault (0.0::Double) ("writes"::String) metricMap
+            output telemetry "writes" (printf "%f" writeCount) "" 
 
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
@@ -362,6 +363,9 @@ receiver broker Mutexes{..} d =
         tele <- socket Pub
         bind tele "tcp://*:5570"
 
+        metrics <- socket Rep
+        bind metrics "tcp://*:5571"
+
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
@@ -376,6 +380,15 @@ receiver broker Mutexes{..} d =
             Ack ident failure <- liftIO $ readChan acknowledge
             let reply = [ envelope ident, mystery ident, messageID ident, failure ]
             sendMulti router (fromList reply)
+
+        linkThread . forever $ do
+            _ <- receive metrics
+            output telemetry "got connection on mon socket" "" ""
+            metricsMap <- liftIO $ (readMVar runtimeMetrics)
+            let metricsList = Map.toList metricsMap
+            let reply = map (\(k,v) -> S.pack $ printf "%s:%f" (k::String) (v::Double)) metricsList
+            sendMulti metrics (fromList reply)
+            output telemetry "sent" "" ""
   where
     linkThread a = async a >>= liftIO . Async.link
 
@@ -397,7 +410,7 @@ program (Options d w pool user broker) quit_mvar = do
 
     dV <- newMVar Map.empty
 
-    runMetricsV <- newMVar Map.empty
+    runtimeMetricsV <- newMVar Map.empty
 
     let u = Mutexes {
         inbound = msgV,
@@ -406,7 +419,7 @@ program (Options d w pool user broker) quit_mvar = do
         storage = storeV,
         pending = pendingV,
         directory = dV,
-        runMetrics = runMetricsV
+        runtimeMetrics = runtimeMetricsV
     }
 
     -- Initialize thread pool to requested size
