@@ -93,12 +93,7 @@ data Mutexes = Mutexes {
 -- doesn't exist.
 --
 metricAdder :: String -> Double -> ((Map String Double) -> IO (Map String Double))
-metricAdder metric addend =
-    (\m -> (return (Map.insert metric (maybeAdd (Map.lookup metric m) addend) m)))
-    where
-        maybeAdd :: (Maybe Double) -> Double -> Double
-        maybeAdd Nothing v = v
-        maybeAdd (Just x) v = x + v
+metricAdder metric addend = return . Map.insertWith (+) metric addend
 --
 -- This will be refactored since the Origin value will soon be conveyed at
 -- the ØMQ level, rather than the current hack of an environment variable
