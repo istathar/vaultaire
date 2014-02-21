@@ -32,5 +32,6 @@ if __name__ == '__main__':
         frame = dataframe.DataFrame()
         frame.ParseFromString(buf)
         
-        print frame.source, '@', frame.timestamp, '=', frame.value
+	print ",".join(k+'='+v for k,v in frame.sourcedict.items()),
+        print '@', frame.timestamp, '=', frame.value
         print "\n\t"+str(frame).replace('\n','\n\t')
