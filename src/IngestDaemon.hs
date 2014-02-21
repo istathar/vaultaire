@@ -85,7 +85,11 @@ data Mutexes = Mutexes {
     storage     :: !(MVar Storage),
     pending     :: !(MVar ()),
     directory   :: !(MVar Directory),
-    metrics     :: !(MVar (Map String Double))
+    metrics     :: !(MVar Metrics)
+}
+
+data Metrics = Metrics {
+    metricWrites :: Int
 }
 
 --
@@ -164,12 +168,17 @@ writer pool' user' Mutexes{..} =
 
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
-
+{-
             liftIO $ modifyMVar_ metrics (metricAdder "writes" (fromIntegral n))
             output telemetry "writing" (printf "%5d" n) ""
             metricMap <- liftIO $ (readMVar metrics)
             let writeCount = Map.findWithDefault (0.0::Double) ("writes"::String) metricMap
-            output telemetry "writes" (printf "%f" writeCount) ""
+            output telemetry "metric_writes" (printf "%f" writeCount) ""
+-}
+            Metrics{..} <- liftIO $ takeMVar metrics
+            liftIO $ putMVar metrics $ Metrics (metricWrites + n)
+
+            output telemetry "writing" (printf "%5d" n) ""
 
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
@@ -364,8 +373,8 @@ receiver broker Mutexes{..} d =
         tele <- Zero.socket Zero.Pub
         Zero.bind tele "tcp://*:5570"
 
-        metrics <- Zero.socket Zero.Rep
-        Zero.bind metrics "tcp://*:5571"
+        mtri <- Zero.socket Zero.Rep
+        Zero.bind mtri "tcp://*:5571"
 
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
@@ -383,13 +392,12 @@ receiver broker Mutexes{..} d =
             Zero.sendMulti router (fromList reply)
 
         linkThread . forever $ do
-            _ <- Zero.receive metrics
-            output telemetry "got connection on mon socket" "" ""
-            metricsMap <- liftIO $ (readMVar metrics)
-            let metricsList = Map.toList metricsMap
-            let reply = map (\(k,v) -> S.pack $ printf "%s:%f" (k::String) (v::Double)) metricsList
-            Zero.sendMulti metrics (fromList reply)
-            output telemetry "sent" "" ""
+            _ <- Zero.receive mtri
+            Metrics{..} <- liftIO $ (readMVar metrics)
+
+            let reply = [ S.pack ("writes:" ++ show metricWrites)]
+
+            Zero.sendMulti mtri (fromList reply)
   where
     linkThread a = Zero.async a >>= liftIO . Async.link
 
@@ -411,7 +419,7 @@ program (Options d w pool user broker) quit_mvar = do
 
     dV <- newMVar Map.empty
 
-    metricsV <- newMVar Map.empty
+    metricsV <- newMVar (Metrics 0)
 
     let u = Mutexes {
         inbound = msgV,
