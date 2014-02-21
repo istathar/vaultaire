@@ -84,9 +84,17 @@ data Mutexes = Mutexes {
     telemetry   :: !(Chan (String,String,String)),
     storage     :: !(MVar Storage),
     pending     :: !(MVar ()),
-    directory   :: !(MVar Directory)
+    directory   :: !(MVar Directory),
+    metrics     :: !(MVar (Map String Double))
 }
 
+--
+-- metricAdder returns a function on a map suitable for passing to
+-- modifyMVar_; it adds addend to the value of metric, creating it if it
+-- doesn't exist.
+--
+metricAdder :: String -> Double -> ((Map String Double) -> IO (Map String Double))
+metricAdder metric addend = return . Map.insertWith (+) metric addend
 --
 -- This will be refactored since the Origin value will soon be conveyed at
 -- the ØMQ level, rather than the current hack of an environment variable
@@ -157,7 +165,12 @@ writer pool' user' Mutexes{..} =
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
 
+            liftIO $ modifyMVar_ metrics (metricAdder "writes" (fromIntegral n))
             output telemetry "writing" (printf "%5d" n) ""
+            metricMap <- liftIO $ (readMVar metrics)
+            let writeCount = Map.findWithDefault (0.0::Double) ("writes"::String) metricMap
+            output telemetry "writes" (printf "%f" writeCount) ""
+
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
 -- guard until we roll out atomic compare and set care of the new operations
@@ -351,6 +364,9 @@ receiver broker Mutexes{..} d =
         tele <- Zero.socket Zero.Pub
         Zero.bind tele "tcp://*:5570"
 
+        metrics <- Zero.socket Zero.Rep
+        Zero.bind metrics "tcp://*:5571"
+
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
@@ -365,6 +381,15 @@ receiver broker Mutexes{..} d =
             Ack ident failure <- liftIO $ readChan acknowledge
             let reply = [ envelope ident, mystery ident, messageID ident, failure ]
             Zero.sendMulti router (fromList reply)
+
+        linkThread . forever $ do
+            _ <- Zero.receive metrics
+            output telemetry "got connection on mon socket" "" ""
+            metricsMap <- liftIO $ (readMVar metrics)
+            let metricsList = Map.toList metricsMap
+            let reply = map (\(k,v) -> S.pack $ printf "%s:%f" (k::String) (v::Double)) metricsList
+            Zero.sendMulti metrics (fromList reply)
+            output telemetry "sent" "" ""
   where
     linkThread a = Zero.async a >>= liftIO . Async.link
 
@@ -386,13 +411,16 @@ program (Options d w pool user broker) quit_mvar = do
 
     dV <- newMVar Map.empty
 
+    metricsV <- newMVar Map.empty
+
     let u = Mutexes {
         inbound = msgV,
         acknowledge = ackC,
         telemetry = telC,
         storage = storeV,
         pending = pendingV,
-        directory = dV
+        directory = dV,
+        metrics = metricsV
     }
 
     -- Initialize thread pool to requested size

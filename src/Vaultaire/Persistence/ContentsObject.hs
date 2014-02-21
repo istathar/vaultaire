@@ -9,9 +9,9 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS -fno-warn-orphans #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 

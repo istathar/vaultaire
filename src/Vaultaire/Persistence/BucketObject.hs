@@ -9,10 +9,10 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE InstanceSigs      #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
-{-# LANGUAGE BangPatterns      #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
 module Vaultaire.Persistence.BucketObject (
