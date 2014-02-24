@@ -11,10 +11,14 @@
 
 module Main where
 
+import Control.Concurrent.MVar
 import Options.Applicative (execParser)
 
-import ReaderDaemon (commandLineParser, program)
+import ReaderDaemon (readerCommandLineParser, readerProgram)
 
 main :: IO ()
 main = do
-    execParser commandLineParser >>= program
+    quitV <- newEmptyMVar
+    options <- execParser readerCommandLineParser
+
+    readerProgram options quitV

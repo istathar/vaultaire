@@ -13,18 +13,24 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE PackageImports     #-}
+{-# LANGUAGE RecordWildCards    #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 
 module ReaderDaemon
 (
-
+    readerProgram,
+    readerCommandLineParser
 )
 where
 
 import Codec.Compression.LZ4
 import Control.Applicative
-import Control.Monad (forever)
+import qualified Control.Concurrent.Async as Async
+import Control.Concurrent.Chan
+import Control.Concurrent.MVar
+import Control.Monad
 import "mtl" Control.Monad.Error ()
+import Control.Monad.IO.Class (liftIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
@@ -35,10 +41,14 @@ import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
-import Options.Applicative
+import GHC.Conc
+import Options.Applicative hiding (reader)
 import System.Environment (getArgs, getProgName)
-import System.Rados
-import System.ZMQ4.Monadic
+import System.IO.Unsafe (unsafePerformIO)
+import qualified System.Rados as Rados
+import System.ZMQ4.Monadic (Pub, Router)
+import qualified System.ZMQ4.Monadic as Zero
+import Text.Printf
 
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
@@ -46,9 +56,27 @@ import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
-
 data Options = Options {
-    argBrokerHost :: !String
+    optGlobalDebug    :: !Bool,
+    optGlobalWorkers  :: !Int,
+    argGlobalPoolName :: !String,
+    optGlobalUserName :: !String,
+    argBrokerHost     :: !String
+}
+
+data Reply = Reply {
+    envelope   :: !ByteString, -- handled for us by the router socket, opaque.
+    originator :: !ByteString, -- handled for us by the router socket, opaque.
+    messageID  :: !ByteString, -- a uint16_t, but opaque to us.
+    response   :: !ByteString
+}
+
+
+data Mutexes = Mutexes {
+    inbound   :: !(MVar [ByteString]),
+    outbound  :: !(Chan Reply),
+    telemetry :: !(Chan (String,String,String)),
+    directory :: !(MVar Directory)
 }
 
 
@@ -102,72 +130,148 @@ debug :: Show σ => σ -> IO ()
 debug x = putStrLn $ show x
 
 
-main :: IO ()
-main = do
-    args <- getArgs
-
-    let broker = if length args == 1
-                    then head args
-                    else error "Specify broker hostname or IP address on command line"
-
-    let cm = Map.empty
-
-    runZMQ $ do
-        req <- socket Req
-        connect req ("tcp://" ++ broker ++ ":5571")
-
-        tele <- socket Pub
-        bind tele "tcp://*:5579"
-
-        linkThread . forever $ do
-            (k,v) <- liftIO $ readChan telemetry
-            when d $ liftIO $ putStrLn $ printf "%-10s %-8s" (k ++ ":") v
-            let reply = [S.pack k, S.pack v]
-            sendMulti tele (fromList reply)
-
-
+reader
+    :: ByteString
+    -> ByteString
+    -> Mutexes
+    -> IO ()
+reader pool' user' Mutexes{..} =
         forever $ do
-            u' <- receive req
+            [envolope', originator', msg_id', request'] <- takeMVar inbound
             t <- getCurrentTime
 
-            (reply', o', cm1) <- case parseRequestMessage u' of
+            (err', reply') <- case parseRequestMessage request' of
                 Left err -> do
                     -- temporary, replace with telemetry
                     debug err
 
-                    return $ (S.pack err, S.empty, cm)
+                    return $ (S.pack err, S.empty)
                 Right q -> do
                     -- temporary, replace with zmq message part?
                     let o' = qOrigin $ head q
 
-                    ps <- findPoints cm o' q
+                    ps <- findPoints o' q
                     let y' = encodePoints ps
 
                     -- temporary, replace with telemetry
                     debug $ S.length y'
 
-                    return $ (y', o', cm)
+                    return $ (y', o')
+
+            return ()
+
+receiver
+    :: String
+    -> Mutexes
+    -> Bool
+    -> IO ()
+receiver broker Mutexes{..} d =
+    Zero.runZMQ $ do
+        router <- Zero.socket Zero.Router
+        Zero.setReceiveHighWM (Zero.restrict 0) router
+        Zero.connect router ("tcp://" ++ broker ++ ":5561")
+
+        tele <- Zero.socket Zero.Pub
+        Zero.bind tele "tcp://*:5569"
+
+--
+-- telemetry
+--
+
+        linkThread . forever $ do
+            (k,v,u) <- liftIO $ readChan telemetry
+            when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
+            let reply = [S.pack k, S.pack v, S.pack u]
+            Zero.sendMulti tele (fromList reply)
+--
+-- inbound work
+--
+
+        linkThread . forever $ do
+            msg <- Zero.receiveMulti router
+            liftIO $ putMVar inbound msg
+
+--
+-- send responses
+--
+
+        linkThread . forever $ do
+            Reply{..} <- liftIO $ readChan outbound
+            let reply = [envelope, originator, messageID, response]
+            Zero.sendMulti router (fromList reply)
+
+  where
+
+    linkThread a = Zero.async a >>= liftIO . Async.link
 
 
-            send req [] reply'
+readerProgram :: Options -> MVar () -> IO ()
+readerProgram (Options d w pool user broker) quitV = do
+    msgV <- newEmptyMVar
 
-            liftIO $ debugTime t
+    -- Responses from workers
+    outC <- newChan
 
-program :: Options -> IO ()
-program (Options broker) = do
-    runZMQ $ do
-        return ()
+    telC <- newChan
+
+    dV <- newMVar Map.empty
+
+    let u = Mutexes {
+        inbound = msgV,
+        outbound = outC,
+        telemetry = telC,
+        directory = dV
+    }
+
+    -- Startup writer thread
+    linkThread $ reader (S.pack pool) (S.pack user) u
+
+
+    -- Startup communications threads
+    linkThread $ receiver broker u d
+
+    -- Our work here is done
+    takeMVar quitV
+
+  where
+    linkThread a = Async.async a >>= Async.link
 
 
 toplevel :: Parser Options
 toplevel = Options
-    <$> argument str
+    <$> switch
+            (long "debug" <>
+             short 'd' <>
+             help "Write debug telemetry to stdout")
+    <*> option
+            (long "workers" <>
+             short 'w' <>
+             value num <>
+             showDefault <>
+             help "Number of bursts to process simultaneously")
+    <*> strOption
+            (long "pool" <>
+             short 'p' <>
+             metavar "POOL" <>
+             value "vaultaire" <>
+             showDefault <>
+             help "Name of the Ceph pool metrics will be written to")
+    <*> strOption
+            (long "user" <>
+             short 'u' <>
+             metavar "USER" <>
+             value "vaultaire" <>
+             showDefault <>
+             help "Username to use when authenticating to the Ceph cluster")
+    <*> argument str
             (metavar "BROKER" <>
-             help "Host name or IP address of broker to request from")
+             help "Host name or IP address of broker to pull from")
+  where
+    num = unsafePerformIO $ getNumCapabilities
 
 
-commandLineParser :: ParserInfo Options
-commandLineParser = info (helper <*> toplevel)
+readerCommandLineParser :: ParserInfo Options
+readerCommandLineParser = info (helper <*> toplevel)
             (fullDesc <>
                 progDesc "Process to handle requests for data points from the vault" <>
                 header "A data vault for metrics")
