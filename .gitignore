@@ -12,6 +12,7 @@ check
 convert
 snippet
 roundtrip
+bench
 
 # other detruitus
 junk/
