@@ -12,37 +12,40 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS -fno-warn-unused-do-bind #-}
 
-{-
 import Prelude hiding (foldl)
--}
 
 import Criterion.Main
-import GHC.Conc
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Map.Strict as Map
-import Data.Hashable (Hashable)
-{-
 import Data.Foldable
+import Data.Hashable (Hashable)
+import qualified Data.HashMap.Strict as HashMap
+import Data.List (sort)
+import qualified Data.Map.Strict as OrdMap
+import GHC.Conc
 
-benchOrdMap :: (Foldable α, Hashable α, Ord α) => α -> Pure
--}
-benchOrdMap :: (Hashable α, Ord α) => α -> Pure
+
+benchOrdMap :: (Foldable φ, Ord α) => φ α -> Pure
 benchOrdMap as =
-  let
-    m xs = foldl (\x m -> Map.insert x x m) Map.empty xs
-  in
-    whnf m as
+    whnf (g as) OrdMap.empty
+  where
+    f xs i = foldl (\m x -> OrdMap.insert x x m) i xs
+    g xs i = OrdMap.keys $ f xs i
 
-benchHashMap :: (Hashable α, Ord α) => α -> Pure
-benchHashMap _ = undefined
+benchHashMap :: (Foldable φ, Eq α, Ord α, Hashable α) => φ α -> Pure
+benchHashMap as =
+    whnf (g as) HashMap.empty
+  where
+    f xs i = foldl (\m x -> HashMap.insert x x m) i xs
+    g xs i = sort $ HashMap.keys $ f xs i
 
-x = [1..1000] :: [Int]
+
+
+input = [1..1000] :: [Int]
 
 main :: IO ()
 main = do
     setNumCapabilities 4
     defaultMain
-       [bench "Data.Map.Strict" (benchOrdMap x),
-        bench "Data.HashMap.Strict | sort" (benchHashMap x)]
+       [bench "Data.Map.Strict" (benchOrdMap input),
+        bench "Data.HashMap.Strict | sort" (benchHashMap input)]
     putStrLn "Complete."
 
