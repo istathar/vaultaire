@@ -106,10 +106,10 @@ reader pool' user' Mutexes{..} =
                         let t1 = requestAlpha q
                         let t2 = requestOmega q
 
-                        let ts = Bucket.calculateTimeMarks t1 t2
+                        let is = Bucket.calculateTimemarks t1 t2
 
-                        forM_ ts $ \t -> do
-                            m <- Bucket.readVaultObject o s t
+                        forM_ is $ \i -> do
+                            m <- Bucket.readVaultObject o s i
                             let ps = Map.elems m
 
                             let y' = encodePoints ps

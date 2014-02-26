@@ -16,6 +16,7 @@
 
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
+    calculateTimemarks,
     appendVaultPoints,
     readVaultObject,
 
@@ -57,10 +58,45 @@ formObjectLabel :: Origin -> ByteString -> Timestamp -> Label
 formObjectLabel o s' t =
     Label l'
   where
-    l' = S.intercalate "_" [__EPOCH__, o', s', t']
+    l' = S.intercalate "_" [__EPOCH__, o', s', i']
     (Origin o') = o
-    t2 = t `div` (windowSize * nanoseconds)
-    t' = S.pack $ show (t2 * windowSize)
+    i' = S.pack $ show $ floorTimestampToMark t
+
+formObjectLabel2 :: Origin -> ByteString -> Timemark -> Label
+formObjectLabel2 o s' i =
+    Label l'
+  where
+    l' = S.intercalate "_" [__EPOCH__, o', s', i']
+    (Origin o') = o
+    i' = S.pack $ show i
+
+--
+-- Convert a Word64 timestamp in nanoseconds to a number in seconds rounded to
+-- the nearest of our "metric day" windows. Have to use Integral to beat the
+-- Y2038 problem.
+--
+floorTimestampToMark :: Timestamp -> Int
+floorTimestampToMark t =
+  let
+    day = t `div` (windowSize * nanoseconds)
+    sec = day * windowSize
+  in
+    fromIntegral sec
+
+
+calculateTimemarks :: Timestamp -> Timestamp -> [Int]
+calculateTimemarks t1 t2 =
+    -- FIXME just do the math manually in a loop. Using Enum silly
+    enumFromThenTo t1floor (t1floor + __WINDOW_SIZE__) t2ceiling
+  where
+    t1a = if t2 > t1
+            then t1
+            else t2
+    t2a = if t2 > t1
+            then t2
+            else t1
+    t1floor   = floorTimestampToMark t1a
+    t2ceiling = floorTimestampToMark t2a + __WINDOW_SIZE__
 
 
 tidyOriginName :: ByteString -> ByteString
@@ -113,12 +149,12 @@ appendVaultPoints m = do
 readVaultObject
     :: Origin
     -> SourceDict
-    -> Timestamp
+    -> Timemark
     -> Pool (Map Timestamp Point)
-readVaultObject o s t =
+readVaultObject o s i =
     let
         s' = hashSourceDict s           -- FIXME lookup from Directory
-        l  = formObjectLabel o s' t
+        l  = formObjectLabel2 o s' i
         Label l' = l
 
     in do

@@ -19,6 +19,7 @@ module Vaultaire.Internal.CoreTypes
 (
     Point(..),
     Timestamp,
+    Timemark,
     SourceDict(..),
     Value(..),
     toHex,
@@ -49,6 +50,8 @@ import Data.Word (Word64)
 import Text.Printf
 
 type Timestamp = Word64
+
+type Timemark  = Int    -- FIXME not Y2038 safe
 
 data Point = Point {
     origin    :: !Origin,
