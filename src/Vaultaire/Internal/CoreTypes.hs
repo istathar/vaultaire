@@ -177,6 +177,6 @@ data Request = Request {
     requestOrigin :: Origin,
     requestSource :: SourceDict,
     requestAlpha  :: Timestamp,
-    requestOmega  :: Maybe Timestamp
+    requestOmega  :: Timestamp
 } deriving (Eq, Show)
 

@@ -14,7 +14,6 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE PackageImports     #-}
 {-# LANGUAGE RecordWildCards    #-}
-{-# OPTIONS -fno-warn-unused-imports #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
 module ReaderDaemon
@@ -33,25 +32,14 @@ import Control.Monad
 import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
-import Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
-import Data.Maybe (fromJust)
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Time.Clock
-import Data.Time.Clock.POSIX
-import Data.Word
 import GHC.Conc
 import Options.Applicative hiding (reader)
-import System.Environment (getArgs, getProgName)
 import System.IO.Unsafe (unsafePerformIO)
-import System.Rados (Pool)
 import qualified System.Rados as Rados
-import System.ZMQ4.Monadic (Pub, Router)
 import qualified System.ZMQ4.Monadic as Zero
 import Text.Printf
 
@@ -59,8 +47,6 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
-import Vaultaire.Persistence.Constants (nanoseconds)
-import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 data Options = Options {
     optGlobalDebug    :: !Bool,
@@ -115,15 +101,10 @@ reader pool' user' Mutexes{..} =
 
                     forM_ qs $ \q -> do
 
-                        let t1 = requestAlpha q
-
-                        let tNowA = utcTimeToPOSIXSeconds a1 :: NominalDiffTime
-                        let tNowB = (realToFrac $ tNowA) * 1000000000
-                        let tNow  = fromIntegral $ round tNowB:: Word64
-                        let t2 = fromMaybe tNow (requestOmega q)
-
                         let o  = requestOrigin q
                         let s  = requestSource q
+                        let t1 = requestAlpha q
+                        let t2 = requestOmega q
 
                         let ts = Bucket.calculateTimeMarks t1 t2
 

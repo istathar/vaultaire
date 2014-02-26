@@ -93,7 +93,7 @@ instance Decode DataBurst
 data RequestSource = RequestSource {
     requestSourceField :: Repeated D1 (Message SourceTag),
     requestAlphaField  :: Required D2 (Value (Fixed Word64)),
-    requestOmegaField  :: Optional D3 (Value (Fixed Word64))
+    requestOmegaField  :: Required D3 (Value (Fixed Word64))
 } deriving (Generic, Eq, Show)
 
 instance Encode RequestSource

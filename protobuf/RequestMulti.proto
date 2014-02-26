@@ -10,7 +10,7 @@ message RequestSource {
         repeated Tag            source = 1;
 
         required fixed64        alpha = 2;
-        optional fixed64        omega = 3;
+        required fixed64        omega = 3;
 }
 
 // vim: set expandtab tabstop=8:

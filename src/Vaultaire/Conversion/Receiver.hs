@@ -109,9 +109,7 @@ convertToRequest o qb =
     ss = getField $ Protobuf.requestSourceField qb  :: [Protobuf.SourceTag]
     as = map convertToMapEntry ss                   :: [(ByteString,ByteString)]
     t1 = fromIntegral $ getField (Protobuf.requestAlphaField qb)
-    t2 = case getField (Protobuf.requestOmegaField qb) of
-            Just x  -> Just $ fromIntegral x
-            Nothing -> Nothing
+    t2 = fromIntegral $ getField (Protobuf.requestOmegaField qb)
   in
     Core.Request {
         Core.requestOrigin = o,
