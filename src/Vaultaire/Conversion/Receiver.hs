@@ -103,8 +103,8 @@ decodeBurst y' =
     Marshall incoming requests
 -}
 
-convertToRequest :: Protobuf.RequestSource -> Core.Request
-convertToRequest qb =
+convertToRequest :: Core.Origin -> Protobuf.RequestSource -> Core.Request
+convertToRequest o qb =
   let
     ss = getField $ Protobuf.requestSourceField qb  :: [Protobuf.SourceTag]
     as = map convertToMapEntry ss                   :: [(ByteString,ByteString)]
@@ -112,32 +112,31 @@ convertToRequest qb =
     t2 = case getField (Protobuf.requestOmegaField qb) of
             Just x  -> Just $ fromIntegral x
             Nothing -> Nothing
-    o = fromMaybe "" $ getField (Protobuf.requestOriginField qb)
   in
     Core.Request {
-        Core.qOrigin = o,
-        Core.qSource = Core.SourceDict $ Map.fromList as,
-        Core.qAlpha = t1,
-        Core.qOmega = t2
+        Core.requestOrigin = o,
+        Core.requestSource = Core.SourceDict $ Map.fromList as,
+        Core.requestAlpha = t1,
+        Core.requestOmega = t2
     }
 
 
 
-convertToRequests :: Protobuf.RequestMulti -> [Core.Request]
-convertToRequests ub =
+convertToRequests :: Core.Origin -> Protobuf.RequestMulti -> [Core.Request]
+convertToRequests o ub =
   let
     qbs = getField $ Protobuf.multiRequestsField ub
-    qs  = List.map convertToRequest qbs
+    qs  = List.map (convertToRequest o) qbs
   in
     qs
 
-decodeRequestMulti :: ByteString -> Either String [Core.Request]
-decodeRequestMulti u' =
+decodeRequestMulti :: Core.Origin -> ByteString -> Either String [Core.Request]
+decodeRequestMulti o u' =
   let
     eu = runGet decodeMessage u'
   in
     case eu of
         Left err    -> Left err
-        Right ub    -> Right $ convertToRequests ub
+        Right ub    -> Right $ convertToRequests o ub
 
 

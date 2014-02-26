@@ -3,8 +3,6 @@ message RequestMulti {
 }
 
 message RequestSource {
-        required bytes          origin = 8;
-
         message Tag {
                 required string field = 1;
                 required string value = 2;

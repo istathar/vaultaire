@@ -174,9 +174,9 @@ newtype Label = Label ByteString deriving (Eq, Ord, Show)
 --
 --
 data Request = Request {
-    qOrigin :: ByteString,
-    qSource :: SourceDict,
-    qAlpha  :: Timestamp,
-    qOmega  :: Maybe Timestamp
+    requestOrigin :: Origin,
+    requestSource :: SourceDict,
+    requestAlpha  :: Timestamp,
+    requestOmega  :: Maybe Timestamp
 } deriving (Eq, Show)
 

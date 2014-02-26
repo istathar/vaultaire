@@ -91,7 +91,6 @@ instance Decode DataBurst
 --
 
 data RequestSource = RequestSource {
-    requestOriginField :: Optional D8 (Value ByteString),
     requestSourceField :: Repeated D1 (Message SourceTag),
     requestAlphaField  :: Required D2 (Value (Fixed Word64)),
     requestOmegaField  :: Optional D3 (Value (Fixed Word64))

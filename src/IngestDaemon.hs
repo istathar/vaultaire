@@ -370,7 +370,7 @@ receiver broker Mutexes{..} d =
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d w pool user broker) quit_mvar = do
+program (Options d w pool user broker) quitV = do
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
@@ -407,10 +407,8 @@ program (Options d w pool user broker) quit_mvar = do
     linkThread $ receiver broker u d
 
     -- Our work here is done
-    takeMVar quit_mvar
-
-    -- TODO, graceful shutdown
-    putStrLn "vaultaire stopping"
+    takeMVar quitV
+    putStrLn "ingestd stopping"
   where
     linkThread a = Async.async a >>= Async.link
 

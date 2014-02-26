@@ -15,6 +15,7 @@
 {-# LANGUAGE PackageImports     #-}
 {-# LANGUAGE RecordWildCards    #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module ReaderDaemon
 (
@@ -30,7 +31,7 @@ import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad
 import "mtl" Control.Monad.Error ()
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
@@ -45,6 +46,7 @@ import GHC.Conc
 import Options.Applicative hiding (reader)
 import System.Environment (getArgs, getProgName)
 import System.IO.Unsafe (unsafePerformIO)
+import System.Rados (Pool)
 import qualified System.Rados as Rados
 import System.ZMQ4.Monadic (Pub, Router)
 import qualified System.ZMQ4.Monadic as Zero
@@ -65,10 +67,9 @@ data Options = Options {
 }
 
 data Reply = Reply {
-    envelope   :: !ByteString, -- handled for us by the router socket, opaque.
-    originator :: !ByteString, -- handled for us by the router socket, opaque.
-    messageID  :: !ByteString, -- a uint16_t, but opaque to us.
-    response   :: !ByteString
+    envelope'   :: !ByteString, -- handled for us by the ROUTER socket, opaque.
+    originator' :: !ByteString, -- handled for us by the ROUTER socket, opaque.
+    response'   :: !ByteString
 }
 
 
@@ -80,54 +81,21 @@ data Mutexes = Mutexes {
 }
 
 
-findPoints = undefined
-{-
-processBurst :: Map Origin (Set SourceDict) -> Origin -> [Point] -> IO (Set SourceDict)
-processBurst _ _ [] =
-    return Set.empty
-processBurst cm o' ps =
-  let
-    known = Map.findWithDefault Set.empty o' cm
-
-    new :: Set SourceDict
-    new = foldl g Set.empty ps
-
-    g :: Set SourceDict -> Point -> Set SourceDict
-    g st p =
-      let
-        s = source p
-      in
-        if Set.member s known
-            then st
-            else Set.insert s st
-
-  in do
-    runConnect Nothing (parseConfig "/etc/ceph/ceph.conf") $
-        runPool "test1" $ do
-            let l' = Contents.formObjectLabel o'
-            withSharedLock l' "name" "desc" "tag" (Just 10.0) $ do
-
-                -- returns the sources that are "new"
-                Bucket.appendVaultPoints o' ps
-    return new
--}
-
-parseRequestMessage :: ByteString -> Either String [Request]
-parseRequestMessage message' =
-    decodeRequestMulti message'
+-- FIXME time range!
+findPoints :: Request -> Pool [Point]
+findPoints (Request o s t1 _) = do
+    m <- Bucket.readVaultObject o s t1
+    return $ Map.elems m
 
 
+parseRequestMessage :: Origin -> ByteString -> Either String [Request]
+parseRequestMessage o message' =
+    decodeRequestMulti o message'
 
 
-
-debugTime :: UTCTime -> IO ()
-debugTime t1 = do
-    t2 <- getCurrentTime
-    debug $ diffUTCTime t2 t1
-
-
-debug :: Show σ => σ -> IO ()
-debug x = putStrLn $ show x
+output :: MonadIO ω => Chan (String,String,String) -> String -> String -> String -> ω ()
+output telemetry k v u = liftIO $ do
+    writeChan telemetry (k, v, u)
 
 
 reader
@@ -136,29 +104,31 @@ reader
     -> Mutexes
     -> IO ()
 reader pool' user' Mutexes{..} =
-        forever $ do
-            [envolope', originator', msg_id', request'] <- takeMVar inbound
-            t <- getCurrentTime
+    Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
+        Rados.runPool pool' $ forever $ do
 
-            (err', reply') <- case parseRequestMessage request' of
+            [envelope', originator', origin', request'] <- liftIO $ takeMVar inbound
+            t1 <- liftIO $ getCurrentTime
+
+            case parseRequestMessage (Origin origin') request' of
                 Left err -> do
                     -- temporary, replace with telemetry
-                    debug err
+                    output telemetry "error" (show err) ""
+                Right qs -> do
 
-                    return $ (S.pack err, S.empty)
-                Right q -> do
-                    -- temporary, replace with zmq message part?
-                    let o' = qOrigin $ head q
+                    forM_ qs $ \q -> do
+                        ps <- findPoints q
+                        let y' = encodePoints ps
+                        let (Just message') = compress y' -- FIXME
 
-                    ps <- findPoints o' q
-                    let y' = encodePoints ps
+                        t2 <- liftIO $ getCurrentTime
+                        output telemetry "duration" (show $ diffUTCTime t2 t1) "s"
 
-                    -- temporary, replace with telemetry
-                    debug $ S.length y'
+                        liftIO $ writeChan outbound (Reply envelope' originator' message')
 
-                    return $ (y', o')
+            liftIO $ writeChan outbound (Reply envelope' originator' S.empty)
 
-            return ()
+
 
 receiver
     :: String
@@ -197,7 +167,7 @@ receiver broker Mutexes{..} d =
 
         linkThread . forever $ do
             Reply{..} <- liftIO $ readChan outbound
-            let reply = [envelope, originator, messageID, response]
+            let reply = [envelope', originator', response']
             Zero.sendMulti router (fromList reply)
 
   where
@@ -223,14 +193,15 @@ readerProgram (Options d w pool user broker) quitV = do
         directory = dV
     }
 
-    -- Startup writer thread
-    linkThread $ reader (S.pack pool) (S.pack user) u
+    -- Startup reader threads
+    replicateM_ w $
+        linkThread $ reader (S.pack pool) (S.pack user) u
 
 
     -- Startup communications threads
     linkThread $ receiver broker u d
 
-    -- Our work here is done
+    -- Block until end
     takeMVar quitV
 
   where
