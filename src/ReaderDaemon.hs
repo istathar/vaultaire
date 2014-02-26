@@ -38,10 +38,13 @@ import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
+import Data.Time.Clock.POSIX
+import Data.Word
 import GHC.Conc
 import Options.Applicative hiding (reader)
 import System.Environment (getArgs, getProgName)
@@ -56,6 +59,7 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+import Vaultaire.Persistence.Constants (nanoseconds)
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 data Options = Options {
@@ -81,13 +85,6 @@ data Mutexes = Mutexes {
 }
 
 
--- FIXME time range!
-findPoints :: Request -> Pool [Point]
-findPoints (Request o s t1 _) = do
-    m <- Bucket.readVaultObject o s t1
-    return $ Map.elems m
-
-
 parseRequestMessage :: Origin -> ByteString -> Either String [Request]
 parseRequestMessage o message' =
     decodeRequestMulti o message'
@@ -108,7 +105,7 @@ reader pool' user' Mutexes{..} =
         Rados.runPool pool' $ forever $ do
 
             [envelope', client', origin', request'] <- liftIO $ takeMVar inbound
-            t1 <- liftIO $ getCurrentTime
+            a1 <- liftIO $ getCurrentTime
 
             case parseRequestMessage (Origin origin') request' of
                 Left err -> do
@@ -117,17 +114,34 @@ reader pool' user' Mutexes{..} =
                 Right qs -> do
 
                     forM_ qs $ \q -> do
-                        ps <- findPoints q
-                        let y' = encodePoints ps
 
-                        let message' = case compress y' of
+                        let t1 = requestAlpha q
+
+                        let tNowA = utcTimeToPOSIXSeconds a1 :: NominalDiffTime
+                        let tNowB = (realToFrac $ tNowA) * 1000000000
+                        let tNow  = fromIntegral $ round tNowB:: Word64
+                        let t2 = fromMaybe tNow (requestOmega q)
+
+                        let o  = requestOrigin q
+                        let s  = requestSource q
+
+                        let ts = Bucket.calculateTimeMarks t1 t2
+
+                        forM_ ts $ \t -> do
+                            m <- Bucket.readVaultObject o s t
+                            let ps = Map.elems m
+
+                            let y' = encodePoints ps
+
+                            let message' = case compress y' of
                                             Just b' -> b'
                                             Nothing -> S.empty
 
-                        t2 <- liftIO $ getCurrentTime
-                        output telemetry "duration" (show $ diffUTCTime t2 t1) "s"
+                            liftIO $ writeChan outbound (Reply envelope' client' message')
 
-                        liftIO $ writeChan outbound (Reply envelope' client' message')
+                        a2 <- liftIO $ getCurrentTime
+                        output telemetry "duration" (show $ diffUTCTime a2 a1) "s"
+
 
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
