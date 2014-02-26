@@ -140,7 +140,7 @@ receiver broker Mutexes{..} d =
         Zero.connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- Zero.socket Zero.Pub
-        Zero.bind tele "tcp://*:5569"
+        Zero.bind tele "tcp://*:5579"
 
 --
 -- telemetry
