@@ -67,9 +67,9 @@ data Options = Options {
 }
 
 data Reply = Reply {
-    envelope'   :: !ByteString, -- handled for us by the ROUTER socket, opaque.
-    originator' :: !ByteString, -- handled for us by the ROUTER socket, opaque.
-    response'   :: !ByteString
+    envelope :: !ByteString, -- handled for us by the ROUTER socket, opaque.
+    client   :: !ByteString, -- handled for us by the ROUTER socket, opaque.
+    response :: !ByteString
 }
 
 
@@ -107,7 +107,7 @@ reader pool' user' Mutexes{..} =
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool' $ forever $ do
 
-            [envelope', originator', origin', request'] <- liftIO $ takeMVar inbound
+            [envelope', client', origin', request'] <- liftIO $ takeMVar inbound
             t1 <- liftIO $ getCurrentTime
 
             case parseRequestMessage (Origin origin') request' of
@@ -127,9 +127,9 @@ reader pool' user' Mutexes{..} =
                         t2 <- liftIO $ getCurrentTime
                         output telemetry "duration" (show $ diffUTCTime t2 t1) "s"
 
-                        liftIO $ writeChan outbound (Reply envelope' originator' message')
+                        liftIO $ writeChan outbound (Reply envelope' client' message')
 
-            liftIO $ writeChan outbound (Reply envelope' originator' S.empty)
+            liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
 
 
@@ -170,7 +170,7 @@ receiver broker Mutexes{..} d =
 
         linkThread . forever $ do
             Reply{..} <- liftIO $ readChan outbound
-            let reply = [envelope', originator', response']
+            let reply = [envelope, client, response]
             Zero.sendMulti router (fromList reply)
 
   where
