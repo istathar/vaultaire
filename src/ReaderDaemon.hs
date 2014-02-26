@@ -119,7 +119,10 @@ reader pool' user' Mutexes{..} =
                     forM_ qs $ \q -> do
                         ps <- findPoints q
                         let y' = encodePoints ps
-                        let (Just message') = compress y' -- FIXME
+
+                        let message' = case compress y' of
+                                            Just b' -> b'
+                                            Nothing -> S.empty
 
                         t2 <- liftIO $ getCurrentTime
                         output telemetry "duration" (show $ diffUTCTime t2 t1) "s"
