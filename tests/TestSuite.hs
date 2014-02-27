@@ -71,6 +71,7 @@ suite = do
 
     describe "objects in vault" $ do
         testFormBucketLabel
+        testTimemarkRange
 
 
 
@@ -294,4 +295,42 @@ testFormBucketLabel =
         let l2 = Bucket.formObjectLabel o s2' t2
         assertEqual "Map should be sorted, time mark div 10^6" l1 l2
 
+
+
+testTimemarkRange = do
+    it "pick correct single Timemark from two adjacent Timestamps" $ do
+        let t1 = 1387929601271828182                    -- 25 Dec + e
+        let t2 = 1387929601314159265                    -- 25 Dec + pi
+        let expectedA = [1387900000]
+        let resultA = Bucket.calculateTimemarks t1 t2
+        assertEqual "Incorrect range" expectedA resultA
+
+        let t3 = 1234500000000000000
+        let t4 = 1234599999999999999
+        let expectedB = [1234500000]
+        let resultB = Bucket.calculateTimemarks t3 t4
+        assertEqual "Incorrect range" expectedB resultB
+
+    it "pick correct range of Timemarks from two widely spaced Timestamps" $ do
+        let t5 = 1234500000000000000
+        let t6 = 1234600000000000000
+        let expectedC = [1234500000,1234600000]
+
+        let actualC = Bucket.calculateTimemarks t5 t6
+        assertEqual "Incorrect range" expectedC actualC
+
+        let t7 = 1234100000000000001
+        let t8 = 1234900000000000009
+        let expectedD = [1234100000,
+                         1234200000,
+                         1234300000,
+                         1234400000,
+                         1234500000,
+                         1234600000,
+                         1234700000,
+                         1234800000,
+                         1234900000]
+
+        let actualD = Bucket.calculateTimemarks t7 t8
+        assertEqual "Incorrect range" expectedD actualD
 

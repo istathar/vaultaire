@@ -21,6 +21,7 @@ module Vaultaire.Persistence.BucketObject (
     readVaultObject,
 
     -- for testing
+    floorTimestampToMark,
     tidyOriginName
 ) where
 
@@ -96,7 +97,7 @@ calculateTimemarks t1 t2 =
             then t2
             else t1
     t1floor   = floorTimestampToMark t1a
-    t2ceiling = floorTimestampToMark t2a + __WINDOW_SIZE__
+    t2ceiling = floorTimestampToMark t2a
 
 
 tidyOriginName :: ByteString -> ByteString
