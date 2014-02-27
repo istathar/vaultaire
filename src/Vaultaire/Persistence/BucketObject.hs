@@ -17,6 +17,7 @@
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
     calculateTimemarks,
+    pointsInRange,
     appendVaultPoints,
     readVaultObject,
 
@@ -98,6 +99,28 @@ calculateTimemarks t1 t2 =
             else t1
     t1floor   = floorTimestampToMark t1a
     t2ceiling = floorTimestampToMark t2a
+
+
+--
+-- This is a bit pedantic. OrdMap provides a split function, but it doesn't
+-- include the lookup value if it is present. Which is a case we'll hit a lot,
+-- so we use splitLookup instead...  which forces us to deal with it manually.
+-- Oh well.
+--
+pointsInRange :: Timestamp -> Timestamp -> Map Timestamp Point -> [Point]
+pointsInRange t1 t2 m =
+  let
+    (_, a', middle) = Map.splitLookup t1 m
+    (valid, b', _)  = Map.splitLookup t2 middle
+    ps1 = Map.elems valid
+    ps2 = case a' of
+            Just a  -> a:ps1
+            Nothing -> ps1
+    ps3 = case b' of
+            Just b  -> ps2 ++ [b]        -- BAD FIXME BAD!
+            Nothing -> ps2
+  in
+    ps3
 
 
 tidyOriginName :: ByteString -> ByteString

@@ -72,7 +72,7 @@ suite = do
     describe "objects in vault" $ do
         testFormBucketLabel
         testTimemarkRange
-
+        testPointsInRange
 
 
 testSerializeDataFrame =
@@ -334,3 +334,44 @@ testTimemarkRange = do
         let actualD = Bucket.calculateTimemarks t7 t8
         assertEqual "Incorrect range" expectedD actualD
 
+
+testPointsInRange =
+  let
+    o  = Core.Origin "ABCDEF"
+
+    s = Core.SourceDict $ Map.fromList
+           [("hostname", "web01.example.com"),
+            ("metric", "math-constants"),
+            ("datacenter", "lhr1")]
+
+    p0 = Core.Point {
+        Core.origin = o,
+        Core.source = s,
+        Core.timestamp = 0,
+        Core.payload = Core.Empty
+    }
+
+    ts = [1000000000000000000,1000025000000000000..2000000000000000000]
+
+
+    m0 = foldl (\m t -> Map.insert t (p0 { Core.timestamp = t }) m) Map.empty ts
+
+  in do
+    it "retreives expected points from range" $ do
+        let t1 = 1234500000000000000
+        let t2 = 1234600000000000000
+        let expectedMarks = [1234500000,1234600000]
+
+        let actualMarks = Bucket.calculateTimemarks t1 t2
+        assertEqual "Incorrect marks" expectedMarks actualMarks
+
+        let ps = Bucket.pointsInRange t1 t2 m0
+
+        let expectedTimes    = [1234500000000000000,
+                                1234525000000000000,
+                                1234550000000000000,
+                                1234575000000000000,
+                                1234600000000000000]
+        let actualTimes = map (\p -> Core.timestamp p) ps
+
+        assertEqual "Incorrect points" expectedTimes actualTimes

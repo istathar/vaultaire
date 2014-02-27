@@ -110,7 +110,7 @@ reader pool' user' Mutexes{..} =
 
                         forM_ is $ \i -> do
                             m <- Bucket.readVaultObject o s i
-                            let ps = Map.elems m
+                            let ps = Bucket.pointsInRange t1 t2 m
 
                             let y' = encodePoints ps
 
