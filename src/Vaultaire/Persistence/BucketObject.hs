@@ -17,10 +17,13 @@
 
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
+    calculateTimemarks,
+    pointsInRange,
     appendVaultPoints,
     readVaultObject,
 
     -- for testing
+    floorTimestampToMark,
     hashOriginName,
     tidyOriginName
 ) where
@@ -59,10 +62,67 @@ formObjectLabel :: Origin -> ByteString -> Timestamp -> Label
 formObjectLabel o s' t =
     Label l'
   where
-    l' = S.intercalate "_" [__EPOCH__, o', s', t']
+    l' = S.intercalate "_" [__EPOCH__, o', s', i']
     (Origin o') = o
-    t2 = t `div` (windowSize * nanoseconds)
-    t' = S.pack $ show (t2 * windowSize)
+    i' = S.pack $ show $ floorTimestampToMark t
+
+formObjectLabel2 :: Origin -> ByteString -> Timemark -> Label
+formObjectLabel2 o s' i =
+    Label l'
+  where
+    l' = S.intercalate "_" [__EPOCH__, o', s', i']
+    (Origin o') = o
+    i' = S.pack $ show i
+
+--
+-- Convert a Word64 timestamp in nanoseconds to a number in seconds rounded to
+-- the nearest of our "metric day" windows. Have to use Integral to beat the
+-- Y2038 problem.
+--
+floorTimestampToMark :: Timestamp -> Int
+floorTimestampToMark t =
+  let
+    day = t `div` (windowSize * nanoseconds)
+    sec = day * windowSize
+  in
+    fromIntegral sec
+
+
+calculateTimemarks :: Timestamp -> Timestamp -> [Int]
+calculateTimemarks t1 t2 =
+    -- FIXME just do the math manually in a loop. Using Enum silly
+    enumFromThenTo t1floor (t1floor + __WINDOW_SIZE__) t2ceiling
+  where
+    t1a = if t2 > t1
+            then t1
+            else t2
+    t2a = if t2 > t1
+            then t2
+            else t1
+    t1floor   = floorTimestampToMark t1a
+    t2ceiling = floorTimestampToMark t2a
+
+
+--
+-- This is a bit pedantic. OrdMap provides a split function, but it doesn't
+-- include the lookup value if it is present. Which is a case we'll hit a lot,
+-- so we use splitLookup instead...  which forces us to deal with it manually.
+-- Oh well.
+--
+pointsInRange :: Timestamp -> Timestamp -> Map Timestamp Point -> [Point]
+pointsInRange t1 t2 m =
+  let
+    (_, a', middle) = Map.splitLookup t1 m
+    (valid, b', _)  = Map.splitLookup t2 middle
+    ps1 = Map.elems valid
+    ps2 = case a' of
+            Just a  -> a:ps1
+            Nothing -> ps1
+    ps3 = case b' of
+            Just b  -> ps2 ++ [b]        -- BAD FIXME BAD!
+            Nothing -> ps2
+  in
+    ps3
 
 
 tidyOriginName :: ByteString -> ByteString
@@ -115,12 +175,12 @@ appendVaultPoints m = do
 readVaultObject
     :: Origin
     -> SourceDict
-    -> Timestamp
+    -> Timemark
     -> Pool (Map Timestamp Point)
-readVaultObject o s t =
+readVaultObject o s i =
     let
         s' = hashSourceDict s           -- FIXME lookup from Directory
-        l  = formObjectLabel o s' t
+        l  = formObjectLabel2 o s' i
         Label l' = l
 
     in do

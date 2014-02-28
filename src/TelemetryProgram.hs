@@ -52,7 +52,7 @@ program :: Options -> IO ()
 program (Options daemon fields) = do
     runZMQ $ do
         telem <- socket Sub
-        connect telem  ("tcp://" ++ daemon ++ ":5570")
+        connect telem  ("tcp://" ++ daemon ++ ":5569")
         forM_ fields (\field -> do
             subscribe telem (S.pack field))
 

@@ -62,7 +62,7 @@ data Options = Options {
 -- and how the client will know which message we are referencing.
 data Ident = Ident {
     envelope  :: !ByteString, -- handled for us by the router socket, opaque.
-    mystery   :: !ByteString, -- handled for us by the router socket, opaque.
+    client    :: !ByteString, -- handled for us by the router socket, opaque.
     messageID :: !ByteString  -- a uint16_t, but opaque to us.
 }
 
@@ -285,8 +285,8 @@ processBurst d o' ps = build
 worker :: Mutexes -> IO ()
 worker Mutexes{..} =
     forever $ do
-        [envelope', mystery', msg_id', message'] <- takeMVar inbound
-        let ident = Ident envelope' mystery' msg_id'
+        [envelope', client', identifier', message'] <- takeMVar inbound
+        let ident = Ident envelope' client' identifier'
 
         case parseMessage message' of
             Left err -> do
@@ -329,10 +329,7 @@ requestWrite storage writes o new a n0 = do
 
     let n1 = n0 + n
 
-    putMVar storage Storage { pendingWrites  = pm2
-                            , pendingSources = sm2
-                            , pendingAcks    = (a:as)
-                            , pendingCount   = n1 }
+    putMVar storage (Storage pm2 sm2 (a:as) n1)
 
   where
     f acc label encodedB = Map.insertWith mappend label encodedB acc
@@ -358,7 +355,7 @@ receiver broker Mutexes{..} d =
         Zero.connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- Zero.socket Zero.Pub
-        Zero.bind tele "tcp://*:5570"
+        Zero.bind tele "tcp://*:5569"
 
         mtri <- Zero.socket Zero.Rep
         Zero.bind mtri "tcp://*:5571"
@@ -375,7 +372,7 @@ receiver broker Mutexes{..} d =
 
         linkThread . forever $ do
             Ack ident failure <- liftIO $ readChan acknowledge
-            let reply = [ envelope ident, mystery ident, messageID ident, failure ]
+            let reply = [ envelope ident, client ident, messageID ident, failure ]
             Zero.sendMulti router (fromList reply)
 
         linkThread . forever $ do
@@ -390,7 +387,7 @@ receiver broker Mutexes{..} d =
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d w pool user broker) quit_mvar = do
+program (Options d w pool user broker) quitV = do
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
@@ -430,10 +427,8 @@ program (Options d w pool user broker) quit_mvar = do
     linkThread $ receiver broker u d
 
     -- Our work here is done
-    takeMVar quit_mvar
-
-    -- TODO, graceful shutdown
-    putStrLn "vaultaire stopping"
+    takeMVar quitV
+    putStrLn "ingestd stopping"
   where
     linkThread a = Async.async a >>= Async.link
 

@@ -15,7 +15,8 @@
 
 module Vaultaire.Conversion.Receiver (
     convertToPoint,
-    decodeBurst
+    decodeBurst,
+    decodeRequestMulti
 ) where
 
 --
@@ -96,5 +97,44 @@ decodeBurst y' =
     case ey of
         Left err    -> Left err
         Right y     -> Right $ convertToPoints y
+
+
+{-
+    Marshall incoming requests
+-}
+
+convertToRequest :: Core.Origin -> Protobuf.RequestSource -> Core.Request
+convertToRequest o qb =
+  let
+    ss = getField $ Protobuf.requestSourceField qb  :: [Protobuf.SourceTag]
+    as = map convertToMapEntry ss                   :: [(ByteString,ByteString)]
+    t1 = fromIntegral $ getField (Protobuf.requestAlphaField qb)
+    t2 = fromIntegral $ getField (Protobuf.requestOmegaField qb)
+  in
+    Core.Request {
+        Core.requestOrigin = o,
+        Core.requestSource = Core.SourceDict $ Map.fromList as,
+        Core.requestAlpha = t1,
+        Core.requestOmega = t2
+    }
+
+
+
+convertToRequests :: Core.Origin -> Protobuf.RequestMulti -> [Core.Request]
+convertToRequests o ub =
+  let
+    qbs = getField $ Protobuf.multiRequestsField ub
+    qs  = List.map (convertToRequest o) qbs
+  in
+    qs
+
+decodeRequestMulti :: Core.Origin -> ByteString -> Either String [Core.Request]
+decodeRequestMulti o u' =
+  let
+    eu = runGet decodeMessage u'
+  in
+    case eu of
+        Left err    -> Left err
+        Right ub    -> Right $ convertToRequests o ub
 
 

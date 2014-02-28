@@ -17,7 +17,9 @@ module Vaultaire.Serialize.WireFormat
     DataFrame(..),
     SourceTag(..),
     ValueType(..),
-    DataBurst(..)
+    DataBurst(..),
+    RequestSource(..),
+    RequestMulti(..)
 ) where
 
 import Data.ByteString (ByteString)
@@ -83,3 +85,23 @@ data DataBurst = DataBurst {
 instance Encode DataBurst
 instance Decode DataBurst
 
+
+--
+-- Query request
+--
+
+data RequestSource = RequestSource {
+    requestSourceField :: Repeated D1 (Message SourceTag),
+    requestAlphaField  :: Required D2 (Value (Fixed Word64)),
+    requestOmegaField  :: Required D3 (Value (Fixed Word64))
+} deriving (Generic, Eq, Show)
+
+instance Encode RequestSource
+instance Decode RequestSource
+
+data RequestMulti = RequestMulti {
+    multiRequestsField :: Repeated D1 (Message RequestSource)
+} deriving (Generic, Eq, Show)
+
+instance Encode RequestMulti
+instance Decode RequestMulti
