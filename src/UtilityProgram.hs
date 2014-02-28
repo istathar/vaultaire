@@ -202,10 +202,10 @@ program (Options verbose pool user cmd) =
 --
             let s' = hashSourceDict s
             debug verbose $ Bucket.formObjectLabel o s' t
-
+            let i = Bucket.floorTimestampToMark t
             m <- runConnect (Just user') (parseConfig "/etc/ceph/ceph.conf") $
                 runPool pool' $ do
-                    Bucket.readVaultObject o s t
+                    Bucket.readVaultObject o s i
 
 --
 -- Fold over m, print the timestamps + values

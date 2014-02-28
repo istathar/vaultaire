@@ -17,13 +17,13 @@
 
 module Vaultaire.Persistence.BucketObject (
     formObjectLabel,
+    floorTimestampToMark,
     calculateTimemarks,
     pointsInRange,
     appendVaultPoints,
     readVaultObject,
 
     -- for testing
-    floorTimestampToMark,
     hashOriginName,
     tidyOriginName
 ) where
@@ -79,7 +79,7 @@ formObjectLabel2 o s' i =
 -- the nearest of our "metric day" windows. Have to use Integral to beat the
 -- Y2038 problem.
 --
-floorTimestampToMark :: Timestamp -> Int
+floorTimestampToMark :: Timestamp -> Timemark
 floorTimestampToMark t =
   let
     day = t `div` (windowSize * nanoseconds)
@@ -88,7 +88,7 @@ floorTimestampToMark t =
     fromIntegral sec
 
 
-calculateTimemarks :: Timestamp -> Timestamp -> [Int]
+calculateTimemarks :: Timestamp -> Timestamp -> [Timemark]
 calculateTimemarks t1 t2 =
     -- FIXME just do the math manually in a loop. Using Enum silly
     enumFromThenTo t1floor (t1floor + __WINDOW_SIZE__) t2ceiling
