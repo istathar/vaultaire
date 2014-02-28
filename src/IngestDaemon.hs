@@ -9,6 +9,7 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -49,6 +50,8 @@ import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
+
+#include "config.h"
 
 data Options = Options {
     optGlobalDebug    :: !Bool,
@@ -388,6 +391,7 @@ receiver broker Mutexes{..} d =
 
 program :: Options -> MVar () -> IO ()
 program (Options d w pool user broker) quitV = do
+    putStrLn $ "ingestd starting (vaultaire v" ++ VERSION ++ ")"
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
