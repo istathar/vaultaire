@@ -31,4 +31,5 @@ if __name__ == '__main__':
     for buf in FrameReader():
         frame = dataframe.DataFrame()
         frame.ParseFromString(buf)
-        print frame.source,frame.timestamp,frame.value
+	print ",".join(k+'='+v for k,v in frame.sourcedict.items()),
+        print frame.timestamp,frame.value

@@ -26,3 +26,13 @@ def _dataframe_value(frame):
         raise TypeError("Unknown type")
 if 'value' not in DataFrame.__slots__: DataFrame.__slots__.append('value')
 DataFrame.value = property(_dataframe_value)
+
+# Use  dicts in a less painfully than by hand every time
+def _dataframe_sourcedict_set(frame, d):
+	'''extend list of sources from a dict'''
+	for k,v in d.items(): frame.source.add(field=k,value=v)
+def _dataframe_sourcedict_get(frame):
+	'''return sources as a dict'''
+	return dict((t.field,t.value) for t in frame.source)
+if 'sourcedict' not in DataFrame.__slots__: DataFrame.__slots__.append('sourcedict')
+DataFrame.sourcedict = property(_dataframe_sourcedict_get,_dataframe_sourcedict_set)

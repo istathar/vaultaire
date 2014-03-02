@@ -9,6 +9,7 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -50,6 +51,8 @@ import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
+#include "config.h"
+
 data Options = Options {
     optGlobalDebug    :: !Bool,
     optGlobalWorkers  :: !Int,
@@ -62,7 +65,7 @@ data Options = Options {
 -- and how the client will know which message we are referencing.
 data Ident = Ident {
     envelope  :: !ByteString, -- handled for us by the router socket, opaque.
-    mystery   :: !ByteString, -- handled for us by the router socket, opaque.
+    client    :: !ByteString, -- handled for us by the router socket, opaque.
     messageID :: !ByteString  -- a uint16_t, but opaque to us.
 }
 
@@ -108,6 +111,28 @@ sanityCheck ps =
         then Left "Empty origin value, discarding burst"
         else Right ps
 
+loadContents
+    :: Directory
+    -> Origin
+    -> Pool (Directory,Int)
+loadContents d o =
+  let
+    known :: Map SourceDict ByteString
+    known = getSourcesMap d o
+
+    l = Contents.formObjectLabel o
+
+  in do
+    if Map.null known
+        then do
+            st <- Contents.readVaultObject l
+            let d1 = insertIntoDirectory d o st
+            let x  = Set.size st
+            return (d1,x)
+        else do
+            return (d,0)
+
+
 --
 -- This takes *a* contents list, not *the* contents list, in other words
 -- this is just conveying the SourceDicts that are "new".
@@ -116,32 +141,28 @@ updateContents
     :: Directory
     -> Origin
     -> Set SourceDict
-    -> Pool (Directory)
-updateContents d o st  =
+    -> Pool (Directory,Int)
+updateContents d o st =
   let
     known :: Map SourceDict ByteString
     known = getSourcesMap d o
 
-    l' = Contents.formObjectLabel o
+    l = Contents.formObjectLabel o
 
-    st0 = Map.keysSet known
-  in do
-    st1 <- if Map.null known
-        then do
-            Contents.readVaultObject l'
-        else do
-            return st0
+    st1 = Map.keysSet known
 
-    let new = Set.foldl (\acc s -> if Set.member s st1
+    new = Set.foldl (\acc s -> if Set.member s st1
                                         then acc
                                         else Set.insert s acc) Set.empty st
-
-    if Set.size new > 0
+    x = Set.size new
+  in do
+    if x > 0
         then do
-            Contents.appendVaultSource l' new
-            return $ insertIntoDirectory d o new
+            Contents.appendVaultSource l new
+            let d1 = insertIntoDirectory d o new
+            return (d1,x)
         else
-            return d
+            return (d,x)
 
 
 global_lock = S.intercalate "_" [__EPOCH__, "global"]
@@ -179,8 +200,20 @@ writer pool' user' Mutexes{..} =
                 unless (Map.null sm) $ do
                     d1 <- liftIO $ takeMVar directory
                     let os = Map.toList sm
-                    d2 <- foldM (\d (o',st) -> updateContents d o' st) d1 os
-                    liftIO $ putMVar directory d2
+
+                    d2 <- foldM (\d (o,_) -> do
+                            (d',x) <- loadContents d o
+                            if x > 0 then output telemetry "loaded" (printf "%5d" x) "sources" else return ()
+                            return d'
+                        ) d1 os
+
+                    d3 <- foldM (\d (o,st) -> do
+                            (d',x) <- updateContents d o st
+                            if x > 0 then output telemetry "saved" (printf "%5d" x) "sources" else return ()
+                            return d'
+                        ) d2 os
+
+                    liftIO $ putMVar directory d3
 
 
             liftIO $ mapM_ (writeChan acknowledge) as
@@ -285,8 +318,8 @@ processBurst d o' ps = build
 worker :: Mutexes -> IO ()
 worker Mutexes{..} =
     forever $ do
-        [envelope', mystery', msg_id', message'] <- takeMVar inbound
-        let ident = Ident envelope' mystery' msg_id'
+        [envelope', client', identifier', message'] <- takeMVar inbound
+        let ident = Ident envelope' client' identifier'
 
         case parseMessage message' of
             Left err -> do
@@ -329,10 +362,7 @@ requestWrite storage writes o new a n0 = do
 
     let n1 = n0 + n
 
-    putMVar storage Storage { pendingWrites  = pm2
-                            , pendingSources = sm2
-                            , pendingAcks    = (a:as)
-                            , pendingCount   = n1 }
+    putMVar storage (Storage pm2 sm2 (a:as) n1)
 
   where
     f acc label encodedB = Map.insertWith mappend label encodedB acc
@@ -358,7 +388,7 @@ receiver broker Mutexes{..} d =
         Zero.connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- Zero.socket Zero.Pub
-        Zero.bind tele "tcp://*:5570"
+        Zero.bind tele "tcp://*:5569"
 
         mtri <- Zero.socket Zero.Rep
         Zero.bind mtri "tcp://*:5571"
@@ -375,7 +405,7 @@ receiver broker Mutexes{..} d =
 
         linkThread . forever $ do
             Ack ident failure <- liftIO $ readChan acknowledge
-            let reply = [ envelope ident, mystery ident, messageID ident, failure ]
+            let reply = [ envelope ident, client ident, messageID ident, failure ]
             Zero.sendMulti router (fromList reply)
 
         linkThread . forever $ do
@@ -390,7 +420,8 @@ receiver broker Mutexes{..} d =
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d w pool user broker) quit_mvar = do
+program (Options d w pool user broker) quitV = do
+    putStrLn $ "ingestd starting (vaultaire v" ++ VERSION ++ ")"
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
 
@@ -430,10 +461,8 @@ program (Options d w pool user broker) quit_mvar = do
     linkThread $ receiver broker u d
 
     -- Our work here is done
-    takeMVar quit_mvar
-
-    -- TODO, graceful shutdown
-    putStrLn "vaultaire stopping"
+    takeMVar quitV
+    putStrLn "ingestd stopping"
   where
     linkThread a = Async.async a >>= Async.link
 

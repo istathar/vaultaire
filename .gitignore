@@ -1,17 +1,22 @@
 tags
 config.h
-ingestd
-vault
-telemetry
 dist/
 *.prof
 *.mem
+*.hp
+
+# real binaries
+ingestd
+readerd
+telemetry
+vault
 
 # test binaries
 check
 convert
 snippet
 roundtrip
+bench
 
 # other detruitus
 junk/

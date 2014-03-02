@@ -1,16 +1,16 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             0.2.1
+version:             0.2.2
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Andrew Cowie <andrew@operationaldynamics.com>
 maintainer:          Andrew Cowie <andrew@operationaldynamics.com>
-copyright:           © 2013 Anchor Systems, Pty Ltd and Others
+copyright:           © 2013-2014 Anchor Systems, Pty Ltd and Others
 category:            Other
 tested-with:         GHC == 7.6
 stability:           experimental
 
-build-type:          Simple
+build-type:          Custom
 
 executable           ingestd
   default-language:  Haskell2010
