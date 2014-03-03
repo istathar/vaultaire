@@ -137,7 +137,7 @@ receiver broker Mutexes{..} d =
     Zero.runZMQ $ do
         router <- Zero.socket Zero.Router
         Zero.setReceiveHighWM (Zero.restrict 0) router
-        Zero.connect router ("tcp://" ++ broker ++ ":5561")
+        Zero.connect router ("tcp://" ++ broker ++ ":5571")
 
         tele <- Zero.socket Zero.Pub
         Zero.bind tele "tcp://*:5579"
