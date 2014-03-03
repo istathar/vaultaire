@@ -178,19 +178,20 @@ readVaultObject
     -> Timemark
     -> Pool (Map Timestamp Point)
 readVaultObject o s i =
-    let
-        s' = hashSourceDict s           -- FIXME lookup from Directory
-        l  = formObjectLabel2 o s' i
-        Label l' = l
+  let
+    s' = hashSourceDict s           -- FIXME lookup from Directory
+    l  = formObjectLabel2 o s' i
+    Label l' = l
 
-    in do
-        ey' <- runObject l' readFull    -- Pool (Either RadosError ByteString)
+  in do
+    ey' <- runObject l' readFull    -- Pool (Either RadosError ByteString)
 
-        case ey' of
-            Left err        -> liftIO $ throwIO err
-            Right y'        -> either error return $ process y' Map.empty
+    case ey' of
+        Left (NoEntity _ _ _)   -> return Map.empty
+        Left err                -> liftIO $ throwIO err
+        Right y'                -> either error return $ process y' Map.empty
 
-    where
+  where
 
 --
 -- First write wins. This is a crucial design property; we DO expect duplicate
