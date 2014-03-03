@@ -9,6 +9,7 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -50,6 +51,8 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+
+#include "config.h"
 
 data Options = Options {
     optGlobalDebug    :: !Bool,
@@ -98,9 +101,9 @@ reader pool' user' Mutexes{..} =
 
             case parseRequestMessage (Origin origin') request' of
                 Left err -> do
-                    -- temporary, replace with telemetry
                     output telemetry "error" (show err) ""
                 Right qs -> do
+                    output telemetry "request" (printf "%5d" (length qs)) "ranges"
 
                     forM_ qs $ \q -> do
 
@@ -124,7 +127,10 @@ reader pool' user' Mutexes{..} =
                             liftIO $ writeChan outbound (Reply envelope' client' message')
 
                         a2 <- liftIO $ getCurrentTime
-                        output telemetry "duration" (show $ diffUTCTime a2 a1) "s"
+                        let delta = diffUTCTime a2 a1
+                        let deltaFloat = (fromRational $ toRational delta) :: Float
+                        let deltaPadded = printf "%9.3f" deltaFloat
+                        output telemetry "duration" deltaPadded "s"
 
 
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
@@ -184,6 +190,8 @@ receiver broker Mutexes{..} d = do
 
 readerProgram :: Options -> MVar () -> IO ()
 readerProgram (Options d w pool user broker) quitV = do
+    putStrLn $ "readerd starting (vaultaire v" ++ VERSION ++ ")"
+
     msgV <- newEmptyMVar
 
     -- Responses from workers
