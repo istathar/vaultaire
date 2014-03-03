@@ -54,7 +54,8 @@ data Command =
         argReadTimestamp :: String
     } |
     ContentsCommand {
-        argContentsOrigin :: String
+        argContentsOrigin :: String,
+        optContentsRaw    :: Bool
     }
 
 
@@ -109,8 +110,10 @@ contentsOptions =
     ContentsCommand
     <$> argument str
             (metavar "ORIGIN")
-
-
+    <*> switch (
+            long "raw" <>
+            short 'r' <>
+            help "Output raw protobufs")
 
 commandLineParser :: ParserInfo Options
 commandLineParser = info (helper <*> toplevel)
@@ -158,11 +161,16 @@ displayPoint p =
   in do
     putStrLn $ t ++ " " ++ v
 
-
 displaySource :: SourceDict -> IO ()
-displaySource s = do
-    putStrLn $ show s
+displaySource s = 
+    do putStrLn $ show s
 
+displaySourceBurst :: [SourceDict] -> IO ()
+displaySourceBurst sources = do
+    let sources' = map createSourceResponse sources
+    let burst = createSourceResponseBurst sources'
+    let out = encodeSourceResponseBurst burst
+    S.putStr out
 
 debug :: Show s => Bool -> s -> IO ()
 debug verbose x =
@@ -214,7 +222,7 @@ program (Options verbose pool user cmd) =
             traverse_ displayPoint m
 
 
-        ContentsCommand o0   ->
+        ContentsCommand o0 rawO   ->
           let
             o = Origin (S.pack o0)
             l = Contents.formObjectLabel o
@@ -223,6 +231,10 @@ program (Options verbose pool user cmd) =
                 runPool pool' $ do
                     Contents.readVaultObject l
 
-            traverse_ displaySource e
+            if rawO 
+              then
+                displaySourceBurst (toList e)
+              else
+                traverse_ displaySource e 
 
 
