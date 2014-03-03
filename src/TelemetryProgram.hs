@@ -49,29 +49,31 @@ getTimestamp = do
 
 
 program :: Options -> IO ()
-program (Options daemon fields) = do
+program (Options broker fields) = do
     runZMQ $ do
         telem <- socket Sub
-        connect telem  ("tcp://" ++ daemon ++ ":5569")
+        connect telem  ("tcp://" ++ broker ++ ":5580")
         forM_ fields (\field -> do
             subscribe telem (S.pack field))
 
         forever $ do
-            [k',v',u'] <- receiveMulti telem
+            [i', h', k',v',u'] <- receiveMulti telem
+            let i = S.unpack i'
+            let h = S.unpack h'
             let k = S.unpack k'
             let v = S.unpack v'
             let u = S.unpack u'
 
             t <- liftIO $ getTimestamp
 
-            liftIO $ putStrLn $ printf "%s  %-10s %-9s  %s" t (k ++ ":") v u
+            liftIO $ putStrLn $ printf "%s  %-15s %-12s %-10s %-9s  %s" t i h (k ++ ":") v u
 
 
 toplevel :: Parser Options
 toplevel = Options
     <$> argument str
-            (metavar "DAEMON" <>
-             help "Host name or IP address of ingestd to follow")
+            (metavar "BROKER" <>
+             help "Host name or IP address of broker to read cluster telemetry from")
     <*> (some (argument str
             (metavar "FIELDS" <>
              help "Fields you wish to subscribe to (if unspecified then all fields)"))
@@ -81,5 +83,5 @@ toplevel = Options
 commandLineParser :: ParserInfo Options
 commandLineParser = info (helper <*> toplevel)
             (fullDesc <>
-                progDesc "Simple utility to read telemetry from an ingestd" <>
+                progDesc "Simple utility to read telemetry from a vaultaire cluster" <>
                 header "A data vault for metrics")

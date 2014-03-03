@@ -37,8 +37,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock
 import GHC.Conc
+import Network.BSD (getHostName)
 import Options.Applicative
+import System.Environment (getProgName)
 import System.IO.Unsafe (unsafePerformIO)
+import System.Posix.Process (getProcessID)
 import System.Rados (Pool)
 import qualified System.Rados as Rados
 import qualified System.ZMQ4.Monadic as Zero
@@ -381,14 +384,20 @@ receiver
     -> Mutexes
     -> Bool
     -> IO ()
-receiver broker Mutexes{..} d =
+receiver broker Mutexes{..} d = do
+    host <- getHostName
+    name <- getProgName
+    pid  <- getProcessID
+    let identifier' = S.pack (name ++ "/" ++ (show pid))
+    let hostname'   = S.pack host
+
     Zero.runZMQ $ do
         router <- Zero.socket Zero.Router
         Zero.setReceiveHighWM (Zero.restrict 0) router
         Zero.connect router ("tcp://" ++ broker ++ ":5561")
 
         tele <- Zero.socket Zero.Pub
-        Zero.bind tele "tcp://*:5569"
+        Zero.connect tele ("tcp://" ++ broker ++ ":5581")
 
         mtri <- Zero.socket Zero.Rep
         Zero.bind mtri "tcp://*:5571"
@@ -396,7 +405,7 @@ receiver broker Mutexes{..} d =
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
-            let reply = [S.pack k, S.pack v, S.pack u]
+            let reply = [identifier', hostname', S.pack k, S.pack v, S.pack u]
             Zero.sendMulti tele (fromList reply)
 
         linkThread . forever $ do
