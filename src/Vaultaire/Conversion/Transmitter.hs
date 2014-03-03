@@ -131,7 +131,7 @@ createSourceTag k v =
     }
 
 createSourceResponse :: Core.SourceDict -> Protobuf.DataSourceResponse
-createSourceResponse dict = 
+createSourceResponse dict =
   let
     m = Core.runSourceDict dict
     tags = Map.elems (Map.mapWithKey createSourceTag m)
@@ -148,7 +148,7 @@ createSourceResponseBurst sources =
     }
 
 encodeSourceResponseBurst :: Protobuf.DataSourceResponseBurst -> S.ByteString
-encodeSourceResponseBurst burst = 
+encodeSourceResponseBurst burst =
     runPut $ encodeMessage burst
 
 

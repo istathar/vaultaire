@@ -126,4 +126,4 @@ data DataSourceResponseBurst = DataSourceResponseBurst {
 
 instance Encode DataSourceResponseBurst
 instance Decode DataSourceResponseBurst
-    
+

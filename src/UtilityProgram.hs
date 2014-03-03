@@ -162,7 +162,7 @@ displayPoint p =
     putStrLn $ t ++ " " ++ v
 
 displaySource :: SourceDict -> IO ()
-displaySource s = 
+displaySource s =
     do putStrLn $ show s
 
 displaySourceBurst :: [SourceDict] -> IO ()
@@ -231,10 +231,10 @@ program (Options verbose pool user cmd) =
                 runPool pool' $ do
                     Contents.readVaultObject l
 
-            if rawO 
+            if rawO
               then
                 displaySourceBurst (toList e)
               else
-                traverse_ displaySource e 
+                traverse_ displaySource e
 
 
