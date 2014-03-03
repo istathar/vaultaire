@@ -19,7 +19,9 @@ module Vaultaire.Serialize.WireFormat
     ValueType(..),
     DataBurst(..),
     RequestSource(..),
-    RequestMulti(..)
+    RequestMulti(..),
+    DataSourceResponse(..),
+    DataSourceResponseBurst(..)
 ) where
 
 import Data.ByteString (ByteString)
@@ -105,3 +107,23 @@ data RequestMulti = RequestMulti {
 
 instance Encode RequestMulti
 instance Decode RequestMulti
+
+--
+-- Contents response to chevalier
+--
+
+data DataSourceResponse = DataSourceResponse {
+    responseSourceField :: Repeated D1 (Message SourceTag)
+} deriving (Generic, Eq, Show)
+
+instance Encode DataSourceResponse
+instance Decode DataSourceResponse
+
+data DataSourceResponseBurst = DataSourceResponseBurst {
+    responseSourcesField :: Repeated D1 (Message DataSourceResponse),
+    responseErrorField   :: Optional D2 (Value (String))
+} deriving (Generic, Eq, Show)
+
+instance Encode DataSourceResponseBurst
+instance Decode DataSourceResponseBurst
+    
