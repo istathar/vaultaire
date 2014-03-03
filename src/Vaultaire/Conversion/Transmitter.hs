@@ -15,6 +15,9 @@
 
 module Vaultaire.Conversion.Transmitter (
     createDataFrame,
+    createSourceResponse,
+    createSourceResponseBurst,
+    encodeSourceResponseBurst,
     encodePoints
 ) where
 
@@ -126,6 +129,27 @@ createSourceTag k v =
         Protobuf.field = putField k,
         Protobuf.value = putField v
     }
+
+createSourceResponse :: Core.SourceDict -> Protobuf.DataSourceResponse
+createSourceResponse dict =
+  let
+    m = Core.runSourceDict dict
+    tags = Map.elems (Map.mapWithKey createSourceTag m)
+  in
+    Protobuf.DataSourceResponse {
+        Protobuf.responseSourceField = putField tags
+    }
+
+createSourceResponseBurst :: [Protobuf.DataSourceResponse] -> Protobuf.DataSourceResponseBurst
+createSourceResponseBurst sources =
+    Protobuf.DataSourceResponseBurst {
+        Protobuf.responseSourcesField = putField sources,
+        Protobuf.responseErrorField = putField Nothing
+    }
+
+encodeSourceResponseBurst :: Protobuf.DataSourceResponseBurst -> S.ByteString
+encodeSourceResponseBurst burst =
+    runPut $ encodeMessage burst
 
 
 {-
