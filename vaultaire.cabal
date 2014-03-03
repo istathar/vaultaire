@@ -34,7 +34,8 @@ executable           ingestd
                      async,
                      unix,
                      blaze-builder,
-                     rados-haskell >= 2.0.0
+                     rados-haskell >= 2.0.0,
+                     network
 
   main-is:           ingestd.hs
   hs-source-dirs:    src
