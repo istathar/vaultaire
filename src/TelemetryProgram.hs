@@ -57,16 +57,12 @@ program (Options broker fields) = do
             subscribe telem (S.pack field))
 
         forever $ do
-            [i', h', k',v',u'] <- receiveMulti telem
-            let i = S.unpack i'
-            let h = S.unpack h'
-            let k = S.unpack k'
-            let v = S.unpack v'
-            let u = S.unpack u'
+            msg <- receiveMulti telem
+            let [i, h, k, v, u] = map S.unpack msg
 
             t <- liftIO $ getTimestamp
 
-            liftIO $ putStrLn $ printf "%s  %-15s %-12s %-10s %-9s  %s" t i h (k ++ ":") v u
+            liftIO $ putStrLn $ printf "%s  %-15s %-15s %-10s %-9s  %s" t i h (k ++ ":") v u
 
 
 toplevel :: Parser Options
