@@ -116,15 +116,17 @@ reader pool' user' Mutexes{..} =
 
                         forM_ is $ \i -> do
                             m <- Bucket.readVaultObject o s i
-                            let ps = Bucket.pointsInRange t1 t2 m
 
-                            let y' = encodePoints ps
+                            unless (Map.null m) $ do
+                                let ps = Bucket.pointsInRange t1 t2 m
 
-                            let message' = case compress y' of
-                                            Just b' -> b'
-                                            Nothing -> S.empty
+                                let y' = encodePoints ps
 
-                            liftIO $ writeChan outbound (Reply envelope' client' message')
+                                let message' = case compress y' of
+                                                Just b' -> b'
+                                                Nothing -> S.empty
+
+                                liftIO $ writeChan outbound (Reply envelope' client' message')
 
                         a2 <- liftIO $ getCurrentTime
                         let delta = diffUTCTime a2 a1
