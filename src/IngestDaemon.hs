@@ -425,11 +425,9 @@ receiver broker Mutexes{..} d = do
 
         forever $ do
             _ <- Zero.receive mtri
-            Metrics{..} <- liftIO $ (readMVar metrics)
+            Metrics{..} <- liftIO $ readMVar metrics
 
-            let reply = [ S.pack ("writes:" ++ show metricWrites)]
-
-            Zero.sendMulti mtri (fromList reply)
+            Zero.send mtri [] $ S.pack ("writes:" ++ show metricWrites)
   where
     linkThread a = Async.async a >>= Async.link
 
