@@ -36,14 +36,14 @@ data Options = Options {
 
 
 formatTimestamp :: UTCTime -> String
-formatTimestamp x = formatTime defaultTimeLocale "%a %e %b %y, %H:%M:%S.%q" x
+formatTimestamp x = formatTime defaultTimeLocale "%H:%M:%S.%q" x
 
 
 getTimestamp :: IO String
 getTimestamp = do
     cur <- getCurrentTime
     let t = formatTimestamp cur
-    let n  = S.length "Sat  8 Oct 11, 07:12:21.999"
+    let n  = S.length "07:12:21.999"
     let s = take n t
     return $ s ++ "Z"
 
@@ -58,7 +58,8 @@ program (Options broker fields) = do
 
         forever $ do
             msg <- receiveMulti telem
-            let [k, v, u, i, h] = map S.unpack msg
+            let [k, v, u, i, h1] = map S.unpack msg
+            let h = takeWhile (/= '.') h1
 
             t <- liftIO $ getTimestamp
 
