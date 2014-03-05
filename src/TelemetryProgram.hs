@@ -58,7 +58,7 @@ program (Options broker fields) = do
 
         forever $ do
             msg <- receiveMulti telem
-            let [i, h, k, v, u] = map S.unpack msg
+            let [k, v, u, i, h] = map S.unpack msg
 
             t <- liftIO $ getTimestamp
 

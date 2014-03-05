@@ -298,9 +298,9 @@ processBurst
     -> Origin
     -> [Point]
     -> (Map Label Builder)
-processBurst d o' ps = build
+processBurst d o ps = build
   where
-    known = getSourcesMap d o'
+    known = getSourcesMap d o
 
     f :: Map Label Builder -> Point -> Map Label Builder
     f m0 p =
@@ -310,7 +310,7 @@ processBurst d o' ps = build
             Just hash'  -> hash'
             Nothing     -> error "No hash found"
 
-        (l,encodedB) = bucket o' s' p
+        (l,encodedB) = bucket o s' p
       in
         Map.insertWith mappend l encodedB m0
 
@@ -371,9 +371,6 @@ requestWrite storage writes o new a n0 = do
     f acc label encodedB = Map.insertWith mappend label encodedB acc
 
 
-
-
-
 --
 -- See documentation for System.ZMQ4.Monadic's async; apparently this is
 -- arranged such that the runZMQ scope does not end until the child Asyncs do
@@ -405,7 +402,7 @@ receiver broker Mutexes{..} d = do
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
-            let reply = [identifier', hostname', S.pack k, S.pack v, S.pack u]
+            let reply = [S.pack k, S.pack v, S.pack u, identifier', hostname']
             Zero.sendMulti tele (fromList reply)
 
         linkThread . forever $ do
