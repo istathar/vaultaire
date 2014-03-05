@@ -44,6 +44,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
 import System.Rados (Pool)
 import qualified System.Rados as Rados
+import System.ZMQ4.Monadic (runZMQ)
 import qualified System.ZMQ4.Monadic as Zero
 import Text.Printf
 
@@ -388,33 +389,41 @@ receiver broker Mutexes{..} d = do
     let identifier' = S.pack (name ++ "/" ++ (show pid))
     let hostname'   = S.pack host
 
-    Zero.runZMQ $ do
-        router <- Zero.socket Zero.Router
-        Zero.setReceiveHighWM (Zero.restrict 0) router
-        Zero.connect router ("tcp://" ++ broker ++ ":5561")
 
+    linkThread $ runZMQ $ do
+        work <- Zero.socket Zero.Router
+        Zero.setReceiveHighWM (Zero.restrict 0) work
+        Zero.connect work ("tcp://" ++ broker ++ ":5561")
+
+        t1 <- Zero.async $ forever $ do
+            msg <- Zero.receiveMulti work
+            liftIO $ putMVar inbound msg
+
+
+        t2 <- Zero.async $ forever $ do
+            Ack ident failure <- liftIO $ readChan acknowledge
+            let reply = [envelope ident, client ident, messageID ident, failure]
+            Zero.sendMulti work (fromList reply)
+
+        liftIO $ Async.waitEitherCancel t1 t2
+
+
+    linkThread $ runZMQ $ do
         tele <- Zero.socket Zero.Pub
         Zero.connect tele ("tcp://" ++ broker ++ ":5581")
 
-        mtri <- Zero.socket Zero.Rep
-        Zero.bind mtri "tcp://*:5571"
-
-        linkThread . forever $ do
+        forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
             let reply = [S.pack k, S.pack v, S.pack u, identifier', hostname']
             Zero.sendMulti tele (fromList reply)
 
-        linkThread . forever $ do
-            msg <- Zero.receiveMulti router
-            liftIO $ putMVar inbound msg
 
-        linkThread . forever $ do
-            Ack ident failure <- liftIO $ readChan acknowledge
-            let reply = [ envelope ident, client ident, messageID ident, failure ]
-            Zero.sendMulti router (fromList reply)
+    linkThread $ runZMQ $ do
+        mtri <- Zero.socket Zero.Rep
+        Zero.bind mtri "tcp://*:5569"
 
-        linkThread . forever $ do
+        forever $ do
             _ <- Zero.receive mtri
             Metrics{..} <- liftIO $ (readMVar metrics)
 
@@ -422,7 +431,7 @@ receiver broker Mutexes{..} d = do
 
             Zero.sendMulti mtri (fromList reply)
   where
-    linkThread a = Zero.async a >>= liftIO . Async.link
+    linkThread a = Async.async a >>= Async.link
 
 
 program :: Options -> MVar () -> IO ()
@@ -464,7 +473,7 @@ program (Options d w pool user broker) quitV = do
 
 
     -- Startup communications threads
-    linkThread $ receiver broker u d
+    receiver broker u d
 
     -- Our work here is done
     takeMVar quitV
