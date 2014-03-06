@@ -77,7 +77,7 @@ executable           readerd
                      blaze-builder,
                      rados-haskell >= 2.0.0
 
-  main-is:           ingestd.hs
+  main-is:           readerd.hs
   hs-source-dirs:    src
   include-dirs:      .
 
