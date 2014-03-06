@@ -22,7 +22,7 @@ module IngestDaemon where
 import Blaze.ByteString.Builder
 import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
-import Control.Concurrent.Chan
+import Control.Concurrent.STM.TChan
 import Control.Concurrent.MVar
 import Control.Monad
 import "mtl" Control.Monad.Error ()
@@ -87,8 +87,8 @@ data Storage = Storage {
 
 data Mutexes = Mutexes {
     inbound     :: !(MVar [ByteString]),
-    acknowledge :: !(Chan Ack),
-    telemetry   :: !(Chan (String,String,String)),
+    acknowledge :: !(TChan Ack),
+    telemetry   :: !(TChan (String,String,String)),
     storage     :: !(MVar Storage),
     pending     :: !(MVar ()),
     directory   :: !(MVar Directory),
@@ -220,7 +220,8 @@ writer pool' user' Mutexes{..} =
                     liftIO $ putMVar directory d3
 
 
-            liftIO $ mapM_ (writeChan acknowledge) as
+            liftIO $ forM_ as $ \a ->
+                atomically $ writeTChan acknowledge a
 
             t2 <- liftIO $ getCurrentTime
 
@@ -235,9 +236,8 @@ writer pool' user' Mutexes{..} =
             output telemetry "rate" ratePadded "p/s"
 
 
-output :: MonadIO ω => Chan (String,String,String) -> String -> String -> String -> ω ()
-output telemetry k v u = liftIO $ do
-    writeChan telemetry (k, v, u)
+output :: MonadIO ω => TChan (String,String,String) -> String -> String -> String -> ω ()
+output telemetry k v u = liftIO $ atomically $ writeTChan telemetry (k, v, u)
 
 parseMessage :: ByteString -> Either String [Point]
 parseMessage message' = do
@@ -320,14 +320,14 @@ processBurst d o ps = build
 
 
 worker :: Mutexes -> IO ()
-worker Mutexes{..} =
+worker Mutexes{..} = do
     forever $ do
         [envelope', client', identifier', message'] <- takeMVar inbound
         let ident = Ident envelope' client' identifier'
 
         case parseMessage message' of
-            Left err -> do
-                writeChan acknowledge $ Ack ident (S.pack err)
+            Left err ->
+                atomically $ writeTChan acknowledge $ Ack ident (S.pack err)
 
             Right ps -> do
                 -- temporary, replace with zmq message part
@@ -377,45 +377,32 @@ requestWrite storage writes o new a n0 = do
 -- arranged such that the runZMQ scope does not end until the child Asyncs do
 -- (via reference counting)
 --
-receiver
-    :: String
-    -> Mutexes
-    -> Bool
-    -> IO ()
+receiver :: String -> Mutexes -> Bool -> IO ()
 receiver broker Mutexes{..} d = do
-    host <- getHostName
-    name <- getProgName
-    pid  <- getProcessID
-    let identifier' = S.pack (name ++ "/" ++ (show pid))
-    let hostname'   = S.pack host
-
-
     linkThread $ runZMQ $ do
         work <- Zero.socket Zero.Router
         Zero.setReceiveHighWM (Zero.restrict 0) work
         Zero.connect work ("tcp://" ++ broker ++ ":5561")
 
-        t1 <- Zero.async $ forever $ do
-            msg <- Zero.receiveMulti work
-            liftIO $ putMVar inbound msg
-
-
-        t2 <- Zero.async $ forever $ do
-            Ack ident failure <- liftIO $ readChan acknowledge
-            let reply = [envelope ident, client ident, messageID ident, failure]
-            Zero.sendMulti work (fromList reply)
-
-        liftIO $ Async.waitEitherCancel t1 t2
-
+        forever $ do
+            res <- Zero.poll 100 [Zero.Sock work [Zero.In] Nothing]
+            case res of
+                -- Timeout, so send all avaliable acks
+                [[]]  -> sendAcks work acknowledge
+                -- Message waiting
+                [[Zero.In]] -> Zero.receiveMulti work >>= liftIO . putMVar inbound
+                _ -> error "reciever: unpossible"
 
     linkThread $ runZMQ $ do
+        (identifier, hostname) <- liftIO getIdentifierAndHostname
+
         tele <- Zero.socket Zero.Pub
         Zero.connect tele ("tcp://" ++ broker ++ ":5581")
 
         forever $ do
-            (k,v,u) <- liftIO $ readChan telemetry
+            (k,v,u) <- liftIO . atomically $ readTChan telemetry
             when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
-            let reply = [S.pack k, S.pack v, S.pack u, identifier', hostname']
+            let reply = [S.pack k, S.pack v, S.pack u, identifier, hostname]
             Zero.sendMulti tele (fromList reply)
 
 
@@ -426,10 +413,27 @@ receiver broker Mutexes{..} d = do
         forever $ do
             _ <- Zero.receive mtri
             Metrics{..} <- liftIO $ readMVar metrics
-
             Zero.send mtri [] $ S.pack ("writes:" ++ show metricWrites)
   where
     linkThread a = Async.async a >>= Async.link
+
+    sendAcks sock chan = do
+        next <- liftIO . atomically $ tryReadTChan chan
+        case next of
+            Nothing ->
+                return ()
+            Just (Ack Ident{..} failure) -> do
+                let reply = fromList [envelope, client, messageID, failure]
+                Zero.sendMulti sock reply
+                sendAcks sock chan
+
+
+    getIdentifierAndHostname = do
+        hostname <- S.pack <$> getHostName
+        pid  <- getProcessID
+        name <- getProgName
+        let identifier = S.pack (name ++ "/" ++ show pid)
+        return (identifier, hostname)
 
 
 program :: Options -> MVar () -> IO ()
@@ -439,10 +443,10 @@ program (Options d w pool user broker) quitV = do
     msgV <- newEmptyMVar
 
     -- Replies from worker threads come back via the ack mvar
-    ackC <- newChan
+    ackC <- newTChanIO
 
     -- Telemetry streams over this channel
-    telC <- newChan
+    telC <- newTChanIO
 
     storeV <- newMVar (Storage Map.empty Map.empty [] 0)
 
@@ -462,16 +466,15 @@ program (Options d w pool user broker) quitV = do
         metrics = metricsV
     }
 
-    -- Initialize thread pool to requested size
-    replicateM_ w $
-        linkThread $ worker u
+    -- Startup communications threads
+    linkThread $ receiver broker u d
 
     -- Startup writer thread
     linkThread $ writer (S.pack pool) (S.pack user) u
 
-
-    -- Startup communications threads
-    receiver broker u d
+    -- Initialize thread pool to requested size
+    replicateM_ w $
+        linkThread $ worker u
 
     -- Our work here is done
     takeMVar quitV
