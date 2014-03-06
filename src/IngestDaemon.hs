@@ -22,8 +22,8 @@ module IngestDaemon where
 import Blaze.ByteString.Builder
 import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
-import Control.Concurrent.STM.TChan
 import Control.Concurrent.MVar
+import Control.Concurrent.STM.TChan
 import Control.Monad
 import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
