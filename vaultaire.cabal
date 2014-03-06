@@ -24,6 +24,7 @@ executable           ingestd
                      semigroups,
                      transformers,
                      mtl,
+                     stm,
                      lz4,
                      optparse-applicative,
                      zeromq4-haskell,
