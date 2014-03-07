@@ -9,6 +9,7 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE BangPatterns       #-}
 {-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
@@ -186,7 +187,7 @@ writer pool' user' Mutexes{..} =
 
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
-            let labels = Map.size pm
+            let !labels = Map.size pm
 
             Metrics{..} <- liftIO $ takeMVar metrics
             liftIO $ putMVar metrics $ Metrics (metricWrites + n)
