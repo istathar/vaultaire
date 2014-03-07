@@ -22,8 +22,8 @@ module IngestDaemon where
 import Blaze.ByteString.Builder
 import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
-import Control.Concurrent.STM.TChan
 import Control.Concurrent.MVar
+import Control.Concurrent.STM.TChan
 import Control.Monad
 import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
@@ -387,11 +387,15 @@ receiver broker Mutexes{..} d = do
         forever $ do
             res <- Zero.poll 100 [Zero.Sock work [Zero.In] Nothing]
             case res of
-                -- Timeout, so send all avaliable acks
-                [[]]  -> sendAcks work acknowledge
                 -- Message waiting
-                [[Zero.In]] -> Zero.receiveMulti work >>= liftIO . putMVar inbound
-                _ -> error "reciever: unpossible"
+                [[Zero.In]] -> sendWork work inbound
+                -- Timeout, do nothing.
+                [[]]        -> return ()
+                _           -> error "reciever: unpossible"
+
+            -- Between each timeout or recieved message, send all outstanding
+            -- acks.
+            sendAcks work acknowledge
 
     linkThread $ runZMQ $ do
         (identifier, hostname) <- liftIO getIdentifierAndHostname
@@ -417,16 +421,16 @@ receiver broker Mutexes{..} d = do
   where
     linkThread a = Async.async a >>= Async.link
 
+    sendWork sock mv = Zero.receiveMulti sock >>= liftIO . putMVar mv
+
     sendAcks sock chan = do
         next <- liftIO . atomically $ tryReadTChan chan
         case next of
-            Nothing ->
-                return ()
+            Nothing -> return ()
             Just (Ack Ident{..} failure) -> do
                 let reply = fromList [envelope, client, messageID, failure]
                 Zero.sendMulti sock reply
                 sendAcks sock chan
-
 
     getIdentifierAndHostname = do
         hostname <- S.pack <$> getHostName
