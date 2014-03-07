@@ -58,11 +58,13 @@ import qualified Vaultaire.Persistence.ContentsObject as Contents
 #include "config.h"
 
 data Options = Options {
-    optGlobalDebug    :: !Bool,
-    optGlobalWorkers  :: !Int,
-    argGlobalPoolName :: !String,
-    optGlobalUserName :: !String,
-    argBrokerHost     :: !String
+    optGlobalDebug     :: !Bool,
+    optGlobalWorkers   :: !Int,
+    optGlobalWriters   :: !Int,
+    optGlobalRateLimit :: !Int,
+    argGlobalPoolName  :: !String,
+    optGlobalUserName  :: !String,
+    argBrokerHost      :: !String
 }
 
 -- This is how the broker will know to route all the way back to the client,
@@ -443,7 +445,7 @@ receiver broker Mutexes{..} d = do
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d w pool user broker) quitV = do
+program (Options d w c s pool user broker) quitV = do
     putStrLn $ "ingestd starting (vaultaire v" ++ VERSION ++ ")"
     -- Incoming requests are given to worker threads via the work mvar
     msgV <- newEmptyMVar
@@ -503,9 +505,24 @@ toplevel = Options
     <*> option
             (long "workers" <>
              short 'w' <>
+             metavar "NUM" <>
              value num <>
              showDefault <>
-             help "Number of bursts to process simultaneously")
+             help "Number of bursts to process concurrently")
+    <*> option
+            (long "connections" <>
+             short 'c' <>
+             metavar "NUM" <>
+             value 1 <>
+             showDefault <>
+             help "Number of connections writing to Ceph concurrently")
+    <*> option
+            (long "objects" <>
+             short 's' <>
+             value 1000 <>
+             metavar "NUM" <>
+             showDefault <>
+             help "Number of objects being written to simultaneously")
     <*> strOption
             (long "pool" <>
              short 'p' <>
