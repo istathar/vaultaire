@@ -186,12 +186,13 @@ writer pool' user' Mutexes{..} =
 
             Storage pm sm as n <- liftIO $ takeMVar storage
             liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
+            let labels = Map.size pm
 
             Metrics{..} <- liftIO $ takeMVar metrics
             liftIO $ putMVar metrics $ Metrics (metricWrites + n)
 
             output telemetry "writing" (printf "%5d" n) "points"
-            output telemetry "across"  (printf "%5d" (Map.size pm)) "labels"
+            output telemetry "across"  (printf "%5d" labels) "labels"
 
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
@@ -236,7 +237,7 @@ writer pool' user' Mutexes{..} =
             let ratePadded = printf "%7.1f" rateFloat
             output telemetry "rate" ratePadded "points/second"
 
-            let lFloat = (fromRational . toRational) (Map.size pm)
+            let lFloat = (fromRational . toRational) labels
             let lRateFloat = lFloat / deltaFloat
             let lRatePadded = printf "%7.1f" lRateFloat
             output telemetry "cluster" lRatePadded "labels/second"
