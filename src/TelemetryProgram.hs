@@ -69,7 +69,7 @@ program (Options broker fields) = do
             let iW = if length i > iW0 then length i else iW0
             let kW = if (length k + 1) > kW0 then length k + 1 else kW0
 
-            liftIO $ putStrLn $ printf "%s  %-*s  %-*s  %-*s %-9s  %s" t iW i hW h kW (k ++ ":") v u
+            liftIO $ putStrLn $ printf "%s %-*s %-*s %-*s %-9s %s" t iW i hW h kW (k ++ ":") v u
 
             loop tele iW hW kW
 
