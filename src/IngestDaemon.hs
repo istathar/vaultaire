@@ -192,8 +192,8 @@ writer pool' user' Mutexes{..} =
             Metrics{..} <- liftIO $ takeMVar metrics
             liftIO $ putMVar metrics $ Metrics (metricWrites + n)
 
-            output telemetry "writing" (printf "%5d" n) "points"
-            output telemetry "across"  (printf "%5d" labels) "labels"
+            output telemetry "writing" (printf "%d" n) "points"
+            output telemetry "across"  (printf "%d" labels) "labels"
 
 --
 -- This is, obviously, a total hack. And horrible. But it is the necessary
@@ -210,13 +210,13 @@ writer pool' user' Mutexes{..} =
 
                     d2 <- foldM (\d (o,_) -> do
                             (d',x) <- loadContents d o
-                            if x > 0 then output telemetry "loaded" (printf "%5d" x) "sources" else return ()
+                            if x > 0 then output telemetry "loaded" (printf "%d" x) "sources" else return ()
                             return d'
                         ) d1 os
 
                     d3 <- foldM (\d (o,st) -> do
                             (d',x) <- updateContents d o st
-                            if x > 0 then output telemetry "saved" (printf "%5d" x) "sources" else return ()
+                            if x > 0 then output telemetry "saved" (printf "%d" x) "sources" else return ()
                             return d'
                         ) d2 os
 
@@ -230,17 +230,17 @@ writer pool' user' Mutexes{..} =
 
             let delta = diffUTCTime t2 t1
             let deltaFloat = (fromRational $ toRational delta) :: Float
-            let deltaPadded = printf "%9.3f" deltaFloat
+            let deltaPadded = printf "%0.3f" deltaFloat
             output telemetry "delta" deltaPadded "seconds"
 
             let countFloat = (fromRational . toRational) n
             let rateFloat = countFloat / deltaFloat
-            let ratePadded = printf "%7.1f" rateFloat
+            let ratePadded = printf "%0.1f" rateFloat
             output telemetry "rate" ratePadded "points/second"
 
             let lFloat = (fromRational . toRational) labels
             let lRateFloat = lFloat / deltaFloat
-            let lRatePadded = printf "%7.1f" lRateFloat
+            let lRatePadded = printf "%0.1f" lRateFloat
             output telemetry "cluster" lRatePadded "labels/second"
 
 
@@ -340,7 +340,7 @@ worker Mutexes{..} = do
             Right ps -> do
                 -- temporary, replace with zmq message part
                 let n = length ps
-                output telemetry "worker" (printf "%5d" n) "points"
+                output telemetry "worker" (printf "%d" n) "points"
 
                 let o = origin $ head ps
 
