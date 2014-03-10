@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"fmt"
+	"syscall"
 )
 
 func Exitf(code int, format string, v... interface{}) {
@@ -42,7 +43,11 @@ func main() {
 	if err != nil {
 		Exitf(2, "Could not send: %v", uri, err)
 	}
-	contents, err := sock.RecvBytes(0)
+	err = nil
+	var contents []byte
+	for err == nil || err == syscall.EINTR {
+		contents, err = sock.RecvBytes(0)
+	}
 	if err != nil {
 		fmt.Printf("Error reading contents: %v", err)
 	}
