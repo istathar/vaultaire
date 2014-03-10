@@ -51,6 +51,7 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 #include "config.h"
 
@@ -68,12 +69,13 @@ data Reply = Reply {
     response :: !ByteString
 }
 
-
 data Mutexes = Mutexes {
     inbound   :: !(MVar [ByteString]),
     outbound  :: !(Chan Reply),
     telemetry :: !(Chan (String,String,String)),
-    directory :: !(MVar Directory)
+    directory :: !(MVar Directory),
+    contentsIn :: !(MVar [ByteString]),
+    contentsOut :: !(Chan Reply)
 }
 
 
@@ -138,7 +140,22 @@ reader pool' user' Mutexes{..} =
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
 
-
+contentsReader :: ByteString -> ByteString -> Mutexes -> IO ()
+contentsReader pool user Mutexes{..} = do
+    Rados.runConnect (Just user) (Rados.parseConfig "/etc/ceph/ceph.conf") $
+        Rados.runPool pool $ forever $ do
+            [envelope, client, _, request] <- liftIO $ takeMVar contentsIn
+            d <- liftIO $ takeMVar directory
+            let origin = Origin request
+            let lbl = Contents.formObjectLabel origin
+            st <- Contents.readVaultObject lbl
+            let d' = insertIntoDirectory d origin st
+            liftIO $ putMVar directory d'
+            let flatten l m = (Map.keys m) ++ l
+            let sources = map createSourceResponse (Map.foldl flatten [] d')
+            let burst = encodeSourceResponseBurst (createSourceResponseBurst sources)
+            liftIO $ writeChan contentsOut (Reply envelope client burst)
+    
 receiver
     :: String
     -> Mutexes
@@ -158,6 +175,9 @@ receiver broker Mutexes{..} d = do
 
         tele <- Zero.socket Zero.Pub
         Zero.connect tele ("tcp://" ++ broker ++ ":5581")
+
+        contentsRouter <- Zero.socket Zero.Router
+        Zero.connect contentsRouter ("tcp://" ++ broker ++ ":5573")
 
 --
 -- telemetry
@@ -185,6 +205,20 @@ receiver broker Mutexes{..} d = do
             let reply = [envelope, client, response]
             Zero.sendMulti router (fromList reply)
 
+--
+-- get and handle contents requests
+--
+
+        linkThread . forever $ do
+            msg <- Zero.receiveMulti contentsRouter
+            liftIO $ putMVar contentsIn msg
+
+        linkThread . forever $ do
+            Reply{..} <- liftIO $ readChan contentsOut
+            let reply = [envelope, client, (S.pack ""), response]
+            Zero.sendMulti contentsRouter (fromList reply)
+            
+
   where
 
     linkThread a = Zero.async a >>= liftIO . Async.link
@@ -195,9 +229,11 @@ readerProgram (Options d w pool user broker) quitV = do
     putStrLn $ "readerd starting (vaultaire v" ++ VERSION ++ ")"
 
     msgV <- newEmptyMVar
+    contentsV <- newEmptyMVar
 
     -- Responses from workers
     outC <- newChan
+    contentsC <- newChan
 
     telC <- newChan
 
@@ -207,12 +243,16 @@ readerProgram (Options d w pool user broker) quitV = do
         inbound = msgV,
         outbound = outC,
         telemetry = telC,
-        directory = dV
+        directory = dV,
+        contentsIn = contentsV,
+        contentsOut = contentsC
     }
 
     -- Startup reader threads
     replicateM_ w $
         linkThread $ reader (S.pack pool) (S.pack user) u
+
+    linkThread $ contentsReader (S.pack pool) (S.pack user) u
 
 
     -- Startup communications threads
