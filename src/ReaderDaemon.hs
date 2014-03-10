@@ -217,8 +217,6 @@ receiver broker Mutexes{..} d = do
             Reply{..} <- liftIO $ readChan contentsOut
             let reply = [envelope, client, (S.pack ""), response]
             Zero.sendMulti contentsRouter (fromList reply)
-            
-
   where
 
     linkThread a = Zero.async a >>= liftIO . Async.link
@@ -253,7 +251,6 @@ readerProgram (Options d w pool user broker) quitV = do
         linkThread $ reader (S.pack pool) (S.pack user) u
 
     linkThread $ contentsReader (S.pack pool) (S.pack user) u
-
 
     -- Startup communications threads
     linkThread $ receiver broker u d
