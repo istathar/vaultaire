@@ -79,10 +79,12 @@ $(BUILDDIR)/%.bin: config.h src/%.hs $(CORE_SOURCES)
 		-o $@ \
 		src/$*.hs
 
+HOTHASKTAGS=$(shell which hothasktags 2>/dev/null)
+CTAGS=$(if $(HOTHASKTAGS),$(HOTHASKTAGS),/bin/false)
 
 tags: $(CORE_SOURCES) $(TEST_SOURCES)
-	@/bin/echo -e "CTAGS\ttags"
-	@hothasktags $^ > tags $(REDIRECT)
+	if [ "$(HOTHASKTAGS)" ] ; then /bin/echo -e "CTAGS\ttags" ; fi
+	-$(CTAGS) $^ > tags $(REDIRECT)
 
 #
 # Build test suite code

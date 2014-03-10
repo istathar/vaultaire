@@ -51,19 +51,35 @@ getTimestamp = do
 program :: Options -> IO ()
 program (Options broker fields) = do
     runZMQ $ do
-        telem <- socket Sub
-        connect telem  ("tcp://" ++ broker ++ ":5580")
+        tele <- socket Sub
+        connect tele  ("tcp://" ++ broker ++ ":5580")
         forM_ fields (\field -> do
-            subscribe telem (S.pack field))
+            subscribe tele (S.pack field))
 
-        forever $ do
-            msg <- receiveMulti telem
+        loop tele 13 9 8
+  where
+        loop tele iW0 hW0 kW0 =  do
+            msg <- receiveMulti tele
             let [k, v, u, i, h1] = map S.unpack msg
             let h = takeWhile (/= '.') h1
 
             t <- liftIO $ getTimestamp
 
-            liftIO $ putStrLn $ printf "%s  %-15s %-15s %-10s %-9s  %s" t i h (k ++ ":") v u
+            let hW = if length h > hW0 then length h else hW0
+            let iW = if length i > iW0 then length i else iW0
+            let kW = if (length k + 1) > kW0 then length k + 1 else kW0
+
+            liftIO $ putStrLn $ printf "%s %-*s %-*s %-*s %s %s" t iW i hW h kW (k ++ ":") (align v) u
+
+            loop tele iW hW kW
+
+
+align :: String -> String
+align v =
+  let
+    (integral,fraction) = span (/= '.') v
+  in
+    printf "%6s%-4s" integral fraction -- three digits, plus the decimal
 
 
 toplevel :: Parser Options

@@ -90,7 +90,7 @@ newtype SourceDict = SourceDict {
 
 instance Show SourceDict where
     show x =
-        intercalate ",\n" ps
+        intercalate "," ps
       where
         m  = runSourceDict x
         ss = Map.toList m
