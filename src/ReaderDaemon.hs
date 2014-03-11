@@ -75,7 +75,8 @@ data Mutexes = Mutexes {
     telemetry :: !(Chan (String,String,String)),
     directory :: !(MVar Directory),
     contentsIn :: !(MVar [ByteString]),
-    contentsOut :: !(Chan Reply)
+    contentsOut :: !(Chan Reply),
+    radosLock :: !(MVar Bool)
 }
 
 
@@ -94,8 +95,10 @@ reader
     -> ByteString
     -> Mutexes
     -> IO ()
-reader pool' user' Mutexes{..} =
-    Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
+reader pool' user' Mutexes{..} = do
+    _ <- liftIO $ takeMVar radosLock
+    Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
+        liftIO $ putMVar radosLock True
         Rados.runPool pool' $ forever $ do
 
             [envelope', client', origin', request'] <- liftIO $ takeMVar inbound
@@ -142,7 +145,9 @@ reader pool' user' Mutexes{..} =
 
 contentsReader :: ByteString -> ByteString -> Mutexes -> IO ()
 contentsReader pool user Mutexes{..} = do
-    Rados.runConnect (Just user) (Rados.parseConfig "/etc/ceph/ceph.conf") $
+    _ <- liftIO $ takeMVar radosLock
+    Rados.runConnect (Just user) (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
+        liftIO $ putMVar radosLock True
         Rados.runPool pool $ forever $ do
             [envelope, client, _, request] <- liftIO $ takeMVar contentsIn
             d <- liftIO $ takeMVar directory
@@ -229,6 +234,10 @@ readerProgram (Options d w pool user broker) quitV = do
     msgV <- newEmptyMVar
     contentsV <- newEmptyMVar
 
+    -- Lock for Ceph connections to avoid race condition in nspr 
+    -- (https://github.com/ceph/ceph/pull/1424)
+    radosLockV <- newMVar True
+
     -- Responses from workers
     outC <- newChan
     contentsC <- newChan
@@ -243,7 +252,8 @@ readerProgram (Options d w pool user broker) quitV = do
         telemetry = telC,
         directory = dV,
         contentsIn = contentsV,
-        contentsOut = contentsC
+        contentsOut = contentsC,
+        radosLock = radosLockV
     }
 
     -- Startup reader threads
