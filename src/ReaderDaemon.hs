@@ -70,13 +70,13 @@ data Reply = Reply {
 }
 
 data Mutexes = Mutexes {
-    inbound   :: !(MVar [ByteString]),
-    outbound  :: !(Chan Reply),
-    telemetry :: !(Chan (String,String,String)),
-    directory :: !(MVar Directory),
-    contentsIn :: !(MVar [ByteString]),
+    inbound     :: !(MVar [ByteString]),
+    outbound    :: !(Chan Reply),
+    telemetry   :: !(Chan (String,String,String)),
+    directory   :: !(MVar Directory),
+    contentsIn  :: !(MVar [ByteString]),
     contentsOut :: !(Chan Reply),
-    radosLock :: !(MVar Bool)
+    radosLock   :: !(MVar Bool)
 }
 
 
@@ -160,7 +160,7 @@ contentsReader pool user Mutexes{..} = do
             let sources = map createSourceResponse (Map.foldl flatten [] d')
             let burst = encodeSourceResponseBurst (createSourceResponseBurst sources)
             liftIO $ writeChan contentsOut (Reply envelope client burst)
-    
+
 receiver
     :: String
     -> Mutexes
@@ -234,7 +234,7 @@ readerProgram (Options d w pool user broker) quitV = do
     msgV <- newEmptyMVar
     contentsV <- newEmptyMVar
 
-    -- Lock for Ceph connections to avoid race condition in nspr 
+    -- Lock for Ceph connections to avoid race condition in nspr
     -- (https://github.com/ceph/ceph/pull/1424)
     radosLockV <- newMVar True
 
