@@ -155,6 +155,34 @@ executable           telemetry
 
   ghc-prof-options:  -prof -fprof-auto-top
 
+executable           query
+  default-language:  Haskell2010
+
+  build-depends:     base,
+                     bytestring,
+                     optparse-applicative,
+                     transformers,
+                     cereal,
+                     protobuf,
+                     zeromq4-haskell,
+                     type-level,
+                     text,
+                     attoparsec
+
+  main-is:           query.hs
+  hs-source-dirs:    src
+  include-dirs:      .
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -funbox-strict-fields
+                     -fno-warn-missing-signatures
+                     -fno-warn-unused-do-bind
+
+  ghc-prof-options:  -prof -fprof-auto-top
 
 test-suite           check
   type:              exitcode-stdio-1.0
