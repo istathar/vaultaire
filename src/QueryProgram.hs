@@ -7,6 +7,7 @@
 
 module QueryProgram where
 
+import Codec.Compression.LZ4 (decompress)
 import Control.Applicative
 import qualified Data.Attoparsec.Char8 as Atto
 import Data.ByteString (ByteString)
@@ -14,6 +15,7 @@ import qualified Data.ByteString.Char8 as B
 import Data.ProtocolBuffers
 import Data.Serialize (runGet, runPut)
 import Data.Word (Word64)
+import Data.Maybe(fromJust)
 import Options.Applicative
 import System.ZMQ4.Monadic hiding (source)
 import Vaultaire.Serialize.Common (SourceTag (..))
@@ -61,7 +63,7 @@ makeRequest broker origin request = do
     encodeRequest = runPut . encodeMessage
 
     decodeBurst :: ByteString -> Either String DataBurst
-    decodeBurst = runGet decodeMessage
+    decodeBurst = runGet decodeMessage . fromJust . decompress
 
     printLoop s = do
         msg <- receive s
