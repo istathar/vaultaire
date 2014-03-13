@@ -156,8 +156,8 @@ contentsReader pool user Mutexes{..} = do
             st <- Contents.readVaultObject lbl
             let d' = insertIntoDirectory d origin st
             liftIO $ putMVar directory d'
-            let flatten l m = (Map.keys m) ++ l
-            let sources = map createSourceResponse (Map.foldl flatten [] d')
+            let origin_sources o m = (Map.keys (Map.findWithDefault Map.empty o m))
+            let sources = map createSourceResponse (origin_sources origin d')
             let burst = encodeSourceResponseBurst (createSourceResponseBurst sources)
             liftIO $ writeChan contentsOut (Reply envelope client burst)
 
