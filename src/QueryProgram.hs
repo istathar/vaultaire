@@ -52,7 +52,7 @@ requestFromTags tags from to =
 makeRequest :: Broker -> Origin -> RequestMulti -> IO ()
 makeRequest broker origin request = do
     runZMQ $ do
-        s <- socket Req
+        s <- socket Dealer
         connect s ("tcp://" ++ broker ++ ":5570")
         send s [SendMore] $ B.pack origin
         send s [] $ encodeRequest request
