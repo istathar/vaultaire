@@ -73,7 +73,6 @@ makeRequest broker origin request = do
                 either error (liftIO . print) (decodeBurst msg)
                 printLoop s
 
-
 toplevel :: Parser Options
 toplevel = Options
     <$> argument str

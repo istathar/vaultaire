@@ -82,7 +82,10 @@ instance Show DataFrame where
 
 data DataBurst = DataBurst {
     frames :: Repeated D1 (Message DataFrame)
-} deriving (Generic, Eq, Show)
+} deriving (Generic, Eq)
+
+instance Show DataBurst where
+    show burst = intercalate "\n\n" $ map show (getField $ frames burst)
 
 instance Encode DataBurst
 instance Decode DataBurst
