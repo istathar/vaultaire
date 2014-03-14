@@ -108,7 +108,7 @@ reader pool' user' Mutexes{..} = do
                 Left err -> do
                     output telemetry "error" (show err) ""
                 Right qs -> do
-                    output telemetry "request" (printf "%5d" (length qs)) "ranges"
+                    output telemetry "request" (printf "%d" (length qs)) "ranges"
 
                     forM_ qs $ \q -> do
 
@@ -137,7 +137,7 @@ reader pool' user' Mutexes{..} = do
                         let delta = diffUTCTime a2 a1
                         let deltaFloat = (fromRational $ toRational delta) :: Float
                         let deltaPadded = printf "%9.3f" deltaFloat
-                        output telemetry "duration" deltaPadded "s"
+                        output telemetry "duration" deltaPadded "seconds"
 
 
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
@@ -190,9 +190,10 @@ receiver broker Mutexes{..} d = do
 
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
-            when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
-            let reply = [identifier', hostname', S.pack k, S.pack v, S.pack u]
+            when d $ liftIO $ printf "%-10s %-9s %s" (k ++ ":") v u
+            let reply = [S.pack k, S.pack v, S.pack u, identifier', hostname']
             Zero.sendMulti tele (fromList reply)
+
 --
 -- inbound work
 --
