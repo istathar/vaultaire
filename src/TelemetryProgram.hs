@@ -56,7 +56,7 @@ program (Options broker fields) = do
         forM_ fields (\field -> do
             subscribe tele (S.pack field))
 
-        loop tele 13 9 10
+        loop tele 13 9 8
   where
         loop tele iW0 hW0 kW0 =  do
             msg <- receiveMulti tele
@@ -69,9 +69,17 @@ program (Options broker fields) = do
             let iW = if length i > iW0 then length i else iW0
             let kW = if (length k + 1) > kW0 then length k + 1 else kW0
 
-            liftIO $ putStrLn $ printf "%s %-*s %-*s %-*s %-9s %s" t iW i hW h kW (k ++ ":") v u
+            liftIO $ putStrLn $ printf "%s %-*s %-*s %-*s %s %s" t iW i hW h kW (k ++ ":") (align v) u
 
             loop tele iW hW kW
+
+
+align :: String -> String
+align v =
+  let
+    (integral,fraction) = span (/= '.') v
+  in
+    printf "%6s%-4s" integral fraction -- three digits, plus the decimal
 
 
 toplevel :: Parser Options

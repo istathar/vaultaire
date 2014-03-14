@@ -51,6 +51,7 @@ import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
+import qualified Vaultaire.Persistence.ContentsObject as Contents
 
 #include "config.h"
 
@@ -68,12 +69,14 @@ data Reply = Reply {
     response :: !ByteString
 }
 
-
 data Mutexes = Mutexes {
-    inbound   :: !(MVar [ByteString]),
-    outbound  :: !(Chan Reply),
-    telemetry :: !(Chan (String,String,String)),
-    directory :: !(MVar Directory)
+    inbound     :: !(MVar [ByteString]),
+    outbound    :: !(Chan Reply),
+    telemetry   :: !(Chan (String,String,String)),
+    directory   :: !(MVar Directory),
+    contentsIn  :: !(MVar [ByteString]),
+    contentsOut :: !(Chan Reply),
+    radosLock   :: !(MVar Bool)
 }
 
 
@@ -92,8 +95,10 @@ reader
     -> ByteString
     -> Mutexes
     -> IO ()
-reader pool' user' Mutexes{..} =
-    Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
+reader pool' user' Mutexes{..} = do
+    _ <- liftIO $ takeMVar radosLock
+    Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
+        liftIO $ putMVar radosLock True
         Rados.runPool pool' $ forever $ do
 
             [envelope', client', origin', request'] <- liftIO $ takeMVar inbound
@@ -103,7 +108,7 @@ reader pool' user' Mutexes{..} =
                 Left err -> do
                     output telemetry "error" (show err) ""
                 Right qs -> do
-                    output telemetry "request" (printf "%5d" (length qs)) "ranges"
+                    output telemetry "request" (printf "%d" (length qs)) "ranges"
 
                     forM_ qs $ \q -> do
 
@@ -132,12 +137,29 @@ reader pool' user' Mutexes{..} =
                         let delta = diffUTCTime a2 a1
                         let deltaFloat = (fromRational $ toRational delta) :: Float
                         let deltaPadded = printf "%9.3f" deltaFloat
-                        output telemetry "duration" deltaPadded "s"
+                        output telemetry "duration" deltaPadded "seconds"
 
 
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
 
+contentsReader :: ByteString -> ByteString -> Mutexes -> IO ()
+contentsReader pool user Mutexes{..} = do
+    _ <- liftIO $ takeMVar radosLock
+    Rados.runConnect (Just user) (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
+        liftIO $ putMVar radosLock True
+        Rados.runPool pool $ forever $ do
+            [envelope, client, _, request] <- liftIO $ takeMVar contentsIn
+            d <- liftIO $ takeMVar directory
+            let origin = Origin request
+            let lbl = Contents.formObjectLabel origin
+            st <- Contents.readVaultObject lbl
+            let d' = insertIntoDirectory d origin st
+            liftIO $ putMVar directory d'
+            let origin_sources o m = (Map.keys (Map.findWithDefault Map.empty o m))
+            let sources = map createSourceResponse (origin_sources origin d')
+            let burst = encodeSourceResponseBurst (createSourceResponseBurst sources)
+            liftIO $ writeChan contentsOut (Reply envelope client burst)
 
 receiver
     :: String
@@ -159,15 +181,19 @@ receiver broker Mutexes{..} d = do
         tele <- Zero.socket Zero.Pub
         Zero.connect tele ("tcp://" ++ broker ++ ":5581")
 
+        contentsRouter <- Zero.socket Zero.Router
+        Zero.connect contentsRouter ("tcp://" ++ broker ++ ":5573")
+
 --
 -- telemetry
 --
 
         linkThread . forever $ do
             (k,v,u) <- liftIO $ readChan telemetry
-            when d $ liftIO $ putStrLn $ printf "%-10s %-9s %s" (k ++ ":") v u
-            let reply = [identifier', hostname', S.pack k, S.pack v, S.pack u]
+            when d $ liftIO $ printf "%-10s %-9s %s" (k ++ ":") v u
+            let reply = [S.pack k, S.pack v, S.pack u, identifier', hostname']
             Zero.sendMulti tele (fromList reply)
+
 --
 -- inbound work
 --
@@ -185,6 +211,18 @@ receiver broker Mutexes{..} d = do
             let reply = [envelope, client, response]
             Zero.sendMulti router (fromList reply)
 
+--
+-- get and handle contents requests
+--
+
+        linkThread . forever $ do
+            msg <- Zero.receiveMulti contentsRouter
+            liftIO $ putMVar contentsIn msg
+
+        linkThread . forever $ do
+            Reply{..} <- liftIO $ readChan contentsOut
+            let reply = [envelope, client, (S.pack ""), response]
+            Zero.sendMulti contentsRouter (fromList reply)
   where
 
     linkThread a = Zero.async a >>= liftIO . Async.link
@@ -195,9 +233,15 @@ readerProgram (Options d w pool user broker) quitV = do
     putStrLn $ "readerd starting (vaultaire v" ++ VERSION ++ ")"
 
     msgV <- newEmptyMVar
+    contentsV <- newEmptyMVar
+
+    -- Lock for Ceph connections to avoid race condition in nspr
+    -- (https://github.com/ceph/ceph/pull/1424)
+    radosLockV <- newMVar True
 
     -- Responses from workers
     outC <- newChan
+    contentsC <- newChan
 
     telC <- newChan
 
@@ -207,13 +251,17 @@ readerProgram (Options d w pool user broker) quitV = do
         inbound = msgV,
         outbound = outC,
         telemetry = telC,
-        directory = dV
+        directory = dV,
+        contentsIn = contentsV,
+        contentsOut = contentsC,
+        radosLock = radosLockV
     }
 
     -- Startup reader threads
     replicateM_ w $
         linkThread $ reader (S.pack pool) (S.pack user) u
 
+    linkThread $ contentsReader (S.pack pool) (S.pack user) u
 
     -- Startup communications threads
     linkThread $ receiver broker u d
