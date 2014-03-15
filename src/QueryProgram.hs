@@ -12,10 +12,10 @@ import Control.Applicative
 import qualified Data.Attoparsec.Char8 as Atto
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
+import Data.Maybe (fromJust)
 import Data.ProtocolBuffers
 import Data.Serialize (runGet, runPut)
 import Data.Word (Word64)
-import Data.Maybe(fromJust)
 import Options.Applicative
 import System.ZMQ4.Monadic hiding (source)
 import Vaultaire.Serialize.Common (SourceTag (..))

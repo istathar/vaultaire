@@ -144,20 +144,39 @@ hashOriginName o' =
 
 
 
+
+
 --
--- | Given a collection of points in the same source, write them down to Ceph.
+-- | Given a list of actions @as@, feed them @limit@ at a time into a second
+-- function @f@ (in that same monad) that evaluates them.
 --
+
+onlySoManyAtATime_ :: Monad ω => Int -> [ω α] -> (α -> ω ()) -> ω ()
+onlySoManyAtATime_ _ [] _ = return ()
+onlySoManyAtATime_ limit actions f =
+  let
+    (prefix, remainder) = splitAt limit actions
+  in do
+    carryOut prefix f
+    onlySoManyAtATime_ limit remainder f
+
+  where
+    carryOut :: Monad ω => [ω α] -> (α -> ω ()) -> ω ()
+    carryOut as g = do
+        xs <- sequence as
+        mapM_ g xs
 
 
 --
 -- The origin contents file is locked before entering here. Build a map of
 -- labels to encoded points, then construct a list of asynchronous appends.
 --
-appendVaultPoints :: Map Label Builder -> Pool ()
-appendVaultPoints m = do
-    asyncs <- sequence $ Map.foldrWithKey asyncAppend [] m
-    mapM_ checkError asyncs
+appendVaultPoints :: Int -> Map Label Builder -> Pool ()
+appendVaultPoints limit m0 =
+    onlySoManyAtATime_ limit (action m0) checkError
   where
+    action m = Map.foldrWithKey asyncAppend [] m :: [Pool AsyncWrite]
+
     asyncAppend (Label l') bB as =
         (runAsync . runObject l' $ append $ toByteString bB) : as
 
