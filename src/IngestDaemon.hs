@@ -177,9 +177,10 @@ global_lock = S.intercalate "_" [__EPOCH__, "global"]
 writer
     :: ByteString
     -> ByteString
+    -> Int
     -> Mutexes
     -> IO ()
-writer pool' user' Mutexes{..} =
+writer pool' user' limit Mutexes{..} =
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool' $ forever $ do
             -- block until signalled to wake up
@@ -204,7 +205,7 @@ writer pool' user' Mutexes{..} =
 --
 
             Rados.withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
-                Bucket.appendVaultPoints pm
+                Bucket.appendVaultPoints limit pm
 
                 unless (Map.null sm) $ do
                     d1 <- liftIO $ takeMVar directory
@@ -484,7 +485,8 @@ program (Options d w c s pool user broker) quitV = do
     linkThread $ receiver broker u d
 
     -- Startup writer thread
-    linkThread $ writer (S.pack pool) (S.pack user) u
+    replicateM_ c $
+        linkThread $ writer (S.pack pool) (S.pack user) s u
 
     -- Initialize thread pool to requested size
     replicateM_ w $
