@@ -527,7 +527,7 @@ toplevel = Options
     <*> option
             (long "objects" <>
              short 's' <>
-             value 1000 <>
+             value 100 <>
              metavar "NUM" <>
              showDefault <>
              help "Number of objects being written to simultaneously")
