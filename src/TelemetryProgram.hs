@@ -10,6 +10,7 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -24,10 +25,12 @@ import qualified Data.ByteString.Char8 as S
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime)
 import Options.Applicative
+import System.IO (BufferMode (..), hSetBuffering, stdout)
 import System.Locale (defaultTimeLocale)
 import System.ZMQ4.Monadic hiding (source)
 import Text.Printf
 
+#include "config.h"
 
 data Options = Options {
     argDaemonHost :: !String,
@@ -50,6 +53,9 @@ getTimestamp = do
 
 program :: Options -> IO ()
 program (Options broker fields) = do
+    hSetBuffering stdout LineBuffering
+    putStrLn $ "telemetry connecting (vaultaire v" ++ VERSION ++ ")"
+
     runZMQ $ do
         tele <- socket Sub
         connect tele  ("tcp://" ++ broker ++ ":5580")
