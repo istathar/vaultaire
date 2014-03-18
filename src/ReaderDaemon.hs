@@ -35,6 +35,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Time.Clock
 import GHC.Conc
@@ -120,7 +121,9 @@ reader pool' user' Mutexes{..} = do
                         let is = Bucket.calculateTimemarks t1 t2
 
                         forM_ is $ \i -> do
-                            m <- Bucket.readVaultObject o s i
+                            m <- if o == Origin "BENHUR"
+                                then return $ demoWave o i
+                                else Bucket.readVaultObject o s i
 
                             unless (Map.null m) $ do
                                 let ps = Bucket.pointsInRange t1 t2 m
@@ -141,6 +144,31 @@ reader pool' user' Mutexes{..} = do
 
 
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
+
+
+demoWave
+    :: Origin
+    -> Timemark
+    -> Map Timestamp Point
+demoWave o i=
+    let
+        times = [i,i+3..i+99999]
+        ts = map (fromIntegral . (*1000000000)) times
+
+        f = 1/600                                       -- instances per second
+        w = 2 * pi * f
+        y t = sin (w * ((fromRational . toRational) t))
+
+        createPoint t = Point {
+                            origin = o,
+                            source = SourceDict $ Map.fromList [("wave","sine")],
+                            timestamp = t,
+                            payload = Measurement (y t)
+                        }
+
+        insertPoint acc t = Map.insert t (createPoint t) acc
+    in
+        foldl insertPoint Map.empty ts
 
 
 contentsReader :: ByteString -> ByteString -> Mutexes -> IO ()

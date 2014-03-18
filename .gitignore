@@ -10,6 +10,7 @@ ingestd
 readerd
 telemetry
 vault
+query
 
 # test binaries
 check
