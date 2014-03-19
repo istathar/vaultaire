@@ -20,7 +20,10 @@
 module ReaderDaemon
 (
     readerProgram,
-    readerCommandLineParser
+    readerCommandLineParser,
+
+    -- for testing
+    demoWave
 )
 where
 
@@ -150,19 +153,20 @@ demoWave
     :: Origin
     -> Timemark
     -> Map Timestamp Point
-demoWave o i=
+demoWave o i =
     let
         times = [i,i+3..i+99999]
-        ts = map (fromIntegral . (*1000000000)) times
+        ts = map fromIntegral times
 
-        f = 1/600                                       -- instances per second
+        period = 3600 * 3
+        f = 1/period                                    -- instances per second
         w = 2 * pi * f
         y t = sin (w * ((fromRational . toRational) t))
 
         createPoint t = Point {
                             origin = o,
                             source = SourceDict $ Map.fromList [("wave","sine")],
-                            timestamp = t,
+                            timestamp = t * 1000000000,
                             payload = Measurement (y t)
                         }
 
