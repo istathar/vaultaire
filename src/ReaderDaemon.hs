@@ -155,7 +155,7 @@ demoWave
     -> Map Timestamp Point
 demoWave o i =
     let
-        times = [i,i+3..i+99999]
+        times = [i,i+5..i+99999]
         ts = map fromIntegral times
 
         period = 3600 * 3
