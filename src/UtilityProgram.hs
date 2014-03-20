@@ -30,7 +30,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Word (Word64)
 import Options.Applicative
-import System.Rados
+import System.Rados.Monadic
 import Text.Printf
 
 import Vaultaire.Conversion.Receiver

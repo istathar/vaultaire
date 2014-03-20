@@ -47,7 +47,7 @@ import Options.Applicative hiding (reader)
 import System.Environment (getProgName)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
-import qualified System.Rados as Rados
+import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as Zero
 import Text.Printf
 

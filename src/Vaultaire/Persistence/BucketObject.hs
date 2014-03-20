@@ -40,7 +40,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Serialize
 import Data.Word
-import System.Rados
+import System.Rados.Monadic
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Internal.CoreTypes
