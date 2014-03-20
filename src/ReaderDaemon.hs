@@ -153,26 +153,30 @@ demoWave
     :: Origin
     -> Timemark
     -> Map Timestamp Point
-demoWave o i =
+demoWave o i0 =
     let
-        times = [i,i+5..i+99999]
-        ts = map fromIntegral times
+        marks = [i0, i0 + 5 .. i0 + 99999]
+        is = map fromIntegral marks
 
         period = 3600 * 3
         f = 1/period                                    -- instances per second
         w = 2 * pi * f
         y t = sin (w * ((fromRational . toRational) t))
 
-        createPoint t = Point {
+        createPoint t v = Point {
                             origin = o,
                             source = SourceDict $ Map.fromList [("wave","sine")],
-                            timestamp = t * 1000000000,
-                            payload = Measurement (y t)
+                            timestamp = t,
+                            payload = Measurement v
                         }
 
-        insertPoint acc t = Map.insert t (createPoint t) acc
+        insertPoint acc i =
+            let
+                t = i * 1000000000
+            in
+                Map.insert t (createPoint t (y i)) acc
     in
-        foldl insertPoint Map.empty ts
+        foldl insertPoint Map.empty is
 
 
 contentsReader :: ByteString -> ByteString -> Mutexes -> IO ()
