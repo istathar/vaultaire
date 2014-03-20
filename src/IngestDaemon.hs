@@ -43,8 +43,8 @@ import Options.Applicative
 import System.Environment (getProgName)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
-import System.Rados (Pool)
-import qualified System.Rados as Rados
+import System.Rados.Monadic (Pool)
+import qualified System.Rados.Monadic as Rados
 import System.ZMQ4.Monadic (runZMQ)
 import qualified System.ZMQ4.Monadic as Zero
 import Text.Printf

@@ -31,7 +31,7 @@ import Data.Foldable
 import Data.Serialize
 import Data.Set (Set)
 import qualified Data.Set as Set
-import System.Rados
+import System.Rados.Monadic
 
 import Vaultaire.Conversion.Reader
 import Vaultaire.Conversion.Writer
