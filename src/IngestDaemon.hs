@@ -407,6 +407,7 @@ receiver broker Mutexes{..} d = do
             -- Between each timeout or recieved message, send all outstanding
             -- acks.
             sendAcks work acknowledge
+            liftIO $ threadDelay 100000
 
     linkThread $ runZMQ $ do
         (identifier, hostname) <- liftIO getIdentifierAndHostname

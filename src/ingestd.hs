@@ -20,9 +20,10 @@ import System.Posix.Signals
 
 main :: IO ()
 main = do
+{-
     n <- getNumProcessors
     setNumCapabilities n
-
+-}
 
     options <- execParser commandLineParser
     quit_mvar <- newEmptyMVar
