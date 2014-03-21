@@ -44,6 +44,7 @@ executable           ingestd
 
   ghc-options:       -O2
                      -threaded
+                     -rtsopts
                      -Wall
                      -Wwarn
                      -fwarn-tabs
@@ -84,6 +85,7 @@ executable           readerd
 
   ghc-options:       -O2
                      -threaded
+                     -rtsopts
                      -Wall
                      -Wwarn
                      -fwarn-tabs
@@ -119,6 +121,7 @@ executable           vault
 
   ghc-options:       -O2
                      -threaded
+                     -rtsopts
                      -Wall
                      -Wwarn
                      -fwarn-tabs
@@ -146,6 +149,7 @@ executable           telemetry
 
   ghc-options:       -O2
                      -threaded
+                     -rtsopts
                      -Wall
                      -Wwarn
                      -fwarn-tabs
@@ -176,6 +180,7 @@ executable           query
 
   ghc-options:       -O2
                      -threaded
+                     -rtsopts
                      -Wall
                      -Wwarn
                      -fwarn-tabs
@@ -217,6 +222,7 @@ test-suite           check
 
   ghc-options:       -O2
                      -threaded
+                     -rtsopts
                      -Wall
                      -Wwarn
                      -fwarn-tabs
