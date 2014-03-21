@@ -363,6 +363,7 @@ worker Mutexes{..} = do
 
                 requestWrite storage pm o st (Ack ident S.empty) n
                 void $ tryPutMVar pending ()
+                liftIO $ threadDelay 1000000
 
 
 requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> Int -> IO ()
@@ -407,7 +408,6 @@ receiver broker Mutexes{..} d = do
             -- Between each timeout or recieved message, send all outstanding
             -- acks.
             sendAcks work acknowledge
-            liftIO $ threadDelay 100000
 
     linkThread $ runZMQ $ do
         (identifier, hostname) <- liftIO getIdentifierAndHostname
