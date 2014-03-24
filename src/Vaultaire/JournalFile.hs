@@ -11,16 +11,19 @@
 
 {-# LANGUAGE OverloadedStrings  #-}
 
-module Vaultaire.JournalFile where
+module Vaultaire.JournalFile
 (
     BlockName,
     BlockSize,
     parseInboundJournal,
     makeInboundJournal
-)
+) where
 
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char8
+import Data.ByteString (ByteString)
+import Data.Monoid((<>), mempty)
+import Data.List(foldl')
 
 import qualified Data.ByteString.Char8 as S
 
@@ -34,11 +37,14 @@ parseInboundJournal :: ByteString -> [(BlockName, BlockSize)]
 parseInboundJournal = map f . S.lines
   where
     f l = case S.split ',' l of
-            [a,b] -> (a,read b)
-            _     -> error $ "Failed to parse journal file on line:\n\t" ++ l
+            [a,b] -> case S.readInteger b of
+                Just (n,_)  -> (a, fromIntegral n)
+                Nothing -> die l
+            _ -> die l
+    die l = error $ "Failed to parse size in journal file on line:\n\t" ++ S.unpack l
             
 makeInboundJournal :: [(BlockName, BlockSize)] -> ByteString
-makeInboundJournal = toByteString . foldr f mempty
+makeInboundJournal = toByteString . foldl' f mempty
   where
     f builder (name, size) = builder <>
                              fromByteString name <>
