@@ -49,20 +49,13 @@ import System.ZMQ4.Monadic (runZMQ)
 import qualified System.ZMQ4.Monadic as Zero
 import Text.Printf
 
-import Vaultaire.Conversion.Receiver
-import Vaultaire.Conversion.Writer
-import Vaultaire.Internal.CoreTypes
-import qualified Vaultaire.Persistence.BucketObject as Bucket
-import Vaultaire.Persistence.Constants
-import qualified Vaultaire.Persistence.ContentsObject as Contents
-
 #include "config.h"
 
 data Options = Options {
     optGlobalDebug     :: !Bool,
     optGlobalWorkers   :: !Int,
     optGlobalWriters   :: !Int,
-    optGlobalRateLimit :: !Int,
+    optGlobalTimeLimit :: !Int,
     argGlobalPoolName  :: !String,
     optGlobalUserName  :: !String,
     argBrokerHost      :: !String
@@ -526,12 +519,12 @@ toplevel = Options
              showDefault <>
              help "Number of connections writing to Ceph concurrently")
     <*> option
-            (long "objects" <>
+            (long "timelimit" <>
              short 's' <>
-             value 100 <>
+             value 10 <>
              metavar "NUM" <>
              showDefault <>
-             help "Number of objects being written to simultaneously")
+             help "Maximum time to wait before flushing buffers to Ceph")
     <*> strOption
             (long "pool" <>
              short 'p' <>
