@@ -1,4 +1,4 @@
-module CommunicationsThread where
+module Vaultaire.CommunicationsThread where
 
 import Control.Concurrent.STM.TChan
 import Control.Monad
@@ -17,7 +17,7 @@ import Text.Printf
 
 type Telemetry = (String,String,String)
 
-telemetry_sender :: String -> Bool -> TChan Telemetry  -> IO ()
+telemetry_sender :: String -> Bool -> TChan Telemetry -> IO ()
 telemetry_sender broker d telemetry =
     runZMQ $ do
         (identifier, hostname) <- liftIO getIdentifierAndHostname
@@ -38,4 +38,5 @@ telemetry_sender broker d telemetry =
         let identifier = S.pack (name ++ "/" ++ show pid)
         return (identifier, hostname)
 
-
+output :: MonadIO ω => TChan (String,String,String) -> String -> String -> String -> ω ()
+output telemetry k v u = liftIO $ atomically $ writeTChan telemetry (k, v, u)

@@ -21,6 +21,7 @@ executable           bufferd
                      containers >= 0.5,
                      network,
                      cereal,
+                     uuid,
                      semigroups,
                      transformers,
                      mtl,
