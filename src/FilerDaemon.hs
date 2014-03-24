@@ -18,7 +18,7 @@
 {-# LANGUAGE RecordWildCards    #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
-module IngestDaemon where
+module FilerDaemon where
 
 import Blaze.ByteString.Builder
 import Codec.Compression.LZ4

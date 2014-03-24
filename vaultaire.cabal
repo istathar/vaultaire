@@ -12,7 +12,7 @@ stability:           experimental
 
 build-type:          Custom
 
-executable           ingestd
+executable           bufferd
   default-language:  Haskell2010
 
   build-depends:     base,
@@ -38,7 +38,49 @@ executable           ingestd
                      blaze-builder,
                      rados-haskell >= 3.0.0
 
-  main-is:           ingestd.hs
+  main-is:           bufferd.hs
+  hs-source-dirs:    src
+  include-dirs:      .
+
+  ghc-options:       -O2
+                     -threaded
+                     -rtsopts
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -funbox-strict-fields
+                     -fno-warn-missing-signatures
+                     -fno-warn-unused-do-bind
+
+  ghc-prof-options:  -prof -auto-all -caf-all
+
+executable           filerd
+  default-language:  Haskell2010
+
+  build-depends:     base,
+                     bytestring,
+                     text,
+                     containers >= 0.5,
+                     network,
+                     cereal,
+                     semigroups,
+                     transformers,
+                     mtl,
+                     stm,
+                     lz4,
+                     optparse-applicative,
+                     zeromq4-haskell,
+                     time,
+                     type-level,
+                     protobuf,
+                     locators,
+                     optparse-applicative,
+                     async,
+                     unix,
+                     blaze-builder,
+                     rados-haskell >= 3.0.0
+
+  main-is:           filerd.hs
   hs-source-dirs:    src
   include-dirs:      .
 

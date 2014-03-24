@@ -6,7 +6,8 @@ dist/
 *.hp
 
 # real binaries
-ingestd
+bufferd
+filerd
 readerd
 telemetry
 vault

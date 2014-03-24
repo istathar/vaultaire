@@ -14,7 +14,7 @@ module Main where
 import Control.Concurrent.MVar
 import Control.Monad (void)
 import GHC.Conc
-import IngestDaemon (commandLineParser, program)
+import FilerDaemon (commandLineParser, program)
 import Options.Applicative (execParser)
 import System.Posix.Signals
 

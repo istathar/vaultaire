@@ -1,4 +1,4 @@
-all: ingestd readerd vault telemetry query
+all: bufferd filerd readerd vault telemetry query
 
 #
 # The name of the binary(ies) you want to build if `make` is invoked without an
