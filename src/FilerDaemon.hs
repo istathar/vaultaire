@@ -21,6 +21,7 @@
 module FilerDaemon where
 
 import Blaze.ByteString.Builder
+import Blaze.ByteString.Builder.Char8
 import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
@@ -55,6 +56,7 @@ import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
+import Vaulaire.JournalFile
 
 #include "config.h"
 
@@ -88,15 +90,8 @@ data Storage = Storage {
     pendingCount   :: !Int
 }
 
-data Mutexes = Mutexes {
-    inbound     :: !(MVar [ByteString]),
-    acknowledge :: !(TChan Ack),
-    telemetry   :: !(TChan (String,String,String)),
-    storage     :: !(MVar Storage),
-    pending     :: !(MVar ()),
-    directory   :: !(MVar Directory),
-    metrics     :: !(MVar Metrics)
-}
+-- key,value,units
+type Telemetry = (String,String,String)
 
 data Metrics = Metrics {
     metricWrites :: Int
@@ -174,6 +169,23 @@ updateContents d o st =
 
 global_lock = S.intercalate "_" [__EPOCH__, "global"]
 
+requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> Int -> IO ()
+requestWrite storage writes o new a n0 = do
+    (Storage pm sm as n) <- takeMVar storage
+
+    let pm2 = Map.foldlWithKey f pm writes
+
+    let sm2 = case Map.lookup o sm of
+                Just st -> Map.insert o (Set.union st new) sm
+                Nothing -> Map.singleton o new
+
+    let n1 = n0 + n
+
+    putMVar storage (Storage pm2 sm2 (a:as) n1)
+
+  where
+    f acc label encodedB = Map.insertWith mappend label encodedB acc
+
 writer
     :: ByteString
     -> ByteString
@@ -183,8 +195,39 @@ writer
 writer pool' user' limit Mutexes{..} =
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool' $ forever $ do
-            -- block until signalled to wake up
-            liftIO $ takeMVar pending
+            -- TODO read journal file then read in a satisfactory number of
+            -- blocks based on thier individual size
+
+            message' <- undefined
+
+            storage <- case parseMessage message' of
+                Left err -> return ()
+                    -- TODO write block name to lost+found journal
+
+                Right ps -> do
+                    -- temporary, replace with zmq message part
+                    let n = length ps
+                    output telemetry "worker" (printf "%d" n) "points"
+
+                    let o = origin $ head ps
+
+                    d1 <- readMVar directory
+
+                    let known = getSourcesMap d1 o
+                    let st = identifyUnknown known ps
+                    let d2 = if Set.null st
+                                then d1
+                                else insertIntoDirectory d1 o st
+--
+-- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
+-- happen again down in updateContents, but it's the only way to ensure that
+-- the data in the Directory is actually on disk)
+--
+                    let pm = processBurst d2 o ps
+
+                    requestWrite storage pm o st (Ack ident S.empty) n
+
+
 
             t1 <- liftIO $ getCurrentTime
 
@@ -226,8 +269,12 @@ writer pool' user' limit Mutexes{..} =
                     liftIO $ putMVar directory d3
 
 
-            liftIO $ forM_ as $ \a ->
-                atomically $ writeTChan acknowledge a
+            -- TODO delete block object
+
+            
+            
+        -- TODO exclusive lock journal, remove blockfrom inbound,processing list
+
 
             t2 <- liftIO $ getCurrentTime
 
@@ -330,85 +377,13 @@ processBurst d o ps = build
     build = foldl f Map.empty ps
 
 
-worker :: Mutexes -> IO ()
-worker Mutexes{..} = do
-    forever $ do
-        [envelope', client', identifier', message'] <- takeMVar inbound
-        let ident = Ident envelope' client' identifier'
-
-        case parseMessage message' of
-            Left err ->
-                atomically $ writeTChan acknowledge $ Ack ident (S.pack err)
-
-            Right ps -> do
-                -- temporary, replace with zmq message part
-                let n = length ps
-                output telemetry "worker" (printf "%d" n) "points"
-
-                let o = origin $ head ps
-
-                d1 <- readMVar directory
-
-                let known = getSourcesMap d1 o
-                let st = identifyUnknown known ps
-                let d2 = if Set.null st
-                            then d1
-                            else insertIntoDirectory d1 o st
---
--- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
--- happen again down in updateContents, but it's the only way to ensure that
--- the data in the Directory is actually on disk)
---
-                let pm = processBurst d2 o ps
-
-                requestWrite storage pm o st (Ack ident S.empty) n
-                void $ tryPutMVar pending ()
-                liftIO $ threadDelay 1000000
-
-
-requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> Int -> IO ()
-requestWrite storage writes o new a n0 = do
-    (Storage pm sm as n) <- takeMVar storage
-
-    let pm2 = Map.foldlWithKey f pm writes
-
-    let sm2 = case Map.lookup o sm of
-                Just st -> Map.insert o (Set.union st new) sm
-                Nothing -> Map.singleton o new
-
-    let n1 = n0 + n
-
-    putMVar storage (Storage pm2 sm2 (a:as) n1)
-
-  where
-    f acc label encodedB = Map.insertWith mappend label encodedB acc
-
-
 --
 -- See documentation for System.ZMQ4.Monadic's async; apparently this is
 -- arranged such that the runZMQ scope does not end until the child Asyncs do
 -- (via reference counting)
 --
-receiver :: String -> Mutexes -> Bool -> IO ()
-receiver broker Mutexes{..} d = do
-    linkThread $ runZMQ $ do
-        work <- Zero.socket Zero.Router
-        Zero.setReceiveHighWM (Zero.restrict 0) work
-        Zero.connect work ("tcp://" ++ broker ++ ":5561")
-
-        forever $ do
-            res <- Zero.poll 100 [Zero.Sock work [Zero.In] Nothing]
-            case res of
-                -- Message waiting
-                [[Zero.In]] -> sendWork work inbound
-                -- Timeout, do nothing.
-                [[]]        -> return ()
-                _           -> error "reciever: unpossible"
-
-            -- Between each timeout or recieved message, send all outstanding
-            -- acks.
-            sendAcks work acknowledge
-
+comms :: String -> Bool -> TChan Telemetry  -> IO ()
+comms broker d telemetry = do
     linkThread $ runZMQ $ do
         (identifier, hostname) <- liftIO getIdentifierAndHostname
 
@@ -433,17 +408,6 @@ receiver broker Mutexes{..} d = do
   where
     linkThread a = Async.async a >>= Async.link
 
-    sendWork sock mv = Zero.receiveMulti sock >>= liftIO . putMVar mv
-
-    sendAcks sock chan = do
-        next <- liftIO . atomically $ tryReadTChan chan
-        case next of
-            Nothing -> return ()
-            Just (Ack Ident{..} failure) -> do
-                let reply = fromList [envelope, client, messageID, failure]
-                Zero.sendMulti sock reply
-                sendAcks sock chan
-
     getIdentifierAndHostname = do
         hostname <- S.pack <$> getHostName
         pid  <- getProcessID
@@ -454,48 +418,21 @@ receiver broker Mutexes{..} d = do
 
 program :: Options -> MVar () -> IO ()
 program (Options d w c s pool user broker) quitV = do
-    putStrLn $ "ingestd starting (vaultaire v" ++ VERSION ++ ")"
-    -- Incoming requests are given to worker threads via the work mvar
-    msgV <- newEmptyMVar
-
-    -- Replies from worker threads come back via the ack mvar
-    ackC <- newTChanIO
-
-    -- Telemetry streams over this channel
+    putStrLn $ "filerd starting (vaultaire v" ++ VERSION ++ ")"
+ 
     telC <- newTChanIO
-
-    storeV <- newMVar (Storage Map.empty Map.empty [] 0)
-
-    pendingV <- newEmptyMVar
-
     dV <- newMVar Map.empty
 
-    metricsV <- newMVar (Metrics 0)
-
-    let u = Mutexes {
-        inbound = msgV,
-        acknowledge = ackC,
-        telemetry = telC,
-        storage = storeV,
-        pending = pendingV,
-        directory = dV,
-        metrics = metricsV
-    }
-
-    -- Startup communications threads
-    linkThread $ receiver broker u d
+    -- Startup communications threads for telemetry and metrics
+    linkThread $ comms broker d telC
 
     -- Startup writer thread
     replicateM_ c $
-        linkThread $ writer (S.pack pool) (S.pack user) s u
-
-    -- Initialize thread pool to requested size
-    replicateM_ w $
-        linkThread $ worker u
+        linkThread $ writer (S.pack pool) (S.pack user) s dV telC
 
     -- Our work here is done
     takeMVar quitV
-    putStrLn "ingestd stopping"
+    putStrLn "filerd stopping"
   where
     linkThread a = Async.async a >>= Async.link
 
@@ -503,6 +440,15 @@ program (Options d w c s pool user broker) quitV = do
 --
 -- Handle command line arguments properly. Copied from original
 -- implementation in vault.hs
+data Mutexes = Mutexes {
+    inbound     :: !(MVar [ByteString]),
+    acknowledge :: !(TChan Ack),
+    telemetry   :: !(TChan (String,String,String)),
+    storage     :: !(MVar Storage),
+    pending     :: !(MVar ()),
+    directory   :: !(MVar Directory),
+    metrics     :: !(MVar Metrics)
+}
 --
 
 toplevel :: Parser Options
@@ -512,19 +458,12 @@ toplevel = Options
              short 'd' <>
              help "Write debug telemetry to stdout")
     <*> option
-            (long "workers" <>
-             short 'w' <>
-             metavar "NUM" <>
-             value num <>
-             showDefault <>
-             help "Number of bursts to process concurrently")
-    <*> option
             (long "connections" <>
              short 'c' <>
              metavar "NUM" <>
              value 1 <>
              showDefault <>
-             help "Number of connections writing to Ceph concurrently")
+             help "Number of workers with connections to Ceph concurrently")
     <*> option
             (long "objects" <>
              short 's' <>
