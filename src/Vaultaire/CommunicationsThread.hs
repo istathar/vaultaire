@@ -1,4 +1,4 @@
-module CommunicationsThreads where
+module CommunicationsThread where
 
 import Control.Concurrent.STM.TChan
 import Control.Monad
