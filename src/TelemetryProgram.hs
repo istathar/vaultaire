@@ -85,7 +85,7 @@ align v =
   let
     (integral,fraction) = span (/= '.') v
   in
-    printf "%7s%-4s" integral fraction -- three digits, plus the decimal
+    printf "%9s%-4s" integral fraction -- three digits, plus the decimal
 
 
 toplevel :: Parser Options

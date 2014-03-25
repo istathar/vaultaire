@@ -74,7 +74,7 @@ program :: Options -> MVar () -> IO ()
 program Options{..} quit_mvar = do
     putStrLn $ "bufferd starting (vaultaire v"  ++ VERSION ++ ")"
 
-    in_chan <- newTBChanIO 64
+    in_chan <- newTBChanIO 8
     telemetry_chan <- newTChanIO
     ack_chan <- newTBChanIO 64
 
@@ -122,7 +122,7 @@ worker pool user in_chan ack_chan telemetry_chan = do
                                       "failed to decompress message(s)"
                                       ""
 
-            output telemetry_chan "writing"
+            output telemetry_chan "journal"
                                   (show $ length writes_pending)
                                   "blocks"
 
@@ -139,8 +139,9 @@ worker pool user in_chan ack_chan telemetry_chan = do
 
             -- Now we can write the journal index and ack
             let !journal_contents = makeInboundJournal $ map fst non_failed
-            journal_write <- Rados.runObject journal_file_name $
-                Rados.append journal_contents
+            journal_write <- Rados.withSharedLock journal_file_name "name" "desc" "tag" Nothing $ do
+                Rados.runObject journal_file_name $
+                    Rados.append journal_contents
 
             case journal_write of
                 Just e -> liftIO $ putStrLn $
