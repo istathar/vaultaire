@@ -129,6 +129,7 @@ worker pool user in_chan ack_chan telemetry_chan = do
                 name <- objectName nonce counter
                 async <- Rados.runAsync . Rados.runObject name $
                     Rados.writeFull payload
+                -- (name, len) are an single entry in the journal index
                 return (async, (name, len), ack)
 
             -- Only want to ack successful writes
