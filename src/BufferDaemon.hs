@@ -16,10 +16,10 @@
 module BufferDaemon where
 
 import Codec.Compression.LZ4
+import Control.Arrow ((***))
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
-import Control.Arrow((***))
 import Control.Concurrent.STM.TBChan
 import Control.Monad
 import Control.Monad.IO.Class
@@ -30,7 +30,7 @@ import Data.List.NonEmpty (fromList)
 import Data.Maybe
 import Data.Serialize
 import Data.Time.Clock
-import Data.UUID
+import Data.UUID (toString)
 import Data.UUID.V4
 import GHC.Conc (getNumCapabilities)
 import Options.Applicative
@@ -115,13 +115,13 @@ worker pool user in_chan ack_chan telemetry_chan = do
 
             sendAcks ack_chan parse_failures
 
-            when ((length parse_failures) > 0) $
+            unless (null parse_failures) $
                 output telemetry_chan "error"
                                       "failed to decompress message(s)"
                                       ""
 
             output telemetry_chan "writing"
-                                  (show $ length $ writes_pending)
+                                  (show $ length writes_pending)
                                   "blocks"
 
             -- Write all the blocks first so that we know they're safe.
@@ -173,13 +173,13 @@ worker pool user in_chan ack_chan telemetry_chan = do
             in (built_block, fails)
           where
             tryDecompress (msgs, acks, fails) (bs, ident) =
-                case decompress bs of 
+                case decompress bs of
                     Just msg -> ( msg:msgs
-                                , (Ack ident ""):acks
+                                , Ack ident "":acks
                                 , fails )
                     Nothing ->  ( msgs
                                 , acks
-                                , (Ack ident "failed to decompress"):fails )
+                                , Ack ident "failed to decompress":fails )
             serialize = runPut . put
             mustCompress = fromJust . compress
 
@@ -240,7 +240,6 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
             Nothing -> loop sock acc bytes last_sent
             Just m  -> loop sock (m:acc) (bytes + msg_size) last_sent
 
-
     prepareMessage [envelope, client, identifier, message] =
       let ident = Ident envelope client identifier
       in return $ Just (message, ident)
@@ -248,11 +247,9 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
         liftIO $ putStrLn "Invalid ZMQ message recieved"
         return Nothing
 
-
     sendWork [] _ = return ()
     sendWork msg ch =
         liftIO $ atomically $ writeTBChan ch msg
-
 
     sendAcks sock chan = do
         next <- liftIO $ atomically $ tryReadTBChan chan
