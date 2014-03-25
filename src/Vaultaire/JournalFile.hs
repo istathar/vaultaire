@@ -18,12 +18,15 @@ module Vaultaire.JournalFile
     BlockSize,
     parseInboundJournal,
     makeInboundJournal,
+    readJournalObject,
     readBlockObject
 ) where
 
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char8
 import Data.ByteString (ByteString)
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import qualified Data.ByteString.Char8 as S
 import Data.Monoid((<>), mempty)
 import Data.List(foldl')
@@ -58,18 +61,30 @@ makeInboundJournal = toByteString . foldl' f mempty
                              fromShow size
 
 
+readJournalObject
+    :: ByteString
+    -> Pool (HashMap BlockName BlockSize)
+readJournalObject journal' = do
+    eb' <- runObject journal' readFull    -- Pool (Either RadosError ByteString)
+
+    case eb' of
+        Left (NoEntity _ _ _)   -> return HashMap.empty
+        Left err                -> liftIO $ throwIO err
+        Right b'                -> return $ HashMap.fromList $ parseInboundJournal b'
+
+
 
 readBlockObject
     :: BlockName
     -> Pool [ByteString]
 readBlockObject block' = do
-    ey' <- runObject block' readFull    -- Pool (Either RadosError ByteString)
+    ez' <- runObject block' readFull    -- Pool (Either RadosError ByteString)
 
-    case ey' of
+    case ez' of
         Left (NoEntity _ _ _)   -> return []
         Left err                -> liftIO $ throwIO err
         Right z'                -> return $ case decode z' of
-                                        Left err    -> []
+                                        Left _      -> []
                                         Right y's   -> y's
 
 -- FIXME throw error on decode failure? No point, really.
