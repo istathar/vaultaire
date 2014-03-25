@@ -206,10 +206,9 @@ filer
 filer pool' user' simultaneous directory storage telemetry metrics =
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool' $ forever $ do
-
-            (chosenm, size) <- Rados.withExclusiveLock journal_name "name" "desc" (Just 60.0) $ do
-                blocksm <- Journal.readJournalObject journal_name
-                return $ chooseBlocks __LIMIT__ blocksm
+            -- don't need to lock here; bufferd is only appending
+            blocksm <- Journal.readJournalObject journal_name
+            let (chosenm, size) = chooseBlocks __LIMIT__ blocksm
 
             output telemetry "ingest" (printf "%d" size) "bytes"
 
@@ -299,7 +298,7 @@ filer pool' user' simultaneous directory storage telemetry metrics =
             forM_ blocks $ \block -> do
                 Journal.deleteBlockObject block
             
-            Rados.withExclusiveLock journal_name "name" "desc" (Just 60.0) $ do
+            Rados.withExclusiveLock journal_name "name" "desc" Nothing $ do
                 blockm <- Journal.readJournalObject journal_name
 
                 let blocksm' = HashMap.difference blockm chosenm
