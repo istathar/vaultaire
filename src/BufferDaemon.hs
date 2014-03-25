@@ -8,62 +8,48 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE BangPatterns       #-}
-{-# LANGUAGE CPP                #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE PackageImports     #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# OPTIONS -fno-warn-type-defaults #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module BufferDaemon where
 
-import Blaze.ByteString.Builder
 import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
-import Control.Concurrent.STM.TChan
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TBChan
 import Control.Monad
-import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.List
 import Data.List.NonEmpty (fromList)
-import Data.Map (Map)
-import qualified Data.Map.Strict as Map
-import Data.Serialize (encode)
-import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.Maybe
+import Data.Serialize
+import Data.Time.Clock
 import Data.UUID
 import Data.UUID.V4
-import Data.Time.Clock
-import GHC.Conc
-import Codec.Compression.LZ4
-import Network.BSD (getHostName)
+import GHC.Conc (getNumCapabilities)
 import Options.Applicative
-import System.Environment (getProgName)
 import System.IO.Unsafe (unsafePerformIO)
-import System.Posix.Process (getProcessID)
-import System.Rados.Monadic (Pool)
 import qualified System.Rados.Monadic as Rados
 import System.ZMQ4.Monadic (runZMQ)
 import qualified System.ZMQ4.Monadic as Zero
-import Text.Printf
 import Vaultaire.CommunicationsThread
-import Data.Maybe
 import Vaultaire.JournalFile
 
 #include "../config.h"
 
 data Options = Options {
-    debug      :: !Bool,
-    workers    :: !Int,
-    time_limit :: !Int,
-    byte_limit :: !Int,
-    pool       :: !String,
-    user       :: !String,
-    broker     :: !String
+    debug     :: !Bool,
+    workers   :: !Int,
+    timeLimit :: !Int,
+    byteLimit :: !Int,
+    pool      :: !String,
+    user      :: !String,
+    broker    :: !String
 }
 
 -- This is how the broker will know to route all the way back to the client,
@@ -84,12 +70,12 @@ program :: Options -> MVar () -> IO ()
 program Options{..} quit_mvar = do
     putStrLn $ "bufferd starting (vaultaire v"  ++ VERSION ++ ")"
 
-    in_chan <- newTChanIO
+    in_chan <- newTBChanIO 64
     telemetry_chan <- newTChanIO
-    ack_chan <- newTChanIO
+    ack_chan <- newTBChanIO 64
 
     linkThread $ telemetry_sender broker debug telemetry_chan
-    linkThread $ receiver broker in_chan ack_chan time_limit byte_limit
+    linkThread $ receiver broker in_chan ack_chan timeLimit byteLimit
 
     replicateM_ workers $
         linkThread $ worker (S.pack pool)
@@ -106,32 +92,34 @@ program Options{..} quit_mvar = do
 worker
     :: ByteString
     -> ByteString
-    -> TChan (ByteString, Ack)
-    -> TChan Ack
+    -> TBChan [(ByteString, Ack)]
+    -> TBChan Ack
     -> TChan Telemetry
     -> IO ()
 worker pool user in_chan ack_chan telemtry_chan = do
-    counter <- newMVar 0
+    counter <- newMVar (0 :: Integer)
     nonce <- toString <$> nextRandom
     let journal_file_name = "01_journal"
 
     Rados.runConnect (Just user) (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool $ forever $ do
             let readIncoming = liftIO $ atomically $ readWholeChan in_chan
-            writes_pending <- decompressMessage <$> readIncoming
+
+            writes_pending <- buildBlocks <$> readIncoming
             output telemtry_chan
                    "writing" (show $ length writes_pending) "journal blocks"
 
             -- Write all the blocks first so that we know they're safe.
-            writes <- forM writes_pending $ \(payload,ack) -> do
+            writes <- forM writes_pending $ \(payload,len,ack) -> do
                 name <- objectName nonce counter
                 async <- Rados.runAsync . Rados.runObject name $
                     Rados.writeFull payload
-                return (async, (name, S.length payload), ack)
+                return (async, (name, len), ack)
 
             -- Only want to ack successful writes
             non_failed <- catMaybes <$> forM writes checkFailure
-                       -- Now we can write the journal index and ack
+
+            -- Now we can write the journal index and ack
             let !journal_contents = makeInboundJournal $ map fst non_failed
             journal_write <- Rados.runObject journal_file_name $
                 Rados.append journal_contents
@@ -139,67 +127,105 @@ worker pool user in_chan ack_chan telemtry_chan = do
             case journal_write of
                 Just e -> liftIO $ putStrLn $
                             "Error writing journal:" ++ show e
-                Nothing -> return ()
+                Nothing ->
+                    let acks = concatMap snd non_failed in
+                        forM_ acks (liftIO . atomically . writeTBChan ack_chan)
   where
-    checkFailure (async, entry, ack) = do
+    checkFailure (async, journal_entry, ack) = do
             result <- Rados.waitSafe async
             case result of
-                Nothing -> return $ Just (entry, ack)
+                Nothing -> return $ Just (journal_entry, ack)
                 Just e -> do
                     liftIO $ putStrLn $ "Error writing block: " ++ show e
                     return Nothing
 
 
-    decompressMessage = map (\(msg, ack) -> (fromJust (decompress msg), ack))
+    buildBlocks :: [[(ByteString, Ack)]] -> [(ByteString, Int, [Ack])]
+    buildBlocks = map f
+      where
+        f :: [(ByteString, Ack)] -> (ByteString, Int, [Ack])
+        f xs =
+            let acks = foldl' (\acc x -> snd x:acc) [] xs
+                msgs = map fst xs
+                decompressed = map (fromJust . decompress) msgs
+                serialized   = runPut (put decompressed)
+                recompressed = fromJust $ compress serialized
+            in (recompressed, S.length serialized, acks)
+
     objectName nonce counter = liftIO $ do
-        n <- takeMVar counter 
+        n <- takeMVar counter
         putMVar counter (n + 1)
         return $ S.pack $ "01_" ++ nonce ++ "_" ++ show n
 
-readWholeChan :: TChan a -> STM [a]
+-- Block on first element of chan, if that exists, try to read more.
+readWholeChan :: TBChan a -> STM [a]
 readWholeChan ch = do
-    next <- tryReadTChan ch
-    case next of
-        Nothing -> return []
-        Just x  -> (x:) <$> readWholeChan ch
+    x <- readTBChan ch
+    xs <- readTail
+    return (x:xs)
+  where
+    readTail = do
+        next <- tryReadTBChan ch
+        case next of
+            Nothing -> return []
+            Just x  -> (x:) <$> readTail
 
 
-receiver :: String -> TChan (ByteString, Ack) -> TChan Ack -> Int -> Int -> IO ()
+receiver :: String -> TBChan [(ByteString, Ack)] -> TBChan Ack -> Int -> Int -> IO ()
 receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
     work <- Zero.socket Zero.Router
-    Zero.setReceiveHighWM (Zero.restrict 0) work
+    Zero.setReceiveHighWM (Zero.restrict (0 :: Int)) work
     Zero.connect work ("tcp://" ++ broker ++ ":5561")
 
-    loop mempty 0
+    liftIO getCurrentTime >>= loop work [] 0
   where
-    loop acc bytes = do
-        res <- Zero.poll 100 [Zero.Sock work [Zero.In] Nothing]
-        case res of
+    loop sock acc bytes last_sent = do
+        res <- Zero.poll 100 [Zero.Sock sock [Zero.In] Nothing]
+        msg <- case res of
             -- Message waiting
-            [[Zero.In]] -> sendWork work in_chan
+            [[Zero.In]] -> Just <$> prepareMessage <$> Zero.receiveMulti sock
             -- Timeout, do nothing.
-            [[]]        -> return ()
+            [[]]        -> return Nothing
             _           -> error "reciever: unpossible"
 
         -- Between each timeout or recieved message, send all outstanding
         -- acks.
-        sendAcks work ack_chan
-    sendWork sock ch = do
-        [envelope, client, identifier, message] <- Zero.receiveMulti sock
-        let ident = Ident envelope client identifier
-        let ack = Ack ident ""
-        liftIO $ atomically $ writeTChan ch (message, ack)
-        
+        sendAcks sock ack_chan
+
+        let msg_size = maybe 0 (S.length . fst) msg
+        now <- liftIO getCurrentTime
+        let time_elapsed = now `diffUTCTime` last_sent > fromIntegral time_limit
+        when (bytes + msg_size > byte_limit || time_elapsed ) $ do
+            case msg of
+                Nothing -> sendWork acc     in_chan
+                Just m  -> sendWork (m:acc) in_chan
+            loop sock [] 0 now
+
+        case msg of
+            Nothing -> loop sock acc bytes last_sent
+            Just m  -> loop sock (m:acc) (bytes + msg_size) last_sent
+
+
+    prepareMessage [envelope, client, identifier, message] =
+      let ident = Ident envelope client identifier
+          ack = Ack ident ""
+      in (message, ack)
+    prepareMessage _ = error "Invalid ZMQ message recieved"
+
+
+    sendWork [] _ = return ()
+    sendWork msg ch =
+        liftIO $ atomically $ writeTBChan ch msg
+
 
     sendAcks sock chan = do
-        next <- liftIO . atomically $ tryReadTChan chan
+        next <- liftIO $ atomically $ tryReadTBChan chan
         case next of
             Nothing -> return ()
             Just (Ack Ident{..} failure) -> do
                 let reply = fromList [envelope, client, messageID, failure]
                 Zero.sendMulti sock reply
                 sendAcks sock chan
-
 
 -- Handle command line arguments.
 commandLineParser :: ParserInfo Options
@@ -222,19 +248,19 @@ toplevel = Options
              showDefault <>
              help "Number of bursts to process concurrently")
     <*> option
-            (long "connections" <>
-             short 'c' <>
-             metavar "NUM" <>
-             value 1 <>
-             showDefault <>
-             help "Number of connections writing to Ceph concurrently")
-    <*> option
             (long "timelimit" <>
              short 's' <>
              value 10 <>
              metavar "NUM" <>
              showDefault <>
              help "Maximum time to wait before flushing buffers to Ceph")
+    <*> option
+            (long "bytelimit" <>
+             short 'b' <>
+             metavar "NUM" <>
+             value 4194304 <>
+             showDefault <>
+             help "Number of bytes to store before flushing")
     <*> strOption
             (long "pool" <>
              short 'p' <>
@@ -253,4 +279,4 @@ toplevel = Options
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
   where
-    num = unsafePerformIO $ getNumCapabilities
+    num = unsafePerformIO getNumCapabilities

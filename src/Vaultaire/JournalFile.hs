@@ -49,6 +49,7 @@ makeInboundJournal = toByteString . foldl' f mempty
     f builder (name, size) = builder <>
                              fromByteString name <>
                              fromChar ',' <>
-                             fromShow size
+                             fromShow size <>
+                             fromChar '\n'
 
 
