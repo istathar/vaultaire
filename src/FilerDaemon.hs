@@ -318,6 +318,9 @@ filer pool' user' simultaneous directory storage telemetry metrics =
             let lRatePadded = printf "%0.1f" lRateFloat
             output telemetry "cluster" lRatePadded "labels/second"
 
+            if n == 0
+                then liftIO $ threadDelay 5000000
+                else return ()
 
 output :: MonadIO ω => TChan (String,String,String) -> String -> String -> String -> ω ()
 output telemetry k v u = liftIO $ atomically $ writeTChan telemetry (k, v, u)

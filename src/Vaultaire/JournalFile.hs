@@ -26,6 +26,7 @@ module Vaultaire.JournalFile
 
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char8
+import Codec.Compression.LZ4
 import Data.ByteString (ByteString)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -100,9 +101,11 @@ readBlockObject block' = do
     case ez' of
         Left (NoEntity _ _ _)   -> return []
         Left err                -> liftIO $ throwIO err
-        Right z'                -> return $ case decode z' of
-                                        Left _      -> []
-                                        Right y's   -> y's
+        Right z'                -> return $ case decompress z' of
+                                                Just z -> case decode z of
+                                                            Left _      -> []
+                                                            Right y's   -> y's
+                                                Nothing -> []
 
 -- FIXME throw error on decode failure? No point, really.
 
