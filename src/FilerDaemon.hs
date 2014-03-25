@@ -188,7 +188,7 @@ chooseBlocks limit blocksm =
   where
     f :: (HashMap BlockName BlockSize, Int) -> BlockName -> BlockSize -> (HashMap BlockName BlockSize, Int)
     f (!m, !accumulated) block size =
-        if accumulated + size > limit
+        if accumulated + size < limit
             then (HashMap.insert block size m, accumulated + size)
             else (m, accumulated)
                 
