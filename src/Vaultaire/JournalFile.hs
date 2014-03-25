@@ -34,7 +34,6 @@ import System.Rados.Monadic
 import Data.Serialize
 import Control.Exception
 import "mtl" Control.Monad.Error ()
-import Control.Monad.IO.Class
 
 
 --newtype BlockName = BlockName ByteString
@@ -59,6 +58,21 @@ makeInboundJournal = toByteString . foldl' f mempty
                              fromByteString name <>
                              fromChar ',' <>
                              fromShow size
+
+
+writeJournalObject
+    :: ByteString
+    -> HashMap BlockName BlockSize
+    -> Pool ()
+writeJournalObject journal' blocksm = do
+    a <- runAsync . runObject journal' $ writeFull z'
+    r <- waitSafe a
+    case r of
+        Nothing     -> return ()
+        Just err    -> liftIO $ throwIO err
+  where
+    zs = HashMap.toList blocksm
+    z' = encode zs
 
 
 readJournalObject
