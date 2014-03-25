@@ -166,17 +166,21 @@ worker pool user in_chan ack_chan telemetry_chan = do
         buildBlock :: [(ByteString, Ident)]
                    -> (BuiltBlock, [BuildFailure])
         buildBlock xs =
-            let (decompressed, acks, fails) = foldl' f ([], [], []) xs
-                serialized  = serialize decompressed
+            let (bursts, acks, fails) = foldl' tryDecompress ([],[],[]) xs
+                serialized  = serialize bursts
                 compressed  = mustCompress serialized
                 built_block = (compressed, S.length serialized, acks)
             in (built_block, fails)
           where
-            f (msgs, acks, fails) (bs, ident) =
+            tryDecompress (msgs, acks, fails) (bs, ident) =
                 case decompress bs of 
-                    Just msg -> (msg:msgs, (Ack ident ""):acks, fails)
-                    Nothing -> (msgs, acks, (Ack ident "failed to decompress"):fails)
-            serialize x = runPut (put x)
+                    Just msg -> ( msg:msgs
+                                , (Ack ident ""):acks
+                                , fails )
+                    Nothing ->  ( msgs
+                                , acks
+                                , (Ack ident "failed to decompress"):fails )
+            serialize = runPut . put
             mustCompress = fromJust . compress
 
     objectName nonce counter = liftIO $ do
@@ -224,8 +228,9 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
 
         let msg_size = maybe 0 (S.length . fst) msg
         now <- liftIO getCurrentTime
-        let time_exceeded = now `diffUTCTime` last_sent > fromIntegral time_limit
-        when (bytes + msg_size > byte_limit || time_exceeded ) $ do
+        let expiry = now `diffUTCTime` last_sent > fromIntegral time_limit
+
+        when (bytes + msg_size > byte_limit || expiry ) $ do
             case msg of
                 Nothing -> sendWork acc     in_chan
                 Just m  -> sendWork (m:acc) in_chan
