@@ -19,6 +19,7 @@ import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
+import Control.Arrow((***))
 import Control.Concurrent.STM.TBChan
 import Control.Monad
 import Control.Monad.IO.Class
@@ -65,6 +66,9 @@ data Ack = Ack {
     failure :: !ByteString -- possible failure, empty for success
 }
 
+type BuiltBlock = (ByteString, Int, [Ack])
+type BuildFailure = Ack
+
 -- Entrypoint
 program :: Options -> MVar () -> IO ()
 program Options{..} quit_mvar = do
@@ -89,15 +93,17 @@ program Options{..} quit_mvar = do
   where
     linkThread a = Async.async a >>= Async.link
 
+
 worker
     :: ByteString
     -> ByteString
-    -> TBChan [(ByteString, Ack)]
+    -> TBChan [(ByteString, Ident)]
     -> TBChan Ack
     -> TChan Telemetry
     -> IO ()
-worker pool user in_chan ack_chan telemtry_chan = do
+worker pool user in_chan ack_chan telemetry_chan = do
     counter <- newMVar (0 :: Integer)
+    -- Seesed in a system dependent fashion.
     nonce <- toString <$> nextRandom
     let journal_file_name = "01_journal"
 
@@ -105,9 +111,17 @@ worker pool user in_chan ack_chan telemtry_chan = do
         Rados.runPool pool $ forever $ do
             let readIncoming = liftIO $ atomically $ readWholeChan in_chan
 
-            writes_pending <- buildBlocks <$> readIncoming
-            output telemtry_chan
-                   "writing" (show $ length writes_pending) "journal blocks"
+            (writes_pending, parse_failures) <- buildBlocks <$> readIncoming
+
+            sendAcks ack_chan parse_failures
+
+            output telemetry_chan  "failed to parse"
+                                   (show $ length $ parse_failures)
+                                   "messages"
+
+            output telemetry_chan "writing"
+                                  (show $ length $ writes_pending)
+                                  "blocks"
 
             -- Write all the blocks first so that we know they're safe.
             writes <- forM writes_pending $ \(payload,len,ack) -> do
@@ -129,7 +143,7 @@ worker pool user in_chan ack_chan telemtry_chan = do
                             "Error writing journal:" ++ show e
                 Nothing ->
                     let acks = concatMap snd non_failed in
-                        forM_ acks (liftIO . atomically . writeTBChan ack_chan)
+                        sendAcks ack_chan acks
   where
     checkFailure (async, journal_entry, ack) = do
             result <- Rados.waitSafe async
@@ -140,22 +154,37 @@ worker pool user in_chan ack_chan telemtry_chan = do
                     return Nothing
 
 
-    buildBlocks :: [[(ByteString, Ack)]] -> [(ByteString, Int, [Ack])]
-    buildBlocks = map f
+    buildBlocks :: [[(ByteString, Ident)]] -> ([BuiltBlock], [BuildFailure])
+    buildBlocks = foldl' combine ([], []) . map buildBlock
       where
-        f :: [(ByteString, Ack)] -> (ByteString, Int, [Ack])
-        f xs =
-            let acks = foldl' (\acc x -> snd x:acc) [] xs
-                msgs = map fst xs
-                decompressed = map (fromJust . decompress) msgs
-                serialized   = runPut (put decompressed)
-                recompressed = fromJust $ compress serialized
-            in (recompressed, S.length serialized, acks)
+        combine :: ([BuiltBlock], [BuildFailure])
+                -> (BuiltBlock, [BuildFailure])
+                -> ([BuiltBlock], [BuildFailure])
+        combine (blocks, failures) = (:blocks) *** (failures++)
+
+        buildBlock :: [(ByteString, Ident)]
+                   -> (BuiltBlock, [BuildFailure])
+        buildBlock xs =
+            let (decompressed, acks, fails) = foldl' f ([], [], []) xs
+                serialized  = serialize decompressed
+                compressed  = mustCompress serialized
+                built_block = (compressed, S.length serialized, acks)
+            in (built_block, fails)
+          where
+            f (msgs, acks, fails) (bs, ident) =
+                case decompress bs of 
+                    Just msg -> (msg:msgs, (Ack ident ""):acks, fails)
+                    Nothing -> (msgs, acks, (Ack ident "failed to decompress"):fails)
+            serialize x = runPut (put x)
+            mustCompress = fromJust . compress
 
     objectName nonce counter = liftIO $ do
         n <- takeMVar counter
         putMVar counter (n + 1)
         return $ S.pack $ "01_" ++ nonce ++ "_" ++ show n
+
+    sendAcks ch =
+        mapM_ (liftIO . atomically . writeTBChan ch)
 
 -- Block on first element of chan, if that exists, try to read more.
 readWholeChan :: TBChan a -> STM [a]
@@ -171,7 +200,7 @@ readWholeChan ch = do
             Just x  -> (x:) <$> readTail
 
 
-receiver :: String -> TBChan [(ByteString, Ack)] -> TBChan Ack -> Int -> Int -> IO ()
+receiver :: String -> TBChan [(ByteString, Ident)] -> TBChan Ack -> Int -> Int -> IO ()
 receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
     work <- Zero.socket Zero.Router
     Zero.setReceiveHighWM (Zero.restrict (0 :: Int)) work
@@ -194,8 +223,8 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
 
         let msg_size = maybe 0 (S.length . fst) msg
         now <- liftIO getCurrentTime
-        let time_elapsed = now `diffUTCTime` last_sent > fromIntegral time_limit
-        when (bytes + msg_size > byte_limit || time_elapsed ) $ do
+        let time_exceeded = now `diffUTCTime` last_sent > fromIntegral time_limit
+        when (bytes + msg_size > byte_limit || time_exceeded ) $ do
             case msg of
                 Nothing -> sendWork acc     in_chan
                 Just m  -> sendWork (m:acc) in_chan
@@ -208,8 +237,7 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
 
     prepareMessage [envelope, client, identifier, message] =
       let ident = Ident envelope client identifier
-          ack = Ack ident ""
-      in (message, ack)
+      in (message, ident)
     prepareMessage _ = error "Invalid ZMQ message recieved"
 
 
@@ -231,7 +259,7 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
 commandLineParser :: ParserInfo Options
 commandLineParser = info (helper <*> toplevel)
             (fullDesc <>
-                progDesc "Ingestion worker to feed points into the vault" <>
+                progDesc "Buffer daemon to write points to journal" <>
                 header "A data vault for metrics")
 
 toplevel :: Parser Options
@@ -253,7 +281,7 @@ toplevel = Options
              value 10 <>
              metavar "NUM" <>
              showDefault <>
-             help "Maximum time to wait before flushing buffers to Ceph")
+             help "Number of seconds to wait before flushing")
     <*> option
             (long "bytelimit" <>
              short 'b' <>
