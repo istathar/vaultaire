@@ -19,7 +19,8 @@ module Vaultaire.JournalFile
     parseInboundJournal,
     makeInboundJournal,
     readJournalObject,
-    readBlockObject
+    readBlockObject,
+    deleteBlockObject
 ) where
 
 import Blaze.ByteString.Builder
@@ -102,4 +103,16 @@ readBlockObject block' = do
                                         Right y's   -> y's
 
 -- FIXME throw error on decode failure? No point, really.
+
+
+deleteBlockObject
+    :: ByteString
+    -> Pool ()
+deleteBlockObject block' = do
+    a <- runAsync . runObject block' $ remove
+    r <- waitComplete a
+    case r of
+        Nothing     -> return ()
+        Just err    -> liftIO $ throwIO err
+
 
