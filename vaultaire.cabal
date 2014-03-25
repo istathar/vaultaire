@@ -27,6 +27,7 @@ executable           bufferd
                      mtl,
                      stm,
                      lz4,
+                     stm-chans,
                      optparse-applicative,
                      zeromq4-haskell,
                      time,
