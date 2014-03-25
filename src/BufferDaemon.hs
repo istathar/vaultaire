@@ -78,8 +78,11 @@ program Options{..} quit_mvar = do
     telemetry_chan <- newTChanIO
     ack_chan <- newTBChanIO 64
 
-    linkThread $ telemetry_sender broker debug telemetry_chan
-    linkThread $ receiver broker in_chan ack_chan timeLimit byteLimit
+    linkThread $
+        telemetry_sender broker debug telemetry_chan
+
+    linkThread $
+        receiver broker in_chan ack_chan telemetry_chan timeLimit byteLimit
 
     replicateM_ workers $
         linkThread $ worker (S.pack pool)
@@ -92,7 +95,6 @@ program Options{..} quit_mvar = do
     putStrLn "bufferd stopping"
   where
     linkThread a = Async.async a >>= Async.link
-
 
 worker
     :: ByteString
@@ -206,13 +208,20 @@ readWholeChan ch = do
             Just x  -> (x:) <$> readTail
 
 
-receiver :: String -> TBChan [(ByteString, Ident)] -> TBChan Ack -> Int -> Int -> IO ()
-receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
-    work <- Zero.socket Zero.Router
-    Zero.setReceiveHighWM (Zero.restrict (0 :: Int)) work
-    Zero.connect work ("tcp://" ++ broker ++ ":5561")
+receiver :: String
+         -> TBChan [(ByteString, Ident)]
+         -> TBChan Ack
+         -> TChan Telemetry
+         -> Int
+         -> Int
+         -> IO ()
+receiver broker in_chan ack_chan telemetry_chan time_limit byte_limit =
+    runZMQ $ do
+        work <- Zero.socket Zero.Router
+        Zero.setReceiveHighWM (Zero.restrict (0 :: Int)) work
+        Zero.connect work ("tcp://" ++ broker ++ ":5561")
 
-    liftIO getCurrentTime >>= loop work [] 0
+        liftIO getCurrentTime >>= loop work [] 0
   where
     loop sock acc bytes last_sent = do
         res <- Zero.poll 100 [Zero.Sock sock [Zero.In] Nothing]
@@ -245,19 +254,22 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
       let ident = Ident envelope client identifier
       in return $ Just (message, ident)
     prepareMessage _ = do
-        liftIO $ putStrLn "Invalid ZMQ message recieved"
+        liftIO $ putStrLn "Invalid ZMQ message recieved, ignoring."
         return Nothing
 
     sendWork [] _ = return ()
-    sendWork msg ch =
-        liftIO $ atomically $ writeTBChan ch msg
+    sendWork msg ch = liftIO $ do
+        output telemetry_chan "congealed"
+                              (show $ length msg)
+                              "bursts"
+        atomically $ writeTBChan ch msg
 
     sendAcks sock chan = do
         next <- liftIO $ atomically $ tryReadTBChan chan
         case next of
             Nothing -> return ()
-            Just (Ack Ident{..} failure) -> do
-                let reply = fromList [envelope, client, messageID, failure]
+            Just (Ack Ident{..} payload) -> do
+                let reply = fromList [envelope, client, messageID, payload]
                 Zero.sendMulti sock reply
                 sendAcks sock chan
 
@@ -278,7 +290,7 @@ toplevel = Options
             (long "workers" <>
              short 'w' <>
              metavar "NUM" <>
-             value num <>
+             value (unsafePerformIO getNumCapabilities) <>
              showDefault <>
              help "Number of bursts to process concurrently")
     <*> option
@@ -312,5 +324,3 @@ toplevel = Options
     <*> argument str
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
-  where
-    num = unsafePerformIO getNumCapabilities
