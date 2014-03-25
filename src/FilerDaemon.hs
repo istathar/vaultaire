@@ -211,14 +211,20 @@ filer pool' user' simultaneous directory storage telemetry metrics =
                 blocksm <- Journal.readJournalObject journal_name
                 return $ chooseBlocks __LIMIT__ blocksm
 
-            output telemetry "chosen" (printf "%d" size) "bytes"
+            output telemetry "ingest" (printf "%d" size) "bytes"
 
+            if size > 0
+                then writeCycle chosenm
+                else liftIO $ threadDelay 5000000
+
+  where
+    writeCycle chosenm = do
             let blocks = HashMap.keys chosenm
 
             forM_ blocks $ \block -> do
                 bursts <- Journal.readBlockObject block
 
-                forM_ bursts $ \message' -> do
+                liftIO $ Async.mapConcurrently (\message' -> do
                     case parseMessage message' of
                         Left err -> do
                             -- TODO write block name to some lost+found journal
@@ -232,7 +238,7 @@ filer pool' user' simultaneous directory storage telemetry metrics =
 
                             let o = origin $ head ps
 
-                            d1 <- liftIO $ readMVar directory
+                            d1 <- readMVar directory
 
                             let known = getSourcesMap d1 o
                             let st = identifyUnknown known ps
@@ -246,8 +252,8 @@ filer pool' user' simultaneous directory storage telemetry metrics =
         --
                             let pm = processBurst d2 o ps
 
-                            liftIO $ requestWrite storage pm o st n
-
+                            requestWrite storage pm o st n
+                        ) bursts
 
 
             t1 <- liftIO $ getCurrentTime
@@ -318,9 +324,6 @@ filer pool' user' simultaneous directory storage telemetry metrics =
             let lRatePadded = printf "%0.1f" lRateFloat
             output telemetry "cluster" lRatePadded "labels/second"
 
-            if n == 0
-                then liftIO $ threadDelay 5000000
-                else return ()
 
 output :: MonadIO ω => TChan (String,String,String) -> String -> String -> String -> ω ()
 output telemetry k v u = liftIO $ atomically $ writeTChan telemetry (k, v, u)
