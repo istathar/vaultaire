@@ -9,23 +9,29 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE PackageImports    #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Vaultaire.JournalFile
 (
     BlockName,
     BlockSize,
     parseInboundJournal,
-    makeInboundJournal
+    makeInboundJournal,
+    readBlockObject
 ) where
 
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char8
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S
 import Data.Monoid((<>), mempty)
 import Data.List(foldl')
-
-import qualified Data.ByteString.Char8 as S
+import System.Rados.Monadic
+import Data.Serialize
+import Control.Exception
+import "mtl" Control.Monad.Error ()
+import Control.Monad.IO.Class
 
 
 --newtype BlockName = BlockName ByteString
@@ -51,4 +57,20 @@ makeInboundJournal = toByteString . foldl' f mempty
                              fromChar ',' <>
                              fromShow size
 
+
+
+readBlockObject
+    :: BlockName
+    -> Pool [ByteString]
+readBlockObject block' = do
+    ey' <- runObject block' readFull    -- Pool (Either RadosError ByteString)
+
+    case ey' of
+        Left (NoEntity _ _ _)   -> return []
+        Left err                -> liftIO $ throwIO err
+        Right z'                -> return $ case decode z' of
+                                        Left err    -> []
+                                        Right y's   -> y's
+
+-- FIXME throw error on decode failure? No point, really.
 

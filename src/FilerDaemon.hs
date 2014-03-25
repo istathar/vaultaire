@@ -56,7 +56,7 @@ import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
-import Vaulaire.JournalFile
+import qualified Vaulaire.JournalFile as Journal
 
 #include "config.h"
 
@@ -169,6 +169,8 @@ updateContents d o st =
 
 global_lock = S.intercalate "_" [__EPOCH__, "global"]
 
+journal_lock = S.intercalate "_" [__EPOCH__, "journal"]
+
 requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> Int -> IO ()
 requestWrite storage writes o new a n0 = do
     (Storage pm sm as n) <- takeMVar storage
@@ -197,6 +199,9 @@ writer pool' user' limit Mutexes{..} =
         Rados.runPool pool' $ forever $ do
             -- TODO read journal file then read in a satisfactory number of
             -- blocks based on thier individual size
+
+            Rados.withSharedLock journal_lock "name" "desc" "tag" (Just 60.0) $ do
+                Journal.readJournalObject
 
             message' <- undefined
 
