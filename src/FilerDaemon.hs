@@ -65,6 +65,7 @@ data Options = Options {
     optGlobalDebug     :: !Bool,
     optGlobalWriters   :: !Int,
     optGlobalRateLimit :: !Int,
+    optGlobalByteLimit :: !Int,
     argGlobalPoolName  :: !String,
     optGlobalUserName  :: !String,
     argBrokerHost      :: !String
@@ -176,12 +177,6 @@ requestWrite storage writes o new n0 = do
     f acc label encodedB = Map.insertWith mappend label encodedB acc
 
 
-
-
-
-__LIMIT__ = 67108864    -- 64 MB
-
-
 chooseBlocks :: Int -> HashMap BlockName BlockSize -> (HashMap BlockName BlockSize, Int)
 chooseBlocks limit blocksm = 
     HashMap.foldlWithKey' f (HashMap.empty, 0) blocksm
@@ -193,22 +188,22 @@ chooseBlocks limit blocksm =
             else (m, accumulated)
                 
 
-
 filer
     :: ByteString
     -> ByteString
+    -> Int
     -> Int
     -> MVar Directory
     -> MVar Storage
     -> TChan Telemetry
     -> MVar Metrics
     -> IO ()
-filer pool' user' simultaneous directory storage telemetry metrics =
+filer pool' user' bytelimit simultaneous directory storage telemetry metrics =
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool' $ forever $ do
             -- don't need to lock here; bufferd is only appending
             blocksm <- Journal.readJournalObject journal_name
-            let (chosenm, size) = chooseBlocks __LIMIT__ blocksm
+            let (chosenm, size) = chooseBlocks bytelimit blocksm
 
             output telemetry "ingest" (printf "%d" size) "bytes"
 
@@ -443,7 +438,7 @@ comms broker d telemetry metrics = do
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d c s pool user broker) quitV = do
+program (Options d c s bytelimit pool user broker) quitV = do
     putStrLn $ "filerd starting (vaultaire v" ++ VERSION ++ ")"
  
     dV <- newMVar Map.empty
@@ -456,7 +451,7 @@ program (Options d c s pool user broker) quitV = do
 
     -- Startup writer thread
     replicateM_ c $
-        linkThread $ filer (S.pack pool) (S.pack user) s dV storeV telC metricV
+        linkThread $ filer (S.pack pool) (S.pack user) bytelimit s dV storeV telC metricV
 
     -- Our work here is done
     takeMVar quitV
@@ -485,6 +480,13 @@ toplevel = Options
              metavar "NUM" <>
              showDefault <>
              help "Number of objects being written to simultaneously")
+    <*> option
+            (long "bytelimit" <>
+             short 'b' <>
+             metavar "NUM" <>
+             value 67108864 <>
+             showDefault <>
+             help "Size limit for inbound work, in bytes")
     <*> strOption
             (long "pool" <>
              short 'p' <>
