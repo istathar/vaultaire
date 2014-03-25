@@ -217,7 +217,7 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
         res <- Zero.poll 100 [Zero.Sock sock [Zero.In] Nothing]
         msg <- case res of
             -- Message waiting
-            [[Zero.In]] -> Just <$> prepareMessage <$> Zero.receiveMulti sock
+            [[Zero.In]] -> Zero.receiveMulti sock >>= prepareMessage
             -- Timeout, do nothing.
             [[]]        -> return Nothing
             _           -> error "reciever: unpossible"
@@ -243,8 +243,10 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
 
     prepareMessage [envelope, client, identifier, message] =
       let ident = Ident envelope client identifier
-      in (message, ident)
-    prepareMessage _ = error "Invalid ZMQ message recieved"
+      in return $ Just (message, ident)
+    prepareMessage _ = do
+        liftIO $ putStrLn "Invalid ZMQ message recieved"
+        return Nothing
 
 
     sendWork [] _ = return ()
