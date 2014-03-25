@@ -21,8 +21,6 @@
 module FilerDaemon where
 
 import Blaze.ByteString.Builder
-import Blaze.ByteString.Builder.Char8
-import Codec.Compression.LZ4
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
 import Control.Concurrent.STM.TChan
@@ -34,6 +32,8 @@ import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import Data.Serialize (encode)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -56,13 +56,13 @@ import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
-import qualified Vaulaire.JournalFile as Journal
+import Vaultaire.JournalFile (BlockName,BlockSize)
+import qualified Vaultaire.JournalFile as Journal
 
 #include "config.h"
 
 data Options = Options {
     optGlobalDebug     :: !Bool,
-    optGlobalWorkers   :: !Int,
     optGlobalWriters   :: !Int,
     optGlobalRateLimit :: !Int,
     argGlobalPoolName  :: !String,
@@ -70,23 +70,9 @@ data Options = Options {
     argBrokerHost      :: !String
 }
 
--- This is how the broker will know to route all the way back to the client,
--- and how the client will know which message we are referencing.
-data Ident = Ident {
-    envelope  :: !ByteString, -- handled for us by the router socket, opaque.
-    client    :: !ByteString, -- handled for us by the router socket, opaque.
-    messageID :: !ByteString  -- a uint16_t, but opaque to us.
-}
-
-data Ack = Ack {
-    ident   :: Ident,
-    failure :: !ByteString -- possible failure, empty for success
-}
-
 data Storage = Storage {
     pendingWrites  :: !(Map Label Builder),
     pendingSources :: !(Map Origin (Set SourceDict)),
-    pendingAcks    :: ![Ack],
     pendingCount   :: !Int
 }
 
@@ -105,6 +91,7 @@ data Metrics = Metrics {
 --
 
 sanityCheck :: [Point] -> Either String [Point]
+sanityCheck [] = Left "Empty burst"
 sanityCheck ps =
   let
     (Origin o') = origin $ head ps
@@ -169,11 +156,11 @@ updateContents d o st =
 
 global_lock = S.intercalate "_" [__EPOCH__, "global"]
 
-journal_lock = S.intercalate "_" [__EPOCH__, "journal"]
+journal_name = S.intercalate "_" [__EPOCH__, "journal"]
 
-requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Ack -> Int -> IO ()
-requestWrite storage writes o new a n0 = do
-    (Storage pm sm as n) <- takeMVar storage
+requestWrite :: MVar Storage -> Map Label Builder -> Origin -> Set SourceDict -> Int -> IO ()
+requestWrite storage writes o new n0 = do
+    (Storage pm sm n) <- takeMVar storage
 
     let pm2 = Map.foldlWithKey f pm writes
 
@@ -183,61 +170,90 @@ requestWrite storage writes o new a n0 = do
 
     let n1 = n0 + n
 
-    putMVar storage (Storage pm2 sm2 (a:as) n1)
+    putMVar storage (Storage pm2 sm2 n1)
 
   where
     f acc label encodedB = Map.insertWith mappend label encodedB acc
 
-writer
+
+
+
+
+__LIMIT__ = 67108864    -- 64 MB
+
+
+chooseBlocks :: Int -> HashMap BlockName BlockSize -> (HashMap BlockName BlockSize, Int)
+chooseBlocks limit blocksm = 
+    HashMap.foldlWithKey' f (HashMap.empty, 0) blocksm
+  where
+    f :: (HashMap BlockName BlockSize, Int) -> BlockName -> BlockSize -> (HashMap BlockName BlockSize, Int)
+    f (!m, !accumulated) block size =
+        if accumulated + size > limit
+            then (HashMap.insert block size m, accumulated + size)
+            else (m, accumulated)
+                
+
+
+filer
     :: ByteString
     -> ByteString
     -> Int
-    -> Mutexes
+    -> MVar Directory
+    -> MVar Storage
+    -> TChan Telemetry
+    -> MVar Metrics
     -> IO ()
-writer pool' user' limit Mutexes{..} =
+filer pool' user' simultaneous directory storage telemetry metrics =
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool' $ forever $ do
-            -- TODO read journal file then read in a satisfactory number of
-            -- blocks based on thier individual size
 
-            Rados.withSharedLock journal_lock "name" "desc" "tag" (Just 60.0) $ do
-                Journal.readJournalObject
+            (chosenm, size) <- Rados.withExclusiveLock journal_name "name" "desc" (Just 60.0) $ do
+                blocksm <- Journal.readJournalObject journal_name
+                return $ chooseBlocks __LIMIT__ blocksm
 
-            message' <- undefined
+            output telemetry "chosen" (printf "%d" size) "bytes"
 
-            storage <- case parseMessage message' of
-                Left err -> return ()
-                    -- TODO write block name to lost+found journal
+            let blocks = HashMap.keys chosenm
 
-                Right ps -> do
-                    -- temporary, replace with zmq message part
-                    let n = length ps
-                    output telemetry "worker" (printf "%d" n) "points"
+            forM_ blocks $ \block -> do
+                bursts <- Journal.readBlockObject block
 
-                    let o = origin $ head ps
+                forM_ bursts $ \message' -> do
+                    case parseMessage message' of
+                        Left err -> do
+                            -- TODO write block name to some lost+found journal
+                            output telemetry "error" err ""
+                            return ()
 
-                    d1 <- readMVar directory
+                        Right ps -> do
+                            -- temporary, replace with zmq message part
+                            let n = length ps
+                            output telemetry "worker" (printf "%d" n) "points"
 
-                    let known = getSourcesMap d1 o
-                    let st = identifyUnknown known ps
-                    let d2 = if Set.null st
-                                then d1
-                                else insertIntoDirectory d1 o st
---
--- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
--- happen again down in updateContents, but it's the only way to ensure that
--- the data in the Directory is actually on disk)
---
-                    let pm = processBurst d2 o ps
+                            let o = origin $ head ps
 
-                    requestWrite storage pm o st (Ack ident S.empty) n
+                            d1 <- liftIO $ readMVar directory
+
+                            let known = getSourcesMap d1 o
+                            let st = identifyUnknown known ps
+                            let d2 = if Set.null st
+                                        then d1
+                                        else insertIntoDirectory d1 o st
+        --
+        -- (we do NOT write d2 back to the MVar here. It means duplicate work for it to
+        -- happen again down in updateContents, but it's the only way to ensure that
+        -- the data in the Directory is actually on disk)
+        --
+                            let pm = processBurst d2 o ps
+
+                            liftIO $ requestWrite storage pm o st n
 
 
 
             t1 <- liftIO $ getCurrentTime
 
-            Storage pm sm as n <- liftIO $ takeMVar storage
-            liftIO $ putMVar storage (Storage Map.empty Map.empty [] 0)
+            Storage pm sm n <- liftIO $ takeMVar storage
+            liftIO $ putMVar storage (Storage Map.empty Map.empty 0)
             let !labels = Map.size pm
 
             Metrics{..} <- liftIO $ takeMVar metrics
@@ -253,7 +269,7 @@ writer pool' user' limit Mutexes{..} =
 --
 
             Rados.withSharedLock global_lock "name" "desc" "tag" (Just 60.0) $ do
-                Bucket.appendVaultPoints limit pm
+                Bucket.appendVaultPoints simultaneous pm
 
                 unless (Map.null sm) $ do
                     d1 <- liftIO $ takeMVar directory
@@ -274,11 +290,15 @@ writer pool' user' limit Mutexes{..} =
                     liftIO $ putMVar directory d3
 
 
-            -- TODO delete block object
+            forM_ blocks $ \block -> do
+                Journal.deleteBlockObject block
+            
+            Rados.withExclusiveLock journal_name "name" "desc" (Just 60.0) $ do
+                blockm <- Journal.readJournalObject journal_name
 
-            
-            
-        -- TODO exclusive lock journal, remove blockfrom inbound,processing list
+                let blocksm' = HashMap.difference blockm chosenm
+
+                Journal.writeJournalObject journal_name blocksm'
 
 
             t2 <- liftIO $ getCurrentTime
@@ -303,11 +323,7 @@ output :: MonadIO ω => TChan (String,String,String) -> String -> String -> Stri
 output telemetry k v u = liftIO $ atomically $ writeTChan telemetry (k, v, u)
 
 parseMessage :: ByteString -> Either String [Point]
-parseMessage message' = do
-    y' <- case decompress message' of
-        Just x' -> Right x'
-        Nothing -> Left "Decompressing DataBurst failed"
-
+parseMessage y' = do
     ps <- decodeBurst y'
 
     sanityCheck ps
@@ -387,8 +403,8 @@ processBurst d o ps = build
 -- arranged such that the runZMQ scope does not end until the child Asyncs do
 -- (via reference counting)
 --
-comms :: String -> Bool -> TChan Telemetry  -> IO ()
-comms broker d telemetry = do
+comms :: String -> Bool -> TChan Telemetry -> MVar Metrics -> IO ()
+comms broker d telemetry metrics = do
     linkThread $ runZMQ $ do
         (identifier, hostname) <- liftIO getIdentifierAndHostname
 
@@ -422,18 +438,20 @@ comms broker d telemetry = do
 
 
 program :: Options -> MVar () -> IO ()
-program (Options d w c s pool user broker) quitV = do
+program (Options d c s pool user broker) quitV = do
     putStrLn $ "filerd starting (vaultaire v" ++ VERSION ++ ")"
  
-    telC <- newTChanIO
     dV <- newMVar Map.empty
+    telC <- newTChanIO
+    storeV <- newMVar (Storage Map.empty Map.empty 0)
+    metricV <- newMVar (Metrics 0)
 
     -- Startup communications threads for telemetry and metrics
-    linkThread $ comms broker d telC
+    linkThread $ comms broker d telC metricV
 
     -- Startup writer thread
     replicateM_ c $
-        linkThread $ writer (S.pack pool) (S.pack user) s dV telC
+        linkThread $ filer (S.pack pool) (S.pack user) s dV storeV telC metricV
 
     -- Our work here is done
     takeMVar quitV
@@ -441,20 +459,6 @@ program (Options d w c s pool user broker) quitV = do
   where
     linkThread a = Async.async a >>= Async.link
 
-
---
--- Handle command line arguments properly. Copied from original
--- implementation in vault.hs
-data Mutexes = Mutexes {
-    inbound     :: !(MVar [ByteString]),
-    acknowledge :: !(TChan Ack),
-    telemetry   :: !(TChan (String,String,String)),
-    storage     :: !(MVar Storage),
-    pending     :: !(MVar ()),
-    directory   :: !(MVar Directory),
-    metrics     :: !(MVar Metrics)
-}
---
 
 toplevel :: Parser Options
 toplevel = Options

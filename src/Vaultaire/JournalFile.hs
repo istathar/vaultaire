@@ -19,6 +19,7 @@ module Vaultaire.JournalFile
     parseInboundJournal,
     makeInboundJournal,
     readJournalObject,
+    writeJournalObject,
     readBlockObject,
     deleteBlockObject
 ) where
