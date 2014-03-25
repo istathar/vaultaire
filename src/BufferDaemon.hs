@@ -158,6 +158,11 @@ worker pool user in_chan ack_chan telemetry_chan = do
                     return Nothing
 
 
+    -- Take a 'sparse' block that has originated from the receiver thread and
+    -- process it into re-compressed 'built' blocks. Failures are possible here
+    -- as this data comes straight from the user and may not be compressed
+    -- correctly. Below the layer of compression, we provide no guarantee that
+    -- an corrupt burst will be written.
     buildBlocks :: [[(ByteString, Ident)]] -> ([BuiltBlock], [BuildFailure])
     buildBlocks = foldl' combine ([], []) . map buildBlock
       where
