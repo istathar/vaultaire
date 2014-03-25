@@ -74,7 +74,7 @@ writeJournalObject journal' blocksm = do
         Just err    -> liftIO $ throwIO err
   where
     zs = HashMap.toList blocksm
-    z' = encode zs
+    z' = makeInboundJournal zs
 
 
 readJournalObject
