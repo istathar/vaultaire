@@ -115,9 +115,10 @@ worker pool user in_chan ack_chan telemetry_chan = do
 
             sendAcks ack_chan parse_failures
 
-            output telemetry_chan  "failed to parse"
-                                   (show $ length $ parse_failures)
-                                   "messages"
+            when ((length parse_failures) > 0) $
+                output telemetry_chan "error"
+                                      "failed to decompress message(s)"
+                                      ""
 
             output telemetry_chan "writing"
                                   (show $ length $ writes_pending)
