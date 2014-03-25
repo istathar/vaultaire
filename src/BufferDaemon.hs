@@ -120,7 +120,7 @@ worker pool user in_chan ack_chan telemetry_chan = do
                                       "failed to decompress message(s)"
                                       ""
 
-            output telemetry_chan "writing"
+            output telemetry_chan "journal"
                                   (show $ length $ writes_pending)
                                   "blocks"
 
