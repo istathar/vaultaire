@@ -16,10 +16,10 @@
 module BufferDaemon where
 
 import Codec.Compression.LZ4
+import Control.Arrow ((***))
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
-import Control.Arrow((***))
 import Control.Concurrent.STM.TBChan
 import Control.Monad
 import Control.Monad.IO.Class
@@ -30,7 +30,7 @@ import Data.List.NonEmpty (fromList)
 import Data.Maybe
 import Data.Serialize
 import Data.Time.Clock
-import Data.UUID
+import Data.UUID (toString)
 import Data.UUID.V4
 import GHC.Conc (getNumCapabilities)
 import Options.Applicative
@@ -78,8 +78,11 @@ program Options{..} quit_mvar = do
     telemetry_chan <- newTChanIO
     ack_chan <- newTBChanIO 64
 
-    linkThread $ telemetry_sender broker debug telemetry_chan
-    linkThread $ receiver broker in_chan ack_chan timeLimit byteLimit
+    linkThread $
+        telemetry_sender broker debug telemetry_chan
+
+    linkThread $
+        receiver broker in_chan ack_chan telemetry_chan timeLimit byteLimit
 
     replicateM_ workers $
         linkThread $ worker (S.pack pool)
@@ -92,7 +95,6 @@ program Options{..} quit_mvar = do
     putStrLn "bufferd stopping"
   where
     linkThread a = Async.async a >>= Async.link
-
 
 worker
     :: ByteString
@@ -115,13 +117,13 @@ worker pool user in_chan ack_chan telemetry_chan = do
 
             sendAcks ack_chan parse_failures
 
-            when ((length parse_failures) > 0) $
+            unless (null parse_failures) $
                 output telemetry_chan "error"
                                       "failed to decompress message(s)"
                                       ""
 
             output telemetry_chan "journal"
-                                  (show $ length $ writes_pending)
+                                  (show $ length writes_pending)
                                   "blocks"
 
             -- Write all the blocks first so that we know they're safe.
@@ -129,6 +131,7 @@ worker pool user in_chan ack_chan telemetry_chan = do
                 name <- objectName nonce counter
                 async <- Rados.runAsync . Rados.runObject name $
                     Rados.writeFull payload
+                -- (name, len) are an single entry in the journal index
                 return (async, (name, len), ack)
 
             -- Only want to ack successful writes
@@ -156,6 +159,11 @@ worker pool user in_chan ack_chan telemetry_chan = do
                     return Nothing
 
 
+    -- Take a 'sparse' block that has originated from the receiver thread and
+    -- process it into re-compressed 'built' blocks. Failures are possible here
+    -- as this data comes straight from the user and may not be compressed
+    -- correctly. Below the layer of compression, we provide no guarantee that
+    -- an corrupt burst will be written.
     buildBlocks :: [[(ByteString, Ident)]] -> ([BuiltBlock], [BuildFailure])
     buildBlocks = foldl' combine ([], []) . map buildBlock
       where
@@ -167,17 +175,21 @@ worker pool user in_chan ack_chan telemetry_chan = do
         buildBlock :: [(ByteString, Ident)]
                    -> (BuiltBlock, [BuildFailure])
         buildBlock xs =
-            let (decompressed, acks, fails) = foldl' f ([], [], []) xs
-                serialized  = serialize decompressed
+            let (bursts, acks, fails) = foldl' tryDecompress ([],[],[]) xs
+                serialized  = serialize bursts
                 compressed  = mustCompress serialized
                 built_block = (compressed, S.length serialized, acks)
             in (built_block, fails)
           where
-            f (msgs, acks, fails) (bs, ident) =
-                case decompress bs of 
-                    Just msg -> (msg:msgs, (Ack ident ""):acks, fails)
-                    Nothing -> (msgs, acks, (Ack ident "failed to decompress"):fails)
-            serialize x = runPut (put x)
+            tryDecompress (msgs, acks, fails) (bs, ident) =
+                case decompress bs of
+                    Just msg -> ( msg:msgs
+                                , Ack ident "":acks
+                                , fails )
+                    Nothing ->  ( msgs
+                                , acks
+                                , Ack ident "failed to decompress":fails )
+            serialize = runPut . put
             mustCompress = fromJust . compress
 
     objectName nonce counter = liftIO $ do
@@ -202,19 +214,26 @@ readWholeChan ch = do
             Just x  -> (x:) <$> readTail
 
 
-receiver :: String -> TBChan [(ByteString, Ident)] -> TBChan Ack -> Int -> Int -> IO ()
-receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
-    work <- Zero.socket Zero.Router
-    Zero.setReceiveHighWM (Zero.restrict (0 :: Int)) work
-    Zero.connect work ("tcp://" ++ broker ++ ":5561")
+receiver :: String
+         -> TBChan [(ByteString, Ident)]
+         -> TBChan Ack
+         -> TChan Telemetry
+         -> Int
+         -> Int
+         -> IO ()
+receiver broker in_chan ack_chan telemetry_chan time_limit byte_limit =
+    runZMQ $ do
+        work <- Zero.socket Zero.Router
+        Zero.setReceiveHighWM (Zero.restrict (0 :: Int)) work
+        Zero.connect work ("tcp://" ++ broker ++ ":5561")
 
-    liftIO getCurrentTime >>= loop work [] 0
+        liftIO getCurrentTime >>= loop work [] 0
   where
     loop sock acc bytes last_sent = do
         res <- Zero.poll 100 [Zero.Sock sock [Zero.In] Nothing]
         msg <- case res of
             -- Message waiting
-            [[Zero.In]] -> Just <$> prepareMessage <$> Zero.receiveMulti sock
+            [[Zero.In]] -> Zero.receiveMulti sock >>= prepareMessage
             -- Timeout, do nothing.
             [[]]        -> return Nothing
             _           -> error "reciever: unpossible"
@@ -225,35 +244,41 @@ receiver broker in_chan ack_chan time_limit byte_limit = runZMQ $ do
 
         let msg_size = maybe 0 (S.length . fst) msg
         now <- liftIO getCurrentTime
-        let time_exceeded = now `diffUTCTime` last_sent > fromIntegral time_limit
-        when (bytes + msg_size > byte_limit || time_exceeded ) $ do
+        let expiry = now `diffUTCTime` last_sent > fromIntegral time_limit
+
+        if (bytes + msg_size > byte_limit || expiry )
+        then do
+            -- Flush unprocessed bursts to worker thread
             case msg of
                 Nothing -> sendWork acc     in_chan
                 Just m  -> sendWork (m:acc) in_chan
             loop sock [] 0 now
-
-        case msg of
-            Nothing -> loop sock acc bytes last_sent
-            Just m  -> loop sock (m:acc) (bytes + msg_size) last_sent
-
+        else
+            -- Accumulate more
+            case msg of
+                Nothing -> loop sock acc bytes last_sent
+                Just m  -> loop sock (m:acc) (bytes + msg_size) last_sent
 
     prepareMessage [envelope, client, identifier, message] =
       let ident = Ident envelope client identifier
-      in (message, ident)
-    prepareMessage _ = error "Invalid ZMQ message recieved"
-
+      in return $ Just (message, ident)
+    prepareMessage _ = do
+        liftIO $ putStrLn "Invalid ZMQ message recieved, ignoring."
+        return Nothing
 
     sendWork [] _ = return ()
-    sendWork msg ch =
-        liftIO $ atomically $ writeTBChan ch msg
-
+    sendWork msg ch = liftIO $ do
+        output telemetry_chan "congealed"
+                              (show $ length msg)
+                              "bursts"
+        atomically $ writeTBChan ch msg
 
     sendAcks sock chan = do
         next <- liftIO $ atomically $ tryReadTBChan chan
         case next of
             Nothing -> return ()
-            Just (Ack Ident{..} failure) -> do
-                let reply = fromList [envelope, client, messageID, failure]
+            Just (Ack Ident{..} payload) -> do
+                let reply = fromList [envelope, client, messageID, payload]
                 Zero.sendMulti sock reply
                 sendAcks sock chan
 
@@ -274,7 +299,7 @@ toplevel = Options
             (long "workers" <>
              short 'w' <>
              metavar "NUM" <>
-             value num <>
+             value (unsafePerformIO getNumCapabilities) <>
              showDefault <>
              help "Number of bursts to process concurrently")
     <*> option
@@ -308,5 +333,3 @@ toplevel = Options
     <*> argument str
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
-  where
-    num = unsafePerformIO getNumCapabilities
