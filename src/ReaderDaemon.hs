@@ -236,7 +236,9 @@ receiver broker Mutexes{..} d = do
 
         linkThread . forever $ do
             msg <- Zero.receiveMulti router
-            liftIO $ putMVar inbound msg
+            liftIO $ case length msg of
+                4 -> putMVar inbound msg
+                n -> putStrLn $ "debug: illegal request received, n="++(show n)++"; ignoring"
 
 --
 -- send responses
