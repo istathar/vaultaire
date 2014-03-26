@@ -246,15 +246,18 @@ receiver broker in_chan ack_chan telemetry_chan time_limit byte_limit =
         now <- liftIO getCurrentTime
         let expiry = now `diffUTCTime` last_sent > fromIntegral time_limit
 
-        when (bytes + msg_size > byte_limit || expiry ) $ do
+        if (bytes + msg_size > byte_limit || expiry )
+        then do
+            -- Flush unprocessed bursts to worker thread
             case msg of
                 Nothing -> sendWork acc     in_chan
                 Just m  -> sendWork (m:acc) in_chan
             loop sock [] 0 now
-
-        case msg of
-            Nothing -> loop sock acc bytes last_sent
-            Just m  -> loop sock (m:acc) (bytes + msg_size) last_sent
+        else
+            -- Accumulate more
+            case msg of
+                Nothing -> loop sock acc bytes last_sent
+                Just m  -> loop sock (m:acc) (bytes + msg_size) last_sent
 
     prepareMessage [envelope, client, identifier, message] =
       let ident = Ident envelope client identifier
