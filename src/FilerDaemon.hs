@@ -29,6 +29,7 @@ import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.List (foldl')
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
@@ -42,7 +43,6 @@ import GHC.Conc
 import Network.BSD (getHostName)
 import Options.Applicative
 import System.Environment (getProgName)
-import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
 import System.Rados.Monadic (Pool)
 import qualified System.Rados.Monadic as Rados

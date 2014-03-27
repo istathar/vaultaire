@@ -13,6 +13,7 @@ module Main where
 
 import Control.Concurrent.MVar
 import Control.Monad (when)
+import GHC.Conc
 import Options.Applicative (execParser)
 
 import ReaderDaemon (readerCommandLineParser, readerProgram)
