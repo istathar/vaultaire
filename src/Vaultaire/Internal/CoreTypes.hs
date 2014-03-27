@@ -108,7 +108,10 @@ toHex x =
 --
 --
 --
-newtype Origin = Origin ByteString deriving (Eq, Ord, Show)
+newtype Origin = Origin ByteString deriving (Eq, Ord)
+instance Show Origin where
+    show (Origin o') = S.unpack o'
+
 
 type Directory = Map Origin (Map SourceDict ByteString)
 
@@ -130,15 +133,6 @@ insertIntoDirectory d o st =
     Map.insert o sm d
 
 
-{-
-getDictionary :: Directory -> Map Text Text
-getDictionary s =
-    underlying s
-
-getHashBase62 :: SourceDict -> ByteString
-getHashBase62 s =
-    hashBase62 s
--}
 --
 --
 -- | The source dictionary portion of the bucket label is formed as follows:
