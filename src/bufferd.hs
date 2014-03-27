@@ -11,15 +11,18 @@
 
 module Main where
 
-import Control.Concurrent.MVar
-import Control.Monad (void)
-import GHC.Conc
 import BufferDaemon (commandLineParser, program)
+import Control.Concurrent.MVar
+import Control.Monad (void, when)
+import GHC.Conc
 import Options.Applicative (execParser)
 import System.Posix.Signals
 
 main :: IO ()
 main = do
+    let n = numCapabilities     -- command line +RTS -Nn -RTS value
+    when (n == 1) (getNumProcessors >>= setNumCapabilities)
+
     options <- execParser commandLineParser
     quit_mvar <- newEmptyMVar
 

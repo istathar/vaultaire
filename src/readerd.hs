@@ -12,12 +12,16 @@
 module Main where
 
 import Control.Concurrent.MVar
+import Control.Monad (when)
 import Options.Applicative (execParser)
 
 import ReaderDaemon (readerCommandLineParser, readerProgram)
 
 main :: IO ()
 main = do
+    let n = numCapabilities     -- command line +RTS -Nn -RTS value
+    when (n == 1) (getNumProcessors >>= setNumCapabilities)
+
     quitV <- newEmptyMVar
     options <- execParser readerCommandLineParser
 
