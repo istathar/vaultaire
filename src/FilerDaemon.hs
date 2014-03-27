@@ -370,7 +370,7 @@ identifyUnknown known ps = new
             else Set.insert s st
 
     new :: Set SourceDict
-    new = foldl g Set.empty ps
+    new = foldl' g Set.empty ps
 
 
 processBurst
@@ -395,7 +395,7 @@ processBurst d o ps = build
         Map.insertWith mappend l encodedB m0
 
     build :: Map Label Builder
-    build = foldl f Map.empty ps
+    build = foldl' f Map.empty ps
 
 
 --
@@ -504,9 +504,6 @@ toplevel = Options
     <*> argument str
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
-  where
-    num = unsafePerformIO $ getNumCapabilities
-
 
 
 commandLineParser :: ParserInfo Options
