@@ -188,13 +188,23 @@ contentsReader pool user Mutexes{..} = do
             [envelope, client, _, request] <- liftIO $ takeMVar contentsIn
             d <- liftIO $ takeMVar directory
             let origin = Origin request
-            let lbl = Contents.formObjectLabel origin
-            st <- Contents.readVaultObject lbl
-            let d' = insertIntoDirectory d origin st
-            liftIO $ putMVar directory d'
-            let origin_sources o m = (Map.keys (Map.findWithDefault Map.empty o m))
-            let sources = map createSourceResponse (origin_sources origin d')
-            let burst = encodeSourceResponseBurst (createSourceResponseBurst sources)
+            --
+            -- Check if we need to return the demo source, otherwise 
+            -- return an actual contents list.
+            --
+            burst <- if origin == (Origin "BENHUR")
+                then do
+                    let ds = (SourceDict (Map.fromList [("wave", "sine")]))
+                    let ds' = [createSourceResponse ds]
+                    return $ encodeSourceResponseBurst $ createSourceResponseBurst ds'
+                else do
+                    let lbl = Contents.formObjectLabel origin
+                    st <- Contents.readVaultObject lbl
+                    let d' = insertIntoDirectory d origin st
+                    liftIO $ putMVar directory d'
+                    let origin_sources o m = (Map.keys (Map.findWithDefault Map.empty o m))
+                    let sources = map createSourceResponse (origin_sources origin d')
+                    return $ encodeSourceResponseBurst (createSourceResponseBurst sources)
             liftIO $ writeChan contentsOut (Reply envelope client burst)
 
 receiver
