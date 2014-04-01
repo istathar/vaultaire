@@ -64,7 +64,8 @@ data Options = Options {
     optGlobalWorkers  :: !Int,
     argGlobalPoolName :: !String,
     optGlobalUserName :: !String,
-    argBrokerHost     :: !String
+    argBrokerHost     :: !String,
+    optParallelReads  :: !Int
 }
 
 data Reply = Reply {
@@ -74,13 +75,13 @@ data Reply = Reply {
 }
 
 data Mutexes = Mutexes {
-    inbound     :: !(MVar [ByteString]),
-    outbound    :: !(Chan Reply),
-    telemetry   :: !(Chan (String,String,String)),
-    directory   :: !(MVar Directory),
-    contentsIn  :: !(MVar [ByteString]),
-    contentsOut :: !(Chan Reply),
-    radosLock   :: !(MVar Bool)
+    inbound         :: !(MVar [ByteString]),
+    outbound        :: !(Chan Reply),
+    telemetry       :: !(Chan (String,String,String)),
+    directory       :: !(MVar Directory),
+    contentsIn      :: !(MVar [ByteString]),
+    contentsOut     :: !(Chan Reply),
+    radosLock       :: !(MVar Bool)
 }
 
 
@@ -97,9 +98,10 @@ output telemetry k v u = liftIO $ do
 reader
     :: ByteString
     -> ByteString
+    -> Int
     -> Mutexes
     -> IO ()
-reader pool' user' Mutexes{..} = do
+reader pool' user' n_threads Mutexes{..} = do
     _ <- liftIO $ takeMVar radosLock
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
         liftIO $ putMVar radosLock True
@@ -111,43 +113,82 @@ reader pool' user' Mutexes{..} = do
             case parseRequestMessage (Origin origin') request' of
                 Left err -> do
                     output telemetry "error" (show err) ""
-                Right qs -> do
-                    output telemetry "request" (printf "%d" (length qs)) "ranges"
+                Right requests -> do
+                    output telemetry "request" (printf "%d" (length requests)) "ranges"
 
-                    forM_ qs $ \q -> do
+                    request_q <- liftIO $ newMVar requests
+                    -- Number of concurrent rados requests
+                    rados_sem <- liftIO $ newMVar (n_threads * 4)
 
-                        let o  = requestOrigin q
-                        let s  = requestSource q
-                        let t1 = requestAlpha q
-                        let t2 = requestOmega q
+                    threads <- replicateM n_threads $ Rados.async $
+                        processRequests (envelope', client') rados_sem request_q
 
-                        let is = Bucket.calculateTimemarks t1 t2
+                    liftIO $ mapM_ Async.wait threads
+                       
 
-                        forM_ is $ \i -> do
-                            m <- if o == Origin "BENHUR"
-                                then return $ demoWave o i
-                                else Bucket.readVaultObject o s i
-
-                            unless (Map.null m) $ do
-                                let ps = Bucket.pointsInRange t1 t2 m
-
-                                let y' = encodePoints ps
-
-                                let message' = case compress y' of
-                                                Just b' -> b'
-                                                Nothing -> S.empty
-
-                                liftIO $ writeChan outbound (Reply envelope' client' message')
-
-                        a2 <- liftIO $ getCurrentTime
-                        let delta = diffUTCTime a2 a1
-                        let deltaFloat = (fromRational $ toRational delta) :: Float
-                        let deltaPadded = printf "%9.3f" deltaFloat
-                        output telemetry "duration" deltaPadded "seconds"
-
+            a2 <- liftIO $ getCurrentTime
+            let delta = diffUTCTime a2 a1
+            let deltaFloat = (fromRational $ toRational delta) :: Float
+            let deltaPadded = printf "%9.3f" deltaFloat
+            output telemetry "duration" deltaPadded "seconds"
 
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
+  where
+    -- | Read work from the request queue until it is empty
+    processRequests :: (ByteString, ByteString) -> MVar Int -> MVar [Request] -> Rados.Pool ()
+    processRequests ident rados_sem request_q = do
+        work <- liftIO $ takeMVar request_q
+        case work of
+            (request:requests) -> do
+                liftIO $ putMVar request_q requests
+                retrieveBuckets ident rados_sem request Nothing
+                processRequests ident rados_sem request_q
+            _ -> return ()
+
+    retrieveBuckets :: (ByteString,ByteString)
+                    -> MVar Int
+                    -> Request
+                    -> Maybe [Timemark]
+                    -> Rados.Pool ()
+    retrieveBuckets ident@(envelope, client) rados_sem r@Request{..} rem = do
+        let bucket_marks = maybe (Bucket.calculateTimemarks requestAlpha requestOmega)
+                                 id
+                                 rem
+
+        free_rados_slots <- liftIO $ takeMVar rados_sem
+        let concurrency = (length bucket_marks) `min` free_rados_slots
+        liftIO $ putMVar rados_sem (free_rados_slots - concurrency)
+
+        let (work_intervals,rem') = splitAt concurrency bucket_marks
+
+        async_replies <- forM work_intervals $ \i -> Rados.async $ do
+            -- readVaultObject should probably be changed to expose a rados
+            -- AsyncRequest directly. Untill then we use a
+            -- Control.Concurrent.Async
+            m <- if requestOrigin == Origin "BENHUR"
+                then return $ demoWave requestOrigin i
+                else Bucket.readVaultObject requestOrigin requestSource i
+
+            if Map.null m
+                then return Nothing
+                else do
+                    let ps = Bucket.pointsInRange requestAlpha requestOmega m
+                    let y = encodePoints ps
+                    let message = case compress y of
+                                    Just b -> b
+                                    Nothing -> S.empty
+
+                    return $ Just $ Reply envelope client message
+
+        forM_ async_replies $ \a ->
+            liftIO $ do
+                result <- Async.wait a
+                maybe (return ()) (writeChan outbound) result
+
+        if null rem'
+            then return ()
+            else retrieveBuckets ident rados_sem r (Just rem')
 
 demoWave
     :: Origin
@@ -277,7 +318,7 @@ receiver broker Mutexes{..} d = do
 
 
 readerProgram :: Options -> MVar () -> IO ()
-readerProgram (Options d w pool user broker) quitV = do
+readerProgram (Options d w pool user broker readerParallelism) quitV = do
     putStrLn $ "readerd starting (vaultaire v" ++ VERSION ++ ")"
 
     msgV <- newEmptyMVar
@@ -307,7 +348,7 @@ readerProgram (Options d w pool user broker) quitV = do
 
     -- Startup reader threads
     replicateM_ w $
-        linkThread $ reader (S.pack pool) (S.pack user) u
+        linkThread $ reader (S.pack pool) (S.pack user) readerParallelism u
 
     linkThread $ contentsReader (S.pack pool) (S.pack user) u
 
@@ -350,6 +391,13 @@ toplevel = Options
     <*> argument str
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
+    <*> option
+            (long "parallel-reads" <>
+             short 'r' <>
+             metavar "PARALLELREADS" <>
+             value num <>
+             showDefault <>
+             help "Number of reads to execute simultaneously")
   where
     num = unsafePerformIO $ getNumCapabilities
 
