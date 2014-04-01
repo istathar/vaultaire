@@ -186,6 +186,10 @@ reader pool' user' n_threads Mutexes{..} = do
                 result <- Async.wait a
                 maybe (return ()) (writeChan outbound) result
 
+        -- We're done, reseed the semaphore.
+        sem_value <- liftIO $ takeMVar rados_sem
+        liftIO $ putMVar rados_sem (sem_value + concurrency)
+
         if null rem'
             then return ()
             else retrieveBuckets ident rados_sem r (Just rem')
