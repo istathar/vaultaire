@@ -34,16 +34,17 @@ import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad
 import "mtl" Control.Monad.Error ()
-import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
+import Data.List.Split (chunksOf)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Time.Clock
-import GHC.Conc
+import GHC.Conc (getNumCapabilities)
 import Network.BSD (getHostName)
 import Options.Applicative hiding (reader)
+import Pipes
 import System.Environment (getProgName)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
@@ -75,13 +76,13 @@ data Reply = Reply {
 }
 
 data Mutexes = Mutexes {
-    inbound         :: !(MVar [ByteString]),
-    outbound        :: !(Chan Reply),
-    telemetry       :: !(Chan (String,String,String)),
-    directory       :: !(MVar Directory),
-    contentsIn      :: !(MVar [ByteString]),
-    contentsOut     :: !(Chan Reply),
-    radosLock       :: !(MVar Bool)
+    inbound     :: !(MVar [ByteString]),
+    outbound    :: !(Chan Reply),
+    telemetry   :: !(Chan (String,String,String)),
+    directory   :: !(MVar Directory),
+    contentsIn  :: !(MVar [ByteString]),
+    contentsOut :: !(Chan Reply),
+    radosLock   :: !(MVar Bool)
 }
 
 
@@ -114,17 +115,21 @@ reader pool' user' n_threads Mutexes{..} = do
                 Left err -> do
                     output telemetry "error" (show err) ""
                 Right requests -> do
+                    -- We have a valid request, so create a work pool of these
+                    -- requests. This work pool is request_q
                     output telemetry "request" (printf "%d" (length requests)) "ranges"
 
                     request_q <- liftIO $ newMVar requests
-                    -- Number of concurrent rados requests
-                    rados_sem <- liftIO $ newMVar (n_threads * 4)
 
+                    -- Spawn an appropriate number of worker threads, each of
+                    -- these will stream results back to the client over the
+                    -- supplied channel within the context of their respective
+                    -- requests.
                     threads <- replicateM n_threads $ Rados.async $
-                        processRequests (envelope', client') rados_sem request_q
+                        processRequests (envelope', client') request_q
 
                     liftIO $ mapM_ Async.wait threads
-                       
+
 
             a2 <- liftIO $ getCurrentTime
             let delta = diffUTCTime a2 a1
@@ -135,64 +140,64 @@ reader pool' user' n_threads Mutexes{..} = do
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
   where
-    -- | Read work from the request queue until it is empty
-    processRequests :: (ByteString, ByteString) -> MVar Int -> MVar [Request] -> Rados.Pool ()
-    processRequests ident rados_sem request_q = do
+    -- | For each request, stream points back.
+    processRequests :: (ByteString, ByteString) -> MVar [Request] -> Rados.Pool ()
+    processRequests (envelope, client) request_q = do
         work <- liftIO $ takeMVar request_q
         case work of
             (request:requests) -> do
                 liftIO $ putMVar request_q requests
-                retrieveBuckets ident rados_sem request Nothing
-                processRequests ident rados_sem request_q
+                runEffect $ for (bucketTimemarks request
+                                 >-> chunk 16
+                                 >-> retrieveTimemarks request
+                                 >-> filterRange request
+                                 >-> pleaseEncodePoints
+                                 >-> tryCompress)
+                                (lift . liftIO . writeChan outbound . Reply envelope client)
             _ -> return ()
 
-    retrieveBuckets :: (ByteString,ByteString)
-                    -> MVar Int
-                    -> Request
-                    -> Maybe [Timemark]
-                    -> Rados.Pool ()
-    retrieveBuckets ident@(envelope, client) rados_sem r@Request{..} rem = do
-        let bucket_marks = maybe (Bucket.calculateTimemarks requestAlpha requestOmega)
-                                 id
-                                 rem
+    -- |
+    -- Produce time marks from a request
+    bucketTimemarks :: Request -> Producer [Timemark] Rados.Pool ()
+    bucketTimemarks Request{..} =
+        yield $ Bucket.calculateTimemarks requestAlpha requestOmega
 
-        free_rados_slots <- liftIO $ takeMVar rados_sem
-        let concurrency = (length bucket_marks) `min` free_rados_slots
-        liftIO $ putMVar rados_sem (free_rados_slots - concurrency)
+    -- |
+    -- Split time marks up into manageable chunks as to not blow all our memory
+    chunk :: Int -> Pipe [Timemark] [Timemark] Rados.Pool ()
+    chunk n = forever $
+        (chunksOf n <$> await) >>= mapM yield
 
-        let (work_intervals,rem') = splitAt concurrency bucket_marks
+    -- |
+    -- Retrieve a chunk of time marks from the vault and retrieve the Map
+    -- Timestamp Point associated with that range, these must be yielded in
+    -- chronological order.
+    retrieveTimemarks :: Request -> Pipe [Timemark] (Map Timestamp Point) Rados.Pool ()
+    retrieveTimemarks Request{..} = forever $ do
+        work <- await
+        lift $ do
+            async_replies <- forM work $ \i -> Rados.async $ do
+                -- readVaultObject should probably be changed to expose a rados
+                -- AsyncRequest directly. Untill then we use a
+                -- Control.Concurrent.Async
+                if requestOrigin == Origin "BENHUR"
+                    then return $ demoWave requestOrigin i
+                    else Bucket.readVaultObject requestOrigin requestSource i
+            liftIO $ mapM Async.wait async_replies
 
-        async_replies <- forM work_intervals $ \i -> Rados.async $ do
-            -- readVaultObject should probably be changed to expose a rados
-            -- AsyncRequest directly. Untill then we use a
-            -- Control.Concurrent.Async
-            m <- if requestOrigin == Origin "BENHUR"
-                then return $ demoWave requestOrigin i
-                else Bucket.readVaultObject requestOrigin requestSource i
+    filterRange :: Request -> Pipe (Map Timestamp Point) [Point] Rados.Pool ()
+    filterRange Request{..} = forever $
+            (Bucket.pointsInRange requestAlpha requestOmega <$> await) >>= yield
 
-            if Map.null m
-                then return Nothing
-                else do
-                    let ps = Bucket.pointsInRange requestAlpha requestOmega m
-                    let y = encodePoints ps
-                    let message = case compress y of
-                                    Just b -> b
-                                    Nothing -> S.empty
 
-                    return $ Just $ Reply envelope client message
+    pleaseEncodePoints :: Pipe [Point] ByteString Rados.Pool ()
+    pleaseEncodePoints = forever $
+        (encodePoints <$> await) >>= yield
 
-        forM_ async_replies $ \a ->
-            liftIO $ do
-                result <- Async.wait a
-                maybe (return ()) (writeChan outbound) result
-
-        -- We're done, reseed the semaphore.
-        sem_value <- liftIO $ takeMVar rados_sem
-        liftIO $ putMVar rados_sem (sem_value + concurrency)
-
-        if null rem'
-            then return ()
-            else retrieveBuckets ident rados_sem r (Just rem')
+    tryCompress :: Pipe ByteString ByteString Rados.Pool ()
+    tryCompress = forever $ do
+        msg <- await
+        maybe (return ()) yield (compress msg)
 
 demoWave
     :: Origin
@@ -234,7 +239,7 @@ contentsReader pool user Mutexes{..} = do
             d <- liftIO $ takeMVar directory
             let origin = Origin request
             --
-            -- Check if we need to return the demo source, otherwise 
+            -- Check if we need to return the demo source, otherwise
             -- return an actual contents list.
             --
             burst <- if origin == (Origin "BENHUR")
