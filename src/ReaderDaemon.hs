@@ -45,6 +45,7 @@ import GHC.Conc (getNumCapabilities)
 import Network.BSD (getHostName)
 import Options.Applicative hiding (reader)
 import Pipes
+import qualified Pipes.Prelude as Pipes
 import System.Environment (getProgName)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
@@ -150,10 +151,11 @@ reader pool' user' n_threads Mutexes{..} = do
                                     >-> filterRange request
                                     >-> pleaseEncodePoints
                                     >-> tryCompress)
-                                (lift . liftIO . writeChan outbound . Reply envelope client)
-                processRequests ident request_q
+                                    (lift . liftIO . writeChan outbound . Reply envelope client)
+                    processRequests ident request_q
             Nothing -> return ()
 
+    -- Surely we don't need this function!
     popQ :: MVar [a] -> IO (Maybe a)
     popQ m = do
         l <- takeMVar m
@@ -168,24 +170,25 @@ reader pool' user' n_threads Mutexes{..} = do
     -- |
     -- Produce time marks from a request
     bucketTimemarks :: Request -> Producer [Timemark] Rados.Pool ()
-    bucketTimemarks Request{..} = do
+    bucketTimemarks Request{..} =
         yield $ Bucket.calculateTimemarks requestAlpha requestOmega
 
     -- |
     -- Split time marks up into manageable chunks as to not blow all our memory
     chunk :: Int -> Pipe [Timemark] [Timemark] Rados.Pool ()
-    chunk n = forever $
-        (chunksOf n <$> await) >>= mapM yield
+    chunk n = Pipes.mapFoldable (chunksOf n)
 
     -- |
     -- Retrieve a chunk of time marks from the vault and retrieve the Map
     -- Timestamp Point associated with that range, these must be yielded in
     -- chronological order.
     retrieveTimemarks :: Request -> Pipe [Timemark] (Map Timestamp Point) Rados.Pool ()
-    retrieveTimemarks Request{..} = forever $ do
-        work <- await
-        maps <- lift $ do
-            async_replies <- forM work $ \i -> Rados.async $ do
+    retrieveTimemarks Request{..} =
+        Pipes.mapM (getBuckets) >-> Pipes.concat >-> Pipes.filter (not . Map.null)
+      where
+        getBuckets :: [Timemark] -> Rados.Pool [Map Timestamp Point]
+        getBuckets intervals = do
+            async_replies <- forM intervals $ \i -> Rados.async $ do
                 -- readVaultObject should probably be changed to expose a rados
                 -- AsyncRequest directly. Untill then we use a
                 -- Control.Concurrent.Async
@@ -193,21 +196,20 @@ reader pool' user' n_threads Mutexes{..} = do
                     then return $ demoWave requestOrigin i
                     else Bucket.readVaultObject requestOrigin requestSource i
             liftIO $ mapM Async.wait async_replies
-        mapM yield $ filter (not . Map.null) maps
 
+    -- |
+    -- All points that are not within the requested range must be dropped
     filterRange :: Request -> Pipe (Map Timestamp Point) [Point] Rados.Pool ()
-    filterRange Request{..} = forever $
-            (Bucket.pointsInRange requestAlpha requestOmega <$> await) >>= yield
+    filterRange Request{..} = Pipes.map $ Bucket.pointsInRange requestAlpha requestOmega
 
-
+    -- |
+    -- Silly naming due to colission, suggestions welcome
     pleaseEncodePoints :: Pipe [Point] ByteString Rados.Pool ()
-    pleaseEncodePoints = forever $
-        (encodePoints <$> await) >>= yield
+    pleaseEncodePoints = Pipes.map encodePoints
 
+    -- | Pass along compressions that do not fail
     tryCompress :: Pipe ByteString ByteString Rados.Pool ()
-    tryCompress = forever $ do
-        msg <- await
-        maybe (return ()) yield (compress msg)
+    tryCompress = Pipes.mapFoldable compress
 
 demoWave
     :: Origin
