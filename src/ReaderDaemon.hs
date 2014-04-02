@@ -142,21 +142,27 @@ reader pool' user' n_threads Mutexes{..} = do
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
   where
-    -- | For each request, stream points back.
+    -- | Pop requests off the queue until it is empty, streaming responses back
+    -- as they are built.
     processRequests :: (ByteString, ByteString) -> TQueue Request -> Rados.Pool ()
     processRequests ident@(envelope, client) request_q = do
         work <- liftIO $ atomically $ tryReadTQueue request_q
         case work of
             Just request -> do
-                runEffect $ for (bucketTimemarks request
-                                 >-> chunk 16
-                                 >-> retrieveTimemarks request
-                                 >-> filterRange request
-                                 >-> pleaseEncodePoints
-                                 >-> tryCompress)
-                                (lift . liftIO . writeChan outbound . Reply envelope client)
+                runEffect $ bucketTimemarks request
+                            >-> chunk 16
+                            >-> retrieveBuckets request
+                            >-> filterRange request
+                            >-> pleaseEncodePoints
+                            >-> tryCompress
+                            >-> buildReply envelope client
+                            >-> transmitResponse outbound
                 processRequests ident request_q
             Nothing -> return ()
+
+    transmitResponse :: Chan Reply -> Consumer Reply Rados.Pool ()
+    transmitResponse ch = forever $
+        await >>= (lift . liftIO . writeChan ch)
 
     -- |
     -- Produce time marks from a request
@@ -173,12 +179,15 @@ reader pool' user' n_threads Mutexes{..} = do
     -- Retrieve a chunk of time marks from the vault and retrieve the Map
     -- Timestamp Point associated with that range, these must be yielded in
     -- chronological order.
-    retrieveTimemarks :: Request -> Pipe [Timemark] (Map Timestamp Point) Rados.Pool ()
-    retrieveTimemarks Request{..} =
-        Pipes.mapM (getBuckets) >-> Pipes.concat >-> Pipes.filter (not . Map.null)
+    --
+    -- The results must also have null maps filtered out due to no points
+    -- encoding and compressing to an empty string, which is a terminator.
+    retrieveBuckets :: Request -> Pipe [Timemark] (Map Timestamp Point) Rados.Pool ()
+    retrieveBuckets Request{..} =
+        Pipes.mapM (readBuckets) >-> Pipes.concat >-> Pipes.filter (not . Map.null)
       where
-        getBuckets :: [Timemark] -> Rados.Pool [Map Timestamp Point]
-        getBuckets intervals = do
+        readBuckets :: [Timemark] -> Rados.Pool [Map Timestamp Point]
+        readBuckets intervals = do
             async_replies <- forM intervals $ \i -> Rados.async $ do
                 -- readVaultObject should probably be changed to expose a rados
                 -- AsyncRequest directly. Untill then we use a
@@ -191,7 +200,7 @@ reader pool' user' n_threads Mutexes{..} = do
     -- |
     -- All points that are not within the requested range must be dropped
     filterRange :: Request -> Pipe (Map Timestamp Point) [Point] Rados.Pool ()
-    filterRange Request{..} = Pipes.map $ Bucket.pointsInRange requestAlpha requestOmega
+    filterRange Request{..} = Pipes.map (Bucket.pointsInRange requestAlpha requestOmega)
 
     -- |
     -- Silly naming due to collision, suggestions welcome
@@ -201,6 +210,9 @@ reader pool' user' n_threads Mutexes{..} = do
     -- | Pass along compressions that do not fail
     tryCompress :: Pipe ByteString ByteString Rados.Pool ()
     tryCompress = Pipes.mapFoldable compress
+
+    buildReply :: ByteString -> ByteString -> Pipe ByteString Reply Rados.Pool ()
+    buildReply envelope client = Pipes.map (Reply envelope client)
 
 demoWave
     :: Origin
