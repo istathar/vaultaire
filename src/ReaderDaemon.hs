@@ -32,6 +32,8 @@ import Control.Applicative
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
+import Control.Concurrent.STM.TQueue
+import Control.Concurrent.STM(atomically)
 import Control.Monad
 import "mtl" Control.Monad.Error ()
 import Data.ByteString (ByteString)
@@ -115,11 +117,12 @@ reader pool' user' n_threads Mutexes{..} = do
                 Left err -> do
                     output telemetry "error" (show err) ""
                 Right requests -> do
-                    -- We have a valid request, so create a work pool of these
-                    -- requests. This work pool is request_q
                     output telemetry "request" (printf "%d" (length requests)) "ranges"
 
-                    request_q <- liftIO $ newMVar requests
+                    -- We have a valid request, so create a work pool of these
+                    -- requests. 
+                    request_q <- liftIO $ newTQueueIO
+                    liftIO $ atomically $ mapM_ (writeTQueue request_q) requests
 
                     -- Spawn an appropriate number of worker threads, each of
                     -- these will stream results back to the client over the
@@ -140,32 +143,20 @@ reader pool' user' n_threads Mutexes{..} = do
 
   where
     -- | For each request, stream points back.
-    processRequests :: (ByteString, ByteString) -> MVar [Request] -> Rados.Pool ()
+    processRequests :: (ByteString, ByteString) -> TQueue Request -> Rados.Pool ()
     processRequests ident@(envelope, client) request_q = do
-        work <- liftIO $ popQ request_q
+        work <- liftIO $ atomically $ tryReadTQueue request_q
         case work of
             Just request -> do
                 runEffect $ for (bucketTimemarks request
-                                    >-> chunk 16
-                                    >-> retrieveTimemarks request
-                                    >-> filterRange request
-                                    >-> pleaseEncodePoints
-                                    >-> tryCompress)
-                                    (lift . liftIO . writeChan outbound . Reply envelope client)
-                    processRequests ident request_q
+                                 >-> chunk 16
+                                 >-> retrieveTimemarks request
+                                 >-> filterRange request
+                                 >-> pleaseEncodePoints
+                                 >-> tryCompress)
+                                (lift . liftIO . writeChan outbound . Reply envelope client)
+                processRequests ident request_q
             Nothing -> return ()
-
-    -- Surely we don't need this function!
-    popQ :: MVar [a] -> IO (Maybe a)
-    popQ m = do
-        l <- takeMVar m
-        case l of
-            (x:xs) -> do
-                putMVar m xs
-                return $ Just x
-            [] -> do
-                putMVar m []
-                return Nothing
 
     -- |
     -- Produce time marks from a request
