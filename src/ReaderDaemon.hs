@@ -194,7 +194,7 @@ reader pool' user' n_threads Mutexes{..} = do
     filterRange Request{..} = Pipes.map $ Bucket.pointsInRange requestAlpha requestOmega
 
     -- |
-    -- Silly naming due to colission, suggestions welcome
+    -- Silly naming due to collision, suggestions welcome
     pleaseEncodePoints :: Pipe [Point] ByteString Rados.Pool ()
     pleaseEncodePoints = Pipes.map encodePoints
 
