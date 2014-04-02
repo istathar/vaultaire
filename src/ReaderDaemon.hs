@@ -107,7 +107,6 @@ reader pool' user' n_threads Mutexes{..} = do
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
         liftIO $ putMVar radosLock True
         Rados.runPool pool' $ forever $ do
-
             [envelope', client', origin', request'] <- liftIO $ takeMVar inbound
             a1 <- liftIO $ getCurrentTime
 
@@ -130,7 +129,6 @@ reader pool' user' n_threads Mutexes{..} = do
 
                     liftIO $ mapM_ Async.wait threads
 
-
             a2 <- liftIO $ getCurrentTime
             let delta = diffUTCTime a2 a1
             let deltaFloat = (fromRational $ toRational delta) :: Float
@@ -142,24 +140,35 @@ reader pool' user' n_threads Mutexes{..} = do
   where
     -- | For each request, stream points back.
     processRequests :: (ByteString, ByteString) -> MVar [Request] -> Rados.Pool ()
-    processRequests (envelope, client) request_q = do
-        work <- liftIO $ takeMVar request_q
+    processRequests ident@(envelope, client) request_q = do
+        work <- liftIO $ popQ request_q
         case work of
-            (request:requests) -> do
-                liftIO $ putMVar request_q requests
+            Just request -> do
                 runEffect $ for (bucketTimemarks request
-                                 >-> chunk 16
-                                 >-> retrieveTimemarks request
-                                 >-> filterRange request
-                                 >-> pleaseEncodePoints
-                                 >-> tryCompress)
+                                    >-> chunk 16
+                                    >-> retrieveTimemarks request
+                                    >-> filterRange request
+                                    >-> pleaseEncodePoints
+                                    >-> tryCompress)
                                 (lift . liftIO . writeChan outbound . Reply envelope client)
-            _ -> return ()
+                processRequests ident request_q
+            Nothing -> return ()
+
+    popQ :: MVar [a] -> IO (Maybe a)
+    popQ m = do
+        l <- takeMVar m
+        case l of
+            (x:xs) -> do
+                putMVar m xs
+                return $ Just x
+            [] -> do
+                putMVar m []
+                return Nothing
 
     -- |
     -- Produce time marks from a request
     bucketTimemarks :: Request -> Producer [Timemark] Rados.Pool ()
-    bucketTimemarks Request{..} =
+    bucketTimemarks Request{..} = do
         yield $ Bucket.calculateTimemarks requestAlpha requestOmega
 
     -- |
@@ -175,7 +184,7 @@ reader pool' user' n_threads Mutexes{..} = do
     retrieveTimemarks :: Request -> Pipe [Timemark] (Map Timestamp Point) Rados.Pool ()
     retrieveTimemarks Request{..} = forever $ do
         work <- await
-        lift $ do
+        maps <- lift $ do
             async_replies <- forM work $ \i -> Rados.async $ do
                 -- readVaultObject should probably be changed to expose a rados
                 -- AsyncRequest directly. Untill then we use a
@@ -184,6 +193,7 @@ reader pool' user' n_threads Mutexes{..} = do
                     then return $ demoWave requestOrigin i
                     else Bucket.readVaultObject requestOrigin requestSource i
             liftIO $ mapM Async.wait async_replies
+        mapM yield $ filter (not . Map.null) maps
 
     filterRange :: Request -> Pipe (Map Timestamp Point) [Point] Rados.Pool ()
     filterRange Request{..} = forever $
