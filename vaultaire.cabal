@@ -117,6 +117,7 @@ executable           readerd
                      optparse-applicative,
                      pipes,
                      split,
+                     stm,
                      zeromq4-haskell,
                      time,
                      type-level,
