@@ -9,7 +9,6 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -22,7 +21,10 @@ module ReaderDaemon
     readerProgram,
     readerCommandLineParser,
 
-    -- for testing
+    -- for benchmarks/testing
+    processBucket,
+    pleaseEncodePoints,
+    tryCompress,
     demoWave
 )
 where
@@ -36,6 +38,7 @@ import Control.Concurrent.STM.TQueue
 import Control.Concurrent.STM(atomically)
 import Control.Monad
 import "mtl" Control.Monad.Error ()
+import qualified Data.HashTable.ST.Basic as HashTable
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
@@ -60,8 +63,6 @@ import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
-
-#include "config.h"
 
 data Options = Options {
     optGlobalDebug    :: !Bool,
@@ -152,7 +153,7 @@ reader pool' user' n_threads Mutexes{..} = do
                 runEffect $ bucketTimemarks request
                             >-> chunk 16
                             >-> retrieveBuckets request
-                            >-> filterRange request
+                            >-> processBucket request
                             >-> pleaseEncodePoints
                             >-> tryCompress
                             >-> buildReply envelope client
@@ -160,59 +161,66 @@ reader pool' user' n_threads Mutexes{..} = do
                 processRequests ident request_q
             Nothing -> return ()
 
-    transmitResponse :: Chan Reply -> Consumer Reply Rados.Pool ()
-    transmitResponse ch = forever $
-        await >>= (lift . liftIO . writeChan ch)
+transmitResponse :: Chan Reply -> Consumer Reply Rados.Pool ()
+transmitResponse ch = forever $
+    await >>= (liftIO . writeChan ch)
 
-    -- |
-    -- Produce time marks from a request
-    bucketTimemarks :: Request -> Producer [Timemark] Rados.Pool ()
-    bucketTimemarks Request{..} =
-        yield $ Bucket.calculateTimemarks requestAlpha requestOmega
+-- |
+-- Produce time marks from a request
+bucketTimemarks :: Request -> Producer [Timemark] Rados.Pool ()
+bucketTimemarks Request{..} =
+    yield $ Bucket.calculateTimemarks requestAlpha requestOmega
 
-    -- |
-    -- Split time marks up into manageable chunks as to not blow all our memory
-    chunk :: Int -> Pipe [Timemark] [Timemark] Rados.Pool ()
-    chunk n = Pipes.mapFoldable (chunksOf n)
+-- |
+-- Split time marks up into manageable chunks as to not blow all our memory
+chunk :: Int -> Pipe [Timemark] [Timemark] Rados.Pool ()
+chunk n = Pipes.mapFoldable (chunksOf n)
 
-    -- |
-    -- Retrieve a chunk of time marks from the vault and retrieve the Map
-    -- Timestamp Point associated with that range, these must be yielded in
-    -- chronological order.
-    --
-    -- The results must also have null maps filtered out due to no points
-    -- encoding and compressing to an empty string, which is a terminator.
-    retrieveBuckets :: Request -> Pipe [Timemark] (Map Timestamp Point) Rados.Pool ()
-    retrieveBuckets Request{..} =
-        Pipes.mapM (readBuckets) >-> Pipes.concat >-> Pipes.filter (not . Map.null)
-      where
-        readBuckets :: [Timemark] -> Rados.Pool [Map Timestamp Point]
-        readBuckets intervals = do
-            async_replies <- forM intervals $ \i -> Rados.async $ do
-                -- readVaultObject should probably be changed to expose a rados
-                -- AsyncRequest directly. Untill then we use a
-                -- Control.Concurrent.Async
-                if requestOrigin == Origin "BENHUR"
-                    then return $ demoWave requestOrigin i
-                    else Bucket.readVaultObject requestOrigin requestSource i
-            liftIO $ mapM Async.wait async_replies
+-- |
+-- Retrieve a chunk of time marks from the vault and range, these must be
+-- yielded in chronological order.
+retrieveBuckets :: Request -> Pipe [Timemark] ByteString Rados.Pool ()
+retrieveBuckets Request{..} = forever $ do
+    labels <- map (Bucket.makeLabel requestOrigin requestSource) <$> await
+    lift (mapM Bucket.readBucket labels) >>= mapM logErrors
+  where
+    logErrors in_flight = do
+        result <- lift $ Rados.look in_flight
+        case result of
+            Right bs ->
+                yield bs
+            Left (Rados.NoEntity{}) -> 
+                return ()
+            Left e ->
+                liftIO $ putStrLn $ "rados error reading bucket:" ++ show e
 
-    -- |
-    -- All points that are not within the requested range must be dropped
-    filterRange :: Request -> Pipe (Map Timestamp Point) [Point] Rados.Pool ()
-    filterRange Request{..} = Pipes.map (Bucket.pointsInRange requestAlpha requestOmega)
+-- | Slow bit, de-duplicate points within this bucket and yield only those
+-- points within the given request timerange
+processBucket :: Monad m => Request -> Pipe ByteString [Point] m ()
+processBucket Request{..} = extractMap >-> extractPoints
+  where
+    extractMap = forever $ do
+        bucket <- await
+        yield $ Bucket.process requestOrigin requestSource bucket Map.empty
+    extractPoints = forever $ do
+        either_map <- await
+        case either_map of
+            Left e ->
+                error $ "error processing bucket" ++ show e
+            Right points ->
+                yield $ Bucket.pointsInRange requestAlpha requestOmega points
 
-    -- |
-    -- Silly naming due to collision, suggestions welcome
-    pleaseEncodePoints :: Pipe [Point] ByteString Rados.Pool ()
-    pleaseEncodePoints = Pipes.map encodePoints
+-- |
+-- Silly naming due to collision, suggestions welcome
+pleaseEncodePoints :: Monad m => Pipe [Point] ByteString m ()
+pleaseEncodePoints = Pipes.map encodePoints
 
-    -- | Pass along compressions that do not fail
-    tryCompress :: Pipe ByteString ByteString Rados.Pool ()
-    tryCompress = Pipes.mapFoldable compress
+-- | Pass along compressions that do not fail
+tryCompress :: Monad m => Pipe ByteString ByteString m ()
+tryCompress = Pipes.mapFoldable compress
 
-    buildReply :: ByteString -> ByteString -> Pipe ByteString Reply Rados.Pool ()
-    buildReply envelope client = Pipes.map (Reply envelope client)
+buildReply :: ByteString -> ByteString -> Pipe ByteString Reply Rados.Pool ()
+buildReply envelope client = Pipes.map (Reply envelope client)
 
 demoWave
     :: Origin
@@ -343,7 +351,7 @@ receiver broker Mutexes{..} d = do
 
 readerProgram :: Options -> MVar () -> IO ()
 readerProgram (Options d w pool user broker readerParallelism) quitV = do
-    putStrLn $ "readerd starting (vaultaire v" ++ VERSION ++ ")"
+    putStrLn $ "readerd starting"
 
     msgV <- newEmptyMVar
     contentsV <- newEmptyMVar

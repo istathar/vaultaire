@@ -22,6 +22,9 @@ module Vaultaire.Persistence.BucketObject (
     pointsInRange,
     appendVaultPoints,
     readVaultObject,
+    readBucket,
+    makeLabel,
+    process,
 
     -- for testing
     hashOriginName,
@@ -208,9 +211,7 @@ readVaultObject o s i =
     case ey' of
         Left (NoEntity _ _ _)   -> return Map.empty
         Left err                -> liftIO $ throwIO err
-        Right y'                -> either error return $ process y' Map.empty
-
-  where
+        Right y'                -> either error return $ process o s y' Map.empty
 
 --
 -- First write wins. This is a crucial design property; we DO expect duplicate
@@ -219,26 +220,34 @@ readVaultObject o s i =
 -- insert it. This also has an important security aspect: someone can
 -- maliciously write later, but we will ignore it and thereby not destroy data.
 --
+process :: Origin -> SourceDict -> ByteString -> Map Timestamp Point -> Either String (Map Timestamp Point)
+process o s y' !m1 =
+    if S.null y'
+        then return m1
+        else do
+            (p,z') <- readPoint2 y'
+            let k = timestamp p
+            let m2 = if Map.member k m1
+                    then m1
+                    else Map.insert k p m1
 
-        process :: ByteString -> Map Timestamp Point -> Either String (Map Timestamp Point)
-        process y' !m1 =
-            if S.null y'
-                then return m1
-                else do
-                    (p,z') <- readPoint2 y'
-                    let k = timestamp p
-                    let m2 = if Map.member k m1
-                            then m1
-                            else Map.insert k p m1
+            process o s z' m2
 
-                    process z' m2
+  where
+    readPoint2 :: ByteString -> Either String (Point, ByteString)
+    readPoint2 x' = do
+        ((VaultRecord _ pb), remainder') <- runGetState get x' 0
+        return (convertVaultToPoint o s pb, remainder')
 
+-- | Wrap fromObjectLabel2 with the hashing of the SourceDict
+makeLabel :: Origin -> SourceDict -> Timemark -> Label
+makeLabel origin' source_dict time_mark =
+    let source_hash = hashSourceDict source_dict
+    in formObjectLabel2 origin' source_hash time_mark
 
-        readPoint2 :: ByteString -> Either String (Point, ByteString)
-        readPoint2 x' = do
-            ((VaultRecord _ pb), remainder') <- runGetState get x' 0
-            return (convertVaultToPoint o s pb, remainder')
-
+-- | Return an AsyncRead of the appropriate bucket
+readBucket :: Label -> Pool (AsyncRead ByteString)
+readBucket (Label l) = runAsync . runObject l $ readFull
 
 data VaultRecord = VaultRecord Disk.VaultPrefix Disk.VaultPoint
 

@@ -10,7 +10,6 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -30,13 +29,10 @@ import System.Locale (defaultTimeLocale)
 import System.ZMQ4.Monadic hiding (source)
 import Text.Printf
 
-#include "config.h"
-
 data Options = Options {
     argDaemonHost :: !String,
     argFields     :: !([String])
 }
-
 
 formatTimestamp :: UTCTime -> String
 formatTimestamp x = formatTime defaultTimeLocale "%H:%M:%S.%q" x
@@ -54,7 +50,7 @@ getTimestamp = do
 program :: Options -> IO ()
 program (Options broker fields) = do
     hSetBuffering stdout LineBuffering
-    putStrLn $ "telemetry connecting (vaultaire v" ++ VERSION ++ ")"
+    putStrLn $ "telemetry connecting"
 
     runZMQ $ do
         tele <- socket Sub

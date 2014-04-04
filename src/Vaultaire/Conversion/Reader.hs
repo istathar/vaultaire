@@ -9,9 +9,8 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE BangPatterns  #-}
 
 module Vaultaire.Conversion.Reader (
     convertVaultToPoint,
@@ -53,9 +52,9 @@ convertToMapEntry tag =
 -}
 
 convertVaultToPoint :: Core.Origin -> Core.SourceDict -> Protobuf.VaultPoint -> Core.Point
-convertVaultToPoint o s pb =
+convertVaultToPoint !o !s !pb =
   let
-    v = case (getField $ Protobuf.payload pb) of
+    !v = case (getField $ Protobuf.payload pb) of
         Protobuf.EMPTY   -> Core.Empty
         Protobuf.NUMBER  -> Core.Numeric (fromMaybe 0 $ getField $ Protobuf.valueNumeric pb)
         Protobuf.REAL    -> Core.Measurement (fromMaybe 0.0 $ getField $ Protobuf.valueMeasurement pb)

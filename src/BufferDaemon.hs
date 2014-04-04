@@ -9,7 +9,6 @@
 --
 
 {-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
@@ -41,8 +40,6 @@ import qualified System.ZMQ4.Monadic as Zero
 import Vaultaire.CommunicationsThread
 import Vaultaire.JournalFile
 
-#include "../config.h"
-
 data Options = Options {
     debug     :: !Bool,
     workers   :: !Int,
@@ -72,7 +69,7 @@ type BuildFailure = Ack
 -- Entrypoint
 program :: Options -> MVar () -> IO ()
 program Options{..} quit_mvar = do
-    putStrLn $ "bufferd starting (vaultaire v"  ++ VERSION ++ ")"
+    putStrLn $ "bufferd starting"
 
     in_chan <- newTBChanIO 8
     telemetry_chan <- newTChanIO

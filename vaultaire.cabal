@@ -10,7 +10,11 @@ category:            Other
 tested-with:         GHC == 7.6
 stability:           experimental
 
-build-type:          Custom
+build-type:          Simple
+
+source-repository    head
+  type:              git
+  location:          git@github.com:anchor/vaultaire.git
 
 executable           bufferd
   default-language:  Haskell2010
@@ -122,6 +126,7 @@ executable           readerd
                      type-level,
                      protobuf,
                      locators,
+                     stm,
                      optparse-applicative,
                      async,
                      unix,
@@ -283,10 +288,40 @@ test-suite           check
 
   ghc-prof-options:  -prof -auto-all -caf-all
 
+benchmark read-bucket
+  hs-source-dirs:      src, bench
+  main-is:             ReadBucket.hs
+  type:                exitcode-stdio-1.0
+  build-depends:       base >=4.6 && <4.7,
+                       bytestring,
+                       criterion,
+                       text,
+                       cereal,
+                       transformers,
+                       mtl,
+                       pipes,
+                       blaze-builder,
+                       zeromq4-haskell,
+                       unix,
+                       optparse-applicative,
+                       protobuf,
+                       network,
+                       time,
+                       split,
+                       semigroups,
+                       stm,
+                       async,
+                       hashtables,
+                       rados-haskell,
+                       type-level,
+                       lz4,
+                       locators,
+                       containers
 
-source-repository    head
-  type:              git
-  location:          git@github.com:anchor/vaultaire.git
-
+  ghc-options:         -threaded
+                       -prof
+                       -auto-all
+                       -caf-all
+  default-language:    Haskell2010
 
 -- vim: set tabstop=21 expandtab:

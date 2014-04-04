@@ -10,7 +10,6 @@
 --
 
 {-# LANGUAGE BangPatterns       #-}
-{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -58,8 +57,6 @@ import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 import Vaultaire.JournalFile (BlockName,BlockSize)
 import qualified Vaultaire.JournalFile as Journal
-
-#include "config.h"
 
 data Options = Options {
     optGlobalDebug     :: !Bool,
@@ -439,7 +436,7 @@ comms broker d telemetry metrics = do
 
 program :: Options -> MVar () -> IO ()
 program (Options d c s bytelimit pool user broker) quitV = do
-    putStrLn $ "filerd starting (vaultaire v" ++ VERSION ++ ")"
+    putStrLn $ "filerd starting"
  
     dV <- newMVar Map.empty
     telC <- newTChanIO
