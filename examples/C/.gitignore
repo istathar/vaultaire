@@ -1,6 +1,0 @@
-*.pb-c.[cho]
-*.o
-generate_frames
-unpack_frames
-framecat
-framegrep

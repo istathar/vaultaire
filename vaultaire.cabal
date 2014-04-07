@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             0.4.2
+version:             2.0.0
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Andrew Cowie <andrew@operationaldynamics.com>
@@ -16,235 +16,26 @@ source-repository    head
   type:              git
   location:          git@github.com:anchor/vaultaire.git
 
-executable           bufferd
-  default-language:  Haskell2010
 
-  build-depends:     base,
+library
+  exposed-modules:   Vaultaire.Daemon
+  other-modules:
+  build-depends:     base >=3 && <5,
                      bytestring,
-                     text,
-                     containers >= 0.5,
-                     unordered-containers,
-                     network,
-                     cereal,
-                     uuid,
-                     semigroups,
-                     transformers,
                      mtl,
-                     errors,
-                     stm,
-                     lz4,
-                     stm-chans,
-                     optparse-applicative,
+                     transformers,
                      zeromq4-haskell,
-                     time,
-                     type-level,
-                     protobuf,
-                     locators,
-                     optparse-applicative,
-                     async,
-                     unix,
-                     blaze-builder,
-                     rados-haskell >= 3.0.0
-
-  main-is:           bufferd.hs
-  hs-source-dirs:    src
-  include-dirs:      .
-
-  ghc-options:       -O2
-                     -threaded
-                     -rtsopts
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-                     -funbox-strict-fields
-                     -fno-warn-missing-signatures
-                     -fno-warn-unused-do-bind
-
-  ghc-prof-options:  -prof -auto-all -caf-all
-
-executable           filerd
-  default-language:  Haskell2010
-
-  build-depends:     base,
-                     bytestring,
-                     text,
-                     containers >= 0.5,
-                     unordered-containers,
-                     network,
-                     cereal,
-                     semigroups,
-                     transformers,
-                     mtl,
-                     stm,
-                     lz4,
-                     optparse-applicative,
-                     zeromq4-haskell,
-                     time,
-                     type-level,
-                     protobuf,
-                     locators,
-                     optparse-applicative,
-                     async,
-                     unix,
-                     blaze-builder,
-                     rados-haskell >= 3.0.0
-
-  main-is:           filerd.hs
-  hs-source-dirs:    src
-  include-dirs:      .
-
-  ghc-options:       -O2
-                     -threaded
-                     -rtsopts
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-                     -funbox-strict-fields
-                     -fno-warn-missing-signatures
-                     -fno-warn-unused-do-bind
-
-  ghc-prof-options:  -prof -auto-all -caf-all
-
-executable           readerd
-  default-language:  Haskell2010
-
-  build-depends:     base,
-                     bytestring,
-                     text,
-                     containers >= 0.5,
-                     network,
-                     cereal,
-                     semigroups,
-                     transformers,
-                     lz4,
-                     mtl,
-                     optparse-applicative,
+                     exceptions,
                      pipes,
-                     split,
-                     zeromq4-haskell,
-                     time,
-                     type-level,
-                     protobuf,
-                     locators,
-                     stm,
-                     optparse-applicative,
+                     pipes-concurrency,
+                     layers,
                      async,
-                     unix,
-                     blaze-builder,
-                     rados-haskell >= 2.0.0
-
-  main-is:           readerd.hs
+                     rados-haskell >= 3
   hs-source-dirs:    src
-  include-dirs:      .
-
-  ghc-options:       -O2
-                     -threaded
-                     -rtsopts
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-                     -funbox-strict-fields
-                     -fno-warn-missing-signatures
-                     -fno-warn-unused-do-bind
-
-  ghc-prof-options:  -prof -auto-all -caf-all
-
-executable           vault
   default-language:  Haskell2010
+  ghc-options:
 
-  build-depends:     base,
-                     bytestring,
-                     text,
-                     containers >= 0.5,
-                     cereal,
-                     semigroups,
-                     transformers,
-                     mtl,
-                     lz4,
-                     optparse-applicative,
-                     time,
-                     type-level,
-                     protobuf,
-                     locators,
-                     blaze-builder,
-                     rados-haskell >= 2.0.0
-
-  main-is:           vault.hs
-  hs-source-dirs:    src
-  include-dirs:      .
-
-  ghc-options:       -O2
-                     -threaded
-                     -rtsopts
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-                     -funbox-strict-fields
-                     -fno-warn-missing-signatures
-                     -fno-warn-unused-do-bind
-
-  ghc-prof-options:  -prof -fprof-auto-top
-
-
-executable           telemetry
-  default-language:  Haskell2010
-
-  build-depends:     base,
-                     bytestring,
-                     optparse-applicative,
-                     transformers,
-                     zeromq4-haskell,
-                     time,
-                     old-locale
-
-  main-is:           telemetry.hs
-  hs-source-dirs:    src
-  include-dirs:      .
-
-  ghc-options:       -O2
-                     -threaded
-                     -rtsopts
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-                     -funbox-strict-fields
-                     -fno-warn-missing-signatures
-                     -fno-warn-unused-do-bind
-
-  ghc-prof-options:  -prof -fprof-auto-top
-
-executable           query
-  default-language:  Haskell2010
-
-  build-depends:     base,
-                     bytestring,
-                     optparse-applicative,
-                     transformers,
-                     cereal,
-                     protobuf,
-                     zeromq4-haskell,
-                     lz4,
-                     type-level,
-                     text,
-                     attoparsec
-
-  main-is:           query.hs
-  hs-source-dirs:    src
-  include-dirs:      .
-
-  ghc-options:       -O2
-                     -threaded
-                     -rtsopts
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-                     -funbox-strict-fields
-                     -fno-warn-missing-signatures
-                     -fno-warn-unused-do-bind
-
-  ghc-prof-options:  -prof -fprof-auto-top
-
-test-suite           check
+test-suite           vaultaire-daemon
   type:              exitcode-stdio-1.0
 
   default-language:  Haskell2010
@@ -253,75 +44,14 @@ test-suite           check
                      HUnit,
                      hspec,
                      hspec-expectations,
-                     QuickCheck,
-                     bytestring,
-                     text,
-                     containers >= 0.5,
-                     cereal,
-                     semigroups,
-                     transformers,
-                     mtl,
-                     lz4,
                      zeromq4-haskell,
                      time,
                      type-level,
                      protobuf,
                      locators,
                      blaze-builder,
-                     rados-haskell >= 2.0.0
+                     vaultaire
 
-  main-is:           check.hs
+  main-is:           TestVaultaireDaemon.hs
   hs-source-dirs:    src,tests
-  include-dirs:      .
 
-  ghc-options:       -O2
-                     -threaded
-                     -rtsopts
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-                     -funbox-strict-fields
-                     -fno-warn-missing-signatures
-                     -fno-warn-unused-do-bind
-
-  include-dirs:      .
-
-  ghc-prof-options:  -prof -auto-all -caf-all
-
-benchmark read-bucket
-  hs-source-dirs:      src, bench
-  main-is:             ReadBucket.hs
-  type:                exitcode-stdio-1.0
-  build-depends:       base >=4.6 && <4.7,
-                       bytestring,
-                       criterion,
-                       text,
-                       cereal,
-                       transformers,
-                       mtl,
-                       pipes,
-                       blaze-builder,
-                       zeromq4-haskell,
-                       unix,
-                       optparse-applicative,
-                       protobuf,
-                       network,
-                       time,
-                       split,
-                       semigroups,
-                       stm,
-                       async,
-                       hashtables,
-                       rados-haskell,
-                       type-level,
-                       lz4,
-                       locators,
-                       containers
-
-  ghc-options:         -threaded
-                       -prof
-                       -auto-all
-                       -caf-all
-  default-language:    Haskell2010
-
--- vim: set tabstop=21 expandtab:
