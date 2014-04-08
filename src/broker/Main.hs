@@ -4,5 +4,5 @@ import System.ZMQ4.Monadic
 
 main :: IO ()
 main = runZMQ $ do
-    startProxy (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
+    linkThread $ startProxy (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
     wait

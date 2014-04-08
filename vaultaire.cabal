@@ -18,7 +18,8 @@ source-repository    head
 
 
 library
-  exposed-modules:   Vaultaire.Daemon
+  exposed-modules:   Vaultaire.Daemon,
+                     Vaultaire.Broker
   other-modules:
   build-depends:     base >=3 && <5,
                      bytestring,
@@ -33,7 +34,7 @@ library
                      pipes-concurrency,
                      async,
                      rados-haskell >= 3.0.1
-  hs-source-dirs:    src/daemon/
+  hs-source-dirs:    src/vaultaire/
   default-language:  Haskell2010
   ghc-options:
 
@@ -44,6 +45,7 @@ executable broker
   build-depends:     base >=3 && <5,
                      bytestring,
                      zeromq4-haskell,
+                     vaultaire,
                      async
   ghc-options:       -threaded
 
@@ -56,8 +58,10 @@ test-suite           daemon
                      HUnit,
                      hspec,
                      hspec-expectations,
-                     vaultaire
+                     vaultaire,
+                     zeromq4-haskell
 
   main-is:           Daemon.hs
   hs-source-dirs:    tests
+  ghc-options:       -threaded
 

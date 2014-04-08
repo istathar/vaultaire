@@ -93,7 +93,7 @@ messenger :: String
 messenger broker msgs_out ack_chan error_f = ZMQ.runZMQ $ do
     router <- ZMQ.socket ZMQ.Router
     ZMQ.setReceiveHighWM (ZMQ.restrict (0 :: Int)) router
-    ZMQ.connect router ("tcp://" ++ broker ++ ":5571")
+    ZMQ.connect router broker
     runEffect $ listen router ack_chan error_f >-> toOutput msgs_out
 
 listen :: ZMQ.Socket z ZMQ.Router
