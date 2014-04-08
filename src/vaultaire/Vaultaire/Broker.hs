@@ -1,11 +1,9 @@
+module Vaultaire.Broker
+(
+    startProxy,
+) where
 
-module Vaultaire.Broker where
 import System.ZMQ4.Monadic
-import Control.Concurrent.Async(link)
-import Control.Concurrent(threadDelay)
-
-wait :: ZMQ z ()
-wait = liftIO (threadDelay maxBound) >> wait
 
 startProxy :: (SocketType front_t, SocketType back_t)
            => (front_t, String) -- | Frontend, clients
@@ -22,6 +20,3 @@ startProxy (front_type, front_addr) (back_type, back_addr) cap_addr = do
     bind cap_s cap_addr
 
     proxy front_s back_s (Just cap_s)
-
-linkThread :: ZMQ z a -> ZMQ z ()
-linkThread a = async a >>= liftIO . link
