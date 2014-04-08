@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Encapsulate runtime requirements of a generic vaultaire daemon within a
 -- monad.
@@ -12,37 +12,48 @@ module Vaultaire.Daemon
 (
     Daemon(..),
     Response(..),
-    Message,
+    Message(..),
     runDaemon,
+    liftPool,
+    incomingMessages,
 )
 
 where
 import Control.Applicative
 import Control.Concurrent.Async
 import Control.Monad.IO.Class
-import Control.Monad.Layer
-import Control.Monad.Reader hiding (lift)
+import Control.Monad.Trans.Class
+import Control.Monad.Reader
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TBChan
 import Data.ByteString (ByteString)
-import Pipes hiding (lift)
-import qualified Pipes
+import Pipes
 import Pipes.Concurrent
+import Data.List.NonEmpty (fromList)
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 
 data Response = Success | Failure ByteString
-type Message = (ByteString, Response -> Daemon ())
+
+type ErrorF = (String -> IO ())
+
+data Message = Message
+    { replyF   :: Response -> Daemon ()
+    , payload  :: ByteString
+    }
+
+type Envelope = (ByteString, ByteString, ByteString)
+
+data Ack = Ack Envelope Response
 
 newtype Daemon a = Daemon
-    { unDaemon :: ReaderT (Input Message) Rados.Pool a}
-  deriving (Functor, Applicative, Monad, MonadIO)
+    { unDaemon :: ReaderT DaemonConfig Rados.Pool a}
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader DaemonConfig)
 
-instance MonadLayer Daemon where
-    type Inner Daemon = ReaderT (Input Message) Rados.Pool
-    layer = Daemon . lift
-    layerInvmap = const . layerMap
-
-instance MonadLayerFunctor Daemon where
-    layerMap f (Daemon a) = Daemon (f a)
+data DaemonConfig = DaemonConfig
+    { messagesIn  :: Input Message
+    , ackChan     :: TBChan Ack
+    }
 
 runDaemon :: String           -- | ^ Broker for ZMQ
           -> Maybe ByteString -- | ^ Username for Ceph
@@ -50,27 +61,79 @@ runDaemon :: String           -- | ^ Broker for ZMQ
           -> Daemon a
           -> IO a
 runDaemon broker ceph_user pool (Daemon a) = do
-    (output, input) <- spawn Unbounded
-    lift (startAsync $ messenger broker output)
+    -- TODO: Reasonable limit, not Unbounded
+    (msgs_out, msgs_in) <- spawn Unbounded
+    (ack_chan) <- liftIO (newTBChanIO 128)
+    -- TODO: Thread errors over telemetry channel
+    let error_f = putStrLn
+    startAsync $ messenger broker msgs_out ack_chan error_f
+
     Rados.runConnect ceph_user (Rados.parseConfig "/etc/ceph/ceph.conf") $
         Rados.runPool pool $
-            runReaderT a input
+            runReaderT a (DaemonConfig msgs_in ack_chan)
+
+liftPool :: Rados.Pool a -> Daemon a
+liftPool = Daemon . lift
+
+incomingMessages :: Producer Message Daemon ()
+incomingMessages = messagesIn <$> ask >>= fromInput
+
+-- Internal
+
+respond :: Envelope -> Response -> Daemon ()
+respond env resp = do
+    ack_chan <- ackChan <$> ask
+    liftIO $ atomically $ writeTBChan ack_chan (Ack env resp)
 
 startAsync :: IO a -> IO ()
 startAsync a = async a >>= link
 
-messenger :: String -> Output Message -> IO ()
-messenger broker output = ZMQ.runZMQ $ do
+messenger :: String
+          -> Output Message
+          -> TBChan Ack
+          -> ErrorF
+          -> IO ()
+messenger broker msgs_out ack_chan error_f = ZMQ.runZMQ $ do
     router <- ZMQ.socket ZMQ.Router
     ZMQ.setReceiveHighWM (ZMQ.restrict (0 :: Int)) router
     ZMQ.connect router ("tcp://" ++ broker ++ ":5571")
-    runEffect $ readMessages router >-> toOutput output
+    runEffect $ listen router ack_chan error_f >-> toOutput msgs_out
 
-readMessages :: ZMQ.Socket z ZMQ.Router -> Producer Message (ZMQ.ZMQ z) ()
-readMessages router = forever $ do
-    msg <- Pipes.lift $ ZMQ.receiveMulti router
-    case length msg of
-        4 -> yield (msg !! 3, undefined)
-        n -> Pipes.liftIO $ putStrLn $
-            "bad message recieved, "++ show n ++" parts; ignoring"
+listen :: ZMQ.Socket z ZMQ.Router
+       -> TBChan Ack
+       -> ErrorF
+       -> Producer Message (ZMQ.ZMQ z) ()
+listen router ack_chan error_f = forever $ do
+    result <- ZMQ.poll 100 [ZMQ.Sock router [ZMQ.In] Nothing]
+    case result of
+        -- Message waiting
+        [[ZMQ.In]] -> do
+            msg <- lift $ ZMQ.receiveMulti router
+            case msg of
+                [env_a, env_b, message_id, payload'] -> do
+                    let respond_f = respond (env_a, env_b, message_id)
+                    yield $ Message respond_f payload'
+                n -> liftIO $ error_f $ 
+                    "bad message recieved, " ++ show n ++ " parts; ignoring"
+        -- Timeout, do nothing.
+        [[]]        -> return ()
+        _           -> error "daemon listen: unpossible"
+    
+    lift $ sendAcks router ack_chan
+
+responseToPayload :: Response -> ByteString
+responseToPayload Success = ""
+responseToPayload (Failure msg) = msg
+
+sendAcks :: ZMQ.Socket z ZMQ.Router -> TBChan Ack -> ZMQ.ZMQ z ()
+sendAcks router ack_chan = do
+    ack <- liftIO $ atomically $ tryReadTBChan ack_chan
+    case ack of
+        Nothing -> return ()
+        Just (Ack (env_a, env_b, message_id) response') -> do
+            let payload' = responseToPayload response'
+            let reply = fromList [env_a, env_b, message_id, payload']
+            ZMQ.sendMulti router reply
+            sendAcks router ack_chan
+
 
