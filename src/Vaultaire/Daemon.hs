@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 -- | Encapsulate runtime requirements of a generic vaultaire daemon within a
 -- monad.
@@ -16,53 +16,46 @@ module Vaultaire.Daemon
     runDaemon,
     liftPool,
     incomingMessages,
-)
+) where
 
-where
 import Control.Applicative
 import Control.Concurrent.Async
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Class
-import Control.Monad.Reader
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TBChan
+import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Data.ByteString (ByteString)
+import Data.List.NonEmpty (fromList)
 import Pipes
 import Pipes.Concurrent
-import Data.List.NonEmpty (fromList)
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 
-data Response = Success | Failure ByteString
-
-type ErrorF = (String -> IO ())
-
-data Message = Message
-    { replyF   :: Response -> Daemon ()
-    , payload  :: ByteString
-    }
-
-type Envelope = (ByteString, ByteString, ByteString)
-
-data Ack = Ack Envelope Response
+-- User facing API
 
 newtype Daemon a = Daemon
     { unDaemon :: ReaderT DaemonConfig Rados.Pool a}
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader DaemonConfig)
 
 data DaemonConfig = DaemonConfig
-    { messagesIn  :: Input Message
-    , ackChan     :: TBChan Ack
+    { messagesIn :: Input Message
+    , ackChan    :: TBChan Ack
     }
 
-runDaemon :: String           -- | ^ Broker for ZMQ
-          -> Maybe ByteString -- | ^ Username for Ceph
-          -> ByteString       -- | ^ Pool name for Ceph
+data Response = Success | Failure ByteString
+
+data Message = Message
+    { replyF  :: Response -> Daemon ()
+    , payload :: ByteString
+    }
+
+runDaemon :: String           -- ^ Broker for ZMQ
+          -> Maybe ByteString -- ^ Username for Ceph
+          -> ByteString       -- ^ Pool name for Ceph
           -> Daemon a
           -> IO a
 runDaemon broker ceph_user pool (Daemon a) = do
-    -- TODO: Reasonable limit, not Unbounded
-    (msgs_out, msgs_in) <- spawn Unbounded
+    (msgs_out, msgs_in) <- spawn (Bounded 16)
     (ack_chan) <- liftIO (newTBChanIO 128)
     -- TODO: Thread errors over telemetry channel
     let error_f = putStrLn
@@ -79,6 +72,10 @@ incomingMessages :: Producer Message Daemon ()
 incomingMessages = messagesIn <$> ask >>= fromInput
 
 -- Internal
+
+type ErrorF = (String -> IO ())
+type Envelope = (ByteString, ByteString, ByteString)
+data Ack = Ack Envelope Response
 
 respond :: Envelope -> Response -> Daemon ()
 respond env resp = do
@@ -113,12 +110,12 @@ listen router ack_chan error_f = forever $ do
                 [env_a, env_b, message_id, payload'] -> do
                     let respond_f = respond (env_a, env_b, message_id)
                     yield $ Message respond_f payload'
-                n -> liftIO $ error_f $ 
+                n -> liftIO $ error_f $
                     "bad message recieved, " ++ show n ++ " parts; ignoring"
         -- Timeout, do nothing.
         [[]]        -> return ()
         _           -> error "daemon listen: unpossible"
-    
+
     lift $ sendAcks router ack_chan
 
 responseToPayload :: Response -> ByteString
@@ -135,5 +132,3 @@ sendAcks router ack_chan = do
             let reply = fromList [env_a, env_b, message_id, payload']
             ZMQ.sendMulti router reply
             sendAcks router ack_chan
-
-

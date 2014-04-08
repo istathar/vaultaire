@@ -37,7 +37,7 @@ library
   default-language:  Haskell2010
   ghc-options:
 
-test-suite           vaultaire-daemon
+test-suite           daemon
   type:              exitcode-stdio-1.0
 
   default-language:  Haskell2010
@@ -46,14 +46,8 @@ test-suite           vaultaire-daemon
                      HUnit,
                      hspec,
                      hspec-expectations,
-                     zeromq4-haskell,
-                     time,
-                     type-level,
-                     protobuf,
-                     locators,
-                     blaze-builder,
                      vaultaire
 
-  main-is:           TestVaultaireDaemon.hs
-  hs-source-dirs:    src,tests
+  main-is:           Daemon.hs
+  hs-source-dirs:    tests
 
