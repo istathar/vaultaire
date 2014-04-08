@@ -27,11 +27,13 @@ suite =
             runDaemon "tcp://localhost:1234" Nothing "test" (return ())
             >>= (`shouldBe` ())
 
-        it "recieves a message and sends ack" $ do
+        it "ignores bad message and replies to good message" $ do
             msg <- async replyOne
+            async sendBadMsg
             reply <- async sendTestMsg
             wait msg >>= (`shouldBe` "im in ur vaults")
             wait reply >>= (`shouldBe` ["\x42", ""])
+
 
 replyOne :: IO ByteString
 replyOne =
@@ -47,3 +49,9 @@ sendTestMsg = runZMQ $ do
     -- Simulate a client sending a sequence number and message
     sendMulti s $ fromList ["\x42", "im in ur vaults"]
     receiveMulti s
+
+sendBadMsg :: IO ()
+sendBadMsg = runZMQ $ do
+    s <- socket Dealer
+    connect s "tcp://localhost:5560"
+    sendMulti s $ fromList ["beep"]

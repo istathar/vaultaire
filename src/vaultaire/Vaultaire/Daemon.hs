@@ -110,7 +110,8 @@ listen router msg_chan ack_chan error_f = forever $ do
                     let respond_f = respond (env_a, env_b, message_id)
                     writeQueue msg_chan $ Message respond_f payload'
                 n -> liftIO $ error_f $
-                    "bad message recieved, " ++ show n ++ " parts; ignoring"
+                    "bad message recieved, " ++ (show $ length $ n)
+                    ++ " parts; ignoring"
         -- Timeout, do nothing.
         [[]]        -> return ()
         _           -> error "daemon listen: unpossible"
