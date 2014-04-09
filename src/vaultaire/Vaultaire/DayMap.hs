@@ -36,7 +36,7 @@ loadDayMap bs
 
 -- Internal
 
-lookupGeneric :: DayMap -> Time -> (Word64, Word64)
+lookupGeneric :: DayMap -> Time -> (Epoch, NoBuckets)
 lookupGeneric dm t = 
     let (left, middle, _) = Map.splitLookup t dm
     in case middle of
