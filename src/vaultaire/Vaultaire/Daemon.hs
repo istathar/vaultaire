@@ -41,9 +41,9 @@ import qualified System.ZMQ4.Monadic as ZMQ
 
 -- User facing API
 
--- | The 'Daemon' monad is implemented transformer stack storing the per
--- origin DayMaps and channels for message retrieval and reply.
--- The underlying base monad is a rados 'Pool', you can lift to this via 'liftPool'.
+-- | The 'Daemon' monad stores per 'Origin' 'DayMap's and queues for message
+-- retrieval and reply. The underlying base monad is a rados 'Pool', you can
+-- lift to this via 'liftPool'.
 newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConfig Pool) a)
   deriving ( Functor, Applicative, Monad, MonadIO, MonadReader DaemonConfig,
              MonadState OriginDays)
