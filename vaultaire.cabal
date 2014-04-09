@@ -21,6 +21,7 @@ library
   exposed-modules:   Vaultaire.Daemon,
                      Vaultaire.Broker,
                      Vaultaire.DayMap,
+                     Vaultaire.OriginMap,
                      Vaultaire.Util
   other-modules:
   build-depends:     base >=3 && <5,

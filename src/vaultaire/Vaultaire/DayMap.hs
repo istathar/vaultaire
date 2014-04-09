@@ -40,7 +40,7 @@ lookupGeneric :: DayMap -> Time -> (Epoch, NoBuckets)
 lookupGeneric dm t = 
     let (left, middle, _) = Map.splitLookup t dm
     in case middle of
-        Just m -> if Map.null left
+        Just m -> if Map.null left -- Corner case, leftmost entry
                     then (t, m)
                     else Map.findMax left
         Nothing -> Map.findMax left
