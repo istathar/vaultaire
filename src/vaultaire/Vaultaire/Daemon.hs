@@ -101,6 +101,7 @@ refreshOriginDays origin = do
     reload om = do
         day_map <- liftPool $ dayMapFromCeph origin
         put $ originInsert om origin day_map
+
     doStat oid =
         liftPool $ Rados.runObject oid Rados.stat
         
