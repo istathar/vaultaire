@@ -5,6 +5,9 @@ module Vaultaire.Broker
 
 import System.ZMQ4.Monadic
 
+-- | Start a ZMQ proxy, capture is always a Pub socket.
+--
+-- This should never return lest catastrophic failure.
 startProxy :: (SocketType front_t, SocketType back_t)
            => (front_t, String) -- ^ Frontend, clients
            -> (back_t, String)  -- ^ Backend, workers

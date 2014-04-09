@@ -29,6 +29,8 @@ lookupEpoch = (fst .) . lookupGeneric
 lookupNoBuckets :: DayMap -> Time -> NoBuckets
 lookupNoBuckets = (snd .) . lookupGeneric
 
+-- | Simple corruption check of input is done by checking that it is a multiple
+-- of two Word64s
 loadDayMap :: ByteString -> Either String DayMap
 loadDayMap bs
     | BS.length bs `rem` 16 /= 0 = Left "corrupt"
