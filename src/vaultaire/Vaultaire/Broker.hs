@@ -6,9 +6,9 @@ module Vaultaire.Broker
 import System.ZMQ4.Monadic
 
 startProxy :: (SocketType front_t, SocketType back_t)
-           => (front_t, String) -- | Frontend, clients
-           -> (back_t, String)  -- | Backend, workers
-           -> String            -- | Capture address, for debug
+           => (front_t, String) -- ^ Frontend, clients
+           -> (back_t, String)  -- ^ Backend, workers
+           -> String            -- ^ Capture address, for debug
            -> ZMQ z ()
 startProxy (front_type, front_addr) (back_type, back_addr) cap_addr = do
     front_s <- socket front_type

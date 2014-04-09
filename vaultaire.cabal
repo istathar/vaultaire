@@ -20,6 +20,7 @@ source-repository    head
 library
   exposed-modules:   Vaultaire.Daemon,
                      Vaultaire.Broker,
+                     Vaultaire.DayMap,
                      Vaultaire.Util
   other-modules:
   build-depends:     base >=3 && <5,
@@ -27,8 +28,11 @@ library
                      mtl,
                      transformers,
                      semigroups,
+                     containers,
+                     unordered-containers,
                      zeromq4-haskell,
                      exceptions,
+                     packer,
                      stm,
                      async,
                      rados-haskell >= 3.0.1
@@ -60,6 +64,21 @@ test-suite           daemon-test
                      zeromq4-haskell
 
   main-is:           Daemon.hs
+  hs-source-dirs:    tests
+  ghc-options:       -threaded
+
+test-suite           daymap-test
+  type:              exitcode-stdio-1.0
+
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     containers,
+                     bytestring,
+                     vaultaire
+
+  main-is:           DayMap.hs
   hs-source-dirs:    tests
   ghc-options:       -threaded
 
