@@ -37,17 +37,17 @@ suite = do
 
     describe "lookup" $ do
         it "handles left boundary correctly" $ do
-            simpleDayMap `lookupEpoch` 0 `shouldBe` 0
-            simpleDayMap `lookupNoBuckets` 0 `shouldBe` 100
+            lookupEpoch 0 simpleDayMap `shouldBe` 0
+            lookupNoBuckets 0 simpleDayMap `shouldBe` 100
 
         it "handles right boundary correcly" $ do
-            simpleDayMap `lookupEpoch` 10 `shouldBe` 0
-            simpleDayMap `lookupNoBuckets` 10 `shouldBe` 100
+            lookupEpoch 10 simpleDayMap `shouldBe` 0
+            lookupNoBuckets 10 simpleDayMap `shouldBe` 100
 
         it "handles beyond right boundary correcly" $ do
-            simpleDayMap `lookupEpoch` 11 `shouldBe` 10
-            simpleDayMap `lookupNoBuckets` 11 `shouldBe` 200
+            lookupEpoch 11 simpleDayMap `shouldBe` 10
+            lookupNoBuckets 11 simpleDayMap `shouldBe` 200
 
         it "handles beyond end" $ do
-            simpleDayMap `lookupEpoch` 31 `shouldBe` 30
-            simpleDayMap `lookupNoBuckets` 31 `shouldBe` 300
+            lookupEpoch 31 simpleDayMap `shouldBe` 30
+            lookupNoBuckets 31 simpleDayMap `shouldBe` 300

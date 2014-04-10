@@ -23,10 +23,10 @@ type NoBuckets = Word64
 type Time = Word64
 type DayMap = Map Epoch NoBuckets
 
-lookupEpoch :: DayMap -> Time -> Epoch
+lookupEpoch :: Time -> DayMap -> Epoch
 lookupEpoch = (fst .) . lookupGeneric
 
-lookupNoBuckets :: DayMap -> Time -> NoBuckets
+lookupNoBuckets :: Time -> DayMap -> NoBuckets
 lookupNoBuckets = (snd .) . lookupGeneric
 
 -- | Simple corruption check of input is done by checking that it is a multiple
@@ -38,8 +38,8 @@ loadDayMap bs
 
 -- Internal
 
-lookupGeneric :: DayMap -> Time -> (Epoch, NoBuckets)
-lookupGeneric dm t = 
+lookupGeneric :: Time -> DayMap -> (Epoch, NoBuckets)
+lookupGeneric t dm = 
     let (left, middle, _) = Map.splitLookup t dm
     in case middle of
         Just m -> if Map.null left -- Corner case, leftmost entry
@@ -49,4 +49,6 @@ lookupGeneric dm t =
  
 mustLoadDayMap :: ByteString -> DayMap
 mustLoadDayMap =
-    Map.fromList . runUnpacking (many ((,) <$> getWord64LE <*> getWord64LE))
+    Map.fromList . runUnpacking parse
+  where
+    parse = many $ (,) <$> getWord64LE <*> getWord64LE

@@ -36,7 +36,7 @@ library
                      packer,
                      stm,
                      async,
-                     rados-haskell >= 3.0.1
+                     rados-haskell >= 3
   hs-source-dirs:    src/vaultaire/
   default-language:  Haskell2010
   ghc-options:
@@ -50,6 +50,7 @@ executable broker
                      zeromq4-haskell,
                      vaultaire
   ghc-options:       -threaded
+  default-language:  Haskell2010
 
 test-suite           daemon-test
   type:              exitcode-stdio-1.0

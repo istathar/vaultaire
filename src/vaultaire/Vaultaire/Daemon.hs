@@ -22,6 +22,8 @@ module Vaultaire.Daemon
     nextMessage,
     refreshOriginDays,
     withDayFileLock,
+    fetchEpoch,
+    fetchNoBuckets,
 ) where
 
 import Control.Applicative
@@ -94,6 +96,22 @@ liftPool = Daemon . lift . lift
 nextMessage :: Daemon Message
 nextMessage = messagesIn <$> ask >>= liftIO . atomically . readTBQueue
 
+-- | Fetch the epoch from cache for a given time, it is up to you to refresh
+-- the cache when you need fresh data.
+fetchEpoch :: Origin -> Time -> Daemon (Maybe Epoch)
+fetchEpoch origin time = do
+    om <- get
+    return $ withDayMap om origin (lookupEpoch time)
+
+-- | Fetch the number of buckets from cache for a given time
+fetchNoBuckets :: Origin -> Time -> Daemon (Maybe NoBuckets)
+fetchNoBuckets origin time = do
+    om <- get
+    return $ withDayMap om origin (lookupNoBuckets time)
+
+withDayMap :: OriginDays -> Origin -> (DayMap -> a) -> Maybe a
+withDayMap om origin f = f . snd <$> originLookup origin om
+    
 -- | Ensure that the 'DayMap' for a given 'Origin' is up to date. If you need
 -- the day map to be up to date for the entirity of an operation you must use
 -- this within a 'withDayFileLock'.
@@ -101,7 +119,7 @@ refreshOriginDays :: Origin -> Daemon ()
 refreshOriginDays origin = do
     om <- get
     -- If we already have it, reload if modified. Otherwise we just reload.
-    case originLookup om origin of 
+    case originLookup origin om of 
         Just (file_size, _) -> do
             let day_file = dayOID origin
             st <- liftPool $ runObject day_file stat
@@ -116,8 +134,31 @@ refreshOriginDays origin = do
         day_map <- liftPool $ dayMapFromCeph origin
         put $ originInsert om origin day_map
 
-withDayFileLock :: Daemon a -> Daemon a
-withDayFileLock = undefined
+-- | ^ Read this:
+--
+-- This function a little odd, due to my hesitancy adopting something cool like
+-- layers, or even MonadCatchIO.
+--
+-- In order to grab a shared lock, we lift to the Pool monad, but to run the
+-- user's action we must re-wrap the state.
+--
+-- TLDR: Daemon state within a withDayFileLock will not be updated within the
+-- 'outer' monad until the entire action completes. You will probably never
+-- even notice this.
+withDayFileLock :: Origin -> Daemon a -> Daemon a
+withDayFileLock origin (Daemon a) = do
+    conf <- ask
+    st <- get
+
+    (r,s) <- liftPool $ withSharedLock (dayOID origin)  -- oid
+                                        "lock"           -- name
+                                        "lock"           -- description
+                                        "daemon"         -- lock holder tag
+                                        Nothing
+                                        (runReaderT (runStateT a st) conf)
+
+    put s
+    return r
 
 -- Internal
 
