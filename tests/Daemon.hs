@@ -24,8 +24,8 @@ main = do
 -- | A pre-requisite for this test suite is a connection to a test ceph cluster
 -- with a "test" pool.
 suite :: Spec
-suite =
-    describe "Daemon" $ do
+suite = do
+    describe "Daemon messaging" $ do
         it "starts up and shuts down cleanly" $
             runDaemon "tcp://localhost:1234" Nothing "test" (return ())
             >>= (`shouldBe` ())
@@ -37,6 +37,7 @@ suite =
             wait msg >>= (`shouldBe` "im in ur vaults")
             wait reply >>= (`shouldBe` ["\x42", ""])
 
+    describe "Daemon day map" $ do
         it "loads an origins map" $ do
             result <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
                 liftPool $ makePonyDayMap dayFileA
@@ -65,6 +66,7 @@ suite =
 
             result `shouldBe` (Just 255, Just 254)
 
+    describe "Daemon rollover" $  do
         it "correctly rolls over day" $ do
             new <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
                 liftPool cleanup
@@ -74,6 +76,17 @@ suite =
                 rollOverDay "PONY"
                 liftPool $ runObject "02_PONY_days" readFull
             new `shouldBe` Right dayFileD
+
+        it "does not rollover if the day map has been touched" $ do
+            new <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
+                liftPool cleanup
+                liftPool $ makePonyDayMap dayFileB
+                refreshOriginDays "PONY"
+                liftPool $ makePonyDayMap dayFileA
+                updateLatest "PONY" 0x48
+                rollOverDay "PONY"
+                liftPool $ runObject "02_PONY_days" readFull
+            new `shouldBe` Right dayFileA
 
 throwJust :: Monad m => Maybe RadosError -> m ()
 throwJust =
