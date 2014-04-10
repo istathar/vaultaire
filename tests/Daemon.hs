@@ -10,6 +10,8 @@ import Test.Hspec
 import Vaultaire.Broker
 import Vaultaire.Daemon
 import Vaultaire.Util
+import Control.Applicative
+import System.Rados.Monadic hiding (async)
 
 main :: IO ()
 main = do
@@ -34,6 +36,50 @@ suite =
             wait msg >>= (`shouldBe` "im in ur vaults")
             wait reply >>= (`shouldBe` ["\x42", ""])
 
+        it "loads an origins map" $ do
+            result <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
+                liftPool $ makePonyDayMap dayFileA
+                refreshOriginDays "PONY"
+                (,) <$> fetchEpoch "PONY" 42 <*> fetchNoBuckets "PONY" 42
+
+            result `shouldBe` (Just 0, Just 8)
+
+        it "does not invalidate cache on same filesize" $ do
+            result <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
+                liftPool $ makePonyDayMap dayFileA
+                refreshOriginDays "PONY"
+                liftPool $ makePonyDayMap dayFileB
+                refreshOriginDays "PONY"
+                (,) <$> fetchEpoch "PONY" 42 <*> fetchNoBuckets "PONY" 42
+
+            result `shouldBe` (Just 0, Just 8)
+
+        it "does invalidate cache on different filesize" $ do
+            result <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
+                liftPool $ makePonyDayMap dayFileA
+                refreshOriginDays "PONY"
+                liftPool $ makePonyDayMap dayFileC
+                refreshOriginDays "PONY"
+                (,) <$> fetchEpoch "PONY" 300 <*> fetchNoBuckets "PONY" 300
+
+            result `shouldBe` (Just 255, Just 254)
+
+makePonyDayMap :: ByteString -> Pool ()
+makePonyDayMap contents =
+    runObject "02_PONY_days" (remove >> writeFull contents)
+    >>= maybe (return ()) (error . show)
+
+dayFileA, dayFileB, dayFileC :: ByteString
+dayFileA = "\x00\x00\x00\x00\x00\x00\x00\x00\
+           \\x08\x00\x00\x00\x00\x00\x00\x00"
+
+dayFileB = "\x00\x00\x00\x00\x00\x00\x00\x00\
+           \\x0f\x00\x00\x00\x00\x00\x00\x00"
+
+dayFileC = "\x00\x00\x00\x00\x00\x00\x00\x00\
+           \\x0f\x00\x00\x00\x00\x00\x00\x00\
+           \\xff\x00\x00\x00\x00\x00\x00\x00\
+           \\xfe\x00\x00\x00\x00\x00\x00\x00"
 
 replyOne :: IO ByteString
 replyOne =

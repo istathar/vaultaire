@@ -33,8 +33,17 @@ lookupNoBuckets = (snd .) . lookupGeneric
 -- of two Word64s
 loadDayMap :: ByteString -> Either String DayMap
 loadDayMap bs
-    | BS.length bs `rem` 16 /= 0 = Left "corrupt"
-    | otherwise = Right $ mustLoadDayMap bs
+    | BS.length bs == 0 =
+        Left "empty"
+    | BS.length bs `rem` 16 /= 0 =
+        Left $ "corrupt contents, should be multiple of 16, was: " ++
+               show (BS.length bs) ++ " bytes."
+    | otherwise =
+        let loaded = mustLoadDayMap bs
+            (first, _) = Map.findMin loaded
+        in if first == 0
+            then Right loaded
+            else Left "bad first entry, must start at zero."
 
 -- Internal
 

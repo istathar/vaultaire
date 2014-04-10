@@ -131,8 +131,10 @@ refreshOriginDays origin = do
         Nothing -> reload om
   where
     reload om = do
-        day_map <- liftPool $ dayMapFromCeph origin
-        put $ originInsert om origin day_map
+        result <- liftPool $ dayMapFromCeph origin
+        case result of
+            Left e -> liftIO $ putStrLn e
+            Right day_map -> put $ originInsert om origin day_map
 
 -- | ^ Read this:
 --
@@ -170,18 +172,23 @@ data Ack = Ack Envelope Response
 -- | Load a DayMap from Ceph, throwing errors on failure.
 --
 -- The file size is returned along side the map for cache invalidation.
-dayMapFromCeph :: Origin -> Pool (FileSize, DayMap)
+dayMapFromCeph :: Origin -> Pool (Either String (FileSize, DayMap))
 dayMapFromCeph origin = do
-    day_file <- runObject (dayOID origin) readFull 
-    case day_file of
-        Left e -> error $ "Failed to read day file: " ++ show day_file ++
-                          " (" ++ show e ++ ")"
-        Right file -> tryLoad file day_file
+    let day_file = dayOID origin
+    result <- runObject day_file readFull 
+    case result of
+        Left e ->
+            return $ Left $ "Failed to read day file: " ++ show day_file ++
+                            " (" ++ show e ++ ")"
+        Right contents ->
+            tryLoad day_file contents
   where
-    tryLoad file day_file = case loadDayMap file of
-        Left e -> error $ "Failed to load day file: " ++ show day_file ++
-                            " (" ++ e ++ ")"
-        Right day_map -> return (fromIntegral (BS.length file), day_map)
+    tryLoad day_file contents = case loadDayMap contents of
+        Left e ->
+            return $ Left $ "Failed to load day file: " ++
+                            show day_file ++ " (" ++ e ++ ")"
+        Right day_map ->
+            return $ Right (fromIntegral (BS.length contents), day_map)
 
 dayOID :: Origin -> ByteString
 dayOID origin = "02_" `BS.append` origin `BS.append` "_days"

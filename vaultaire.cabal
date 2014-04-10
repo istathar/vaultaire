@@ -63,7 +63,8 @@ test-suite           daemon-test
                      semigroups,
                      bytestring,
                      vaultaire,
-                     zeromq4-haskell
+                     zeromq4-haskell,
+                     rados-haskell >= 3
 
   main-is:           Daemon.hs
   hs-source-dirs:    tests
