@@ -37,7 +37,7 @@ rollOverDay origin =
                 append (latest `BS.append` build buckets)
 
             case app of
-                Just e -> error $ "failed to append for rollover: " ++ show e
+                Just e  -> error $ "failed to append for rollover: " ++ show e
                 Nothing -> return ()
   where
     build n = runPacking 8 $ putWord64LE n
@@ -45,10 +45,12 @@ rollOverDay origin =
     mustLatest = either (\e -> error $ "could not get latest_file" ++ show e)
                         return
 
--- | After any write to the vault, the latest value should be updated if a
--- point with a later time than that has been written. You should only call
--- this once with the maximum time of whatever data set you are writing down.
--- This should be done within the same lock as that write.
+-- | This compares the given time against the latest one in ceph, and updates
+-- if larger.
+--
+-- You should only call this once with the maximum time of whatever data set
+-- you are writing down. This should be done within the same lock as that
+-- write.
 updateLatest :: Origin -> Time -> Daemon ()
 updateLatest origin time = withExLock (latestOID origin) . liftPool $ do
     let oid = latestOID origin
@@ -66,7 +68,7 @@ updateLatest origin time = withExLock (latestOID origin) . liftPool $ do
 
 
 -- Internal
---
+
 latestOID :: Origin -> ByteString
 latestOID origin = "02_" `BS.append` origin `BS.append` "_latest"
 
