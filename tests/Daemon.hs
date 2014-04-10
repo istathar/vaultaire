@@ -8,6 +8,7 @@ import Data.List.NonEmpty (fromList)
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
 import Vaultaire.Broker
+import Vaultaire.RollOver
 import Vaultaire.Daemon
 import Vaultaire.Util
 import Control.Applicative

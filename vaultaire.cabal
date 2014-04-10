@@ -19,6 +19,7 @@ source-repository    head
 
 library
   exposed-modules:   Vaultaire.Daemon,
+                     Vaultaire.RollOver,
                      Vaultaire.Broker,
                      Vaultaire.DayMap,
                      Vaultaire.OriginMap,
