@@ -33,7 +33,7 @@ lookupNoBuckets = (snd .) . lookupGeneric
 -- of two Word64s
 loadDayMap :: ByteString -> Either String DayMap
 loadDayMap bs
-    | BS.length bs == 0 =
+    | BS.null bs =
         Left "empty"
     | BS.length bs `rem` 16 /= 0 =
         Left $ "corrupt contents, should be multiple of 16, was: " ++

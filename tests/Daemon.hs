@@ -64,12 +64,32 @@ suite =
 
             result `shouldBe` (Just 255, Just 254)
 
+        it "correctly rolls over day" $ do
+            new <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
+                liftPool cleanup
+                liftPool $ makePonyDayMap dayFileA
+                refreshOriginDays "PONY"
+                updateLatest "PONY" 0x42
+                rollOverDay "PONY"
+                liftPool $ runObject "02_PONY_days" readFull
+            new `shouldBe` Right dayFileD
+
+throwJust :: Monad m => Maybe RadosError -> m ()
+throwJust =
+    maybe (return ()) (error . show)
+            
 makePonyDayMap :: ByteString -> Pool ()
 makePonyDayMap contents =
     runObject "02_PONY_days" (remove >> writeFull contents)
-    >>= maybe (return ()) (error . show)
+    >>= throwJust
 
-dayFileA, dayFileB, dayFileC :: ByteString
+cleanup :: Pool ()
+cleanup = do
+    _ <- runObject "02_PONY_days" remove
+    _ <- runObject "02_PONY_latest" remove
+    return ()
+
+dayFileA, dayFileB, dayFileC, dayFileD:: ByteString
 dayFileA = "\x00\x00\x00\x00\x00\x00\x00\x00\
            \\x08\x00\x00\x00\x00\x00\x00\x00"
 
@@ -80,6 +100,11 @@ dayFileC = "\x00\x00\x00\x00\x00\x00\x00\x00\
            \\x0f\x00\x00\x00\x00\x00\x00\x00\
            \\xff\x00\x00\x00\x00\x00\x00\x00\
            \\xfe\x00\x00\x00\x00\x00\x00\x00"
+
+dayFileD = "\x00\x00\x00\x00\x00\x00\x00\x00\
+           \\x08\x00\x00\x00\x00\x00\x00\x00\
+           \\x42\x00\x00\x00\x00\x00\x00\x00\
+           \\x08\x00\x00\x00\x00\x00\x00\x00"
 
 replyOne :: IO ByteString
 replyOne =

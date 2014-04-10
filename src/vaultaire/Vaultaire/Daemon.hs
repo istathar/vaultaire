@@ -24,6 +24,8 @@ module Vaultaire.Daemon
     withDayFileLock,
     fetchEpoch,
     fetchNoBuckets,
+    rollOverDay,
+    updateLatest,
 ) where
 
 import Control.Applicative
@@ -34,6 +36,7 @@ import Control.Monad.State
 import Data.Word (Word64)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Packer
 import Data.List.NonEmpty (fromList)
 import Vaultaire.Util(linkThread)
 import Vaultaire.DayMap
@@ -119,16 +122,8 @@ refreshOriginDays :: Origin -> Daemon ()
 refreshOriginDays origin = do
     om <- get
     -- If we already have it, reload if modified. Otherwise we just reload.
-    case originLookup origin om of 
-        Just (file_size, _) -> do
-            let day_file = dayOID origin
-            st <- liftPool $ runObject day_file stat
-            case st of
-                Left e -> error $ "Failed to stat day file: " ++ show day_file
-                                  ++ "( " ++ show e ++ ")"
-                Right result ->
-                    unless (fileSize result == file_size) (reload om)
-        Nothing -> reload om
+    expired <- cacheExpired om origin
+    when expired $ reload om
   where
     reload om = do
         result <- liftPool $ dayMapFromCeph origin
@@ -136,7 +131,7 @@ refreshOriginDays origin = do
             Left e -> liftIO $ putStrLn e
             Right day_map -> put $ originInsert om origin day_map
 
--- | ^ Read this:
+-- | Read this:
 --
 -- This function a little odd, due to my hesitancy adopting something cool like
 -- layers, or even MonadCatchIO.
@@ -162,12 +157,91 @@ withDayFileLock origin (Daemon a) = do
     put s
     return r
 
+-- | Roll the cluster onto a new "vault day", this will block until all other
+-- daemons are synchronized at acquiring any shared locks.
+--
+-- All day maps will be invalidated on roll over, it is up to you to ensure
+-- that they are reloaded before next use.
+rollOverDay :: Origin -> Daemon ()
+rollOverDay origin =
+    let day_file = dayOID origin
+        latest_file = latestOID origin
+    in withExLock day_file $ do
+        om <- get
+        expired <- cacheExpired om origin
+
+        unless expired $ do
+            buckets <- fetchNoBuckets origin maxBound >>= mustBucket
+            latest <- liftPool $ runObject latest_file readFull >>= mustLatest
+
+            app <- liftPool . runObject day_file $
+                append (latest `BS.append` build buckets)
+
+            case app of
+                Just e -> error $ "failed to append for rollover: " ++ show e
+                Nothing -> return ()
+  where
+    build n = runPacking 8 $ putWord64LE n
+    mustBucket = maybe (error "could not find n_buckets for roll over") return
+    mustLatest = either (\e -> error $ "could not get latest_file" ++ show e)
+                        return
+                       
+-- | After any write to the vault, the latest value should be updated if a
+-- point with a later time than that has been written. You should only call
+-- this once with the maximum time of whatever data set you are writing down.
+-- This should be done within the same lock as that write.
+updateLatest :: Origin -> Time -> Daemon ()
+updateLatest origin time = withExLock (latestOID origin) . liftPool $ do
+    let oid = latestOID origin
+    result <- runObject oid readFull
+    case result of
+        Right v           -> when (parse v < time) doWrite
+        Left (NoEntity{}) -> doWrite
+        Left e            -> error $ show e
+  where
+    doWrite = 
+        runObject (latestOID origin) (writeFull value)
+        >>= maybe (return ()) (error.show)
+    value = runPacking 8 (putWord64LE time)
+    parse = either (const 0) id . tryUnpacking getWord64LE
+        
+        
+
 -- Internal
 
 type FileSize = Word64
 type OriginDays = OriginMap (FileSize, DayMap)
 type Envelope = (ByteString, ByteString, ByteString)
 data Ack = Ack Envelope Response
+
+-- | Check if a cached origin has expired.
+cacheExpired :: OriginDays -> Origin -> Daemon Bool
+cacheExpired om origin = 
+    case originLookup origin om of 
+        Just (file_size, _) -> do
+            let day_file = dayOID origin
+            st <- liftPool $ runObject day_file stat
+            case st of
+                Left e -> error $ "Failed to stat day file: " ++ show day_file
+                                  ++ "( " ++ show e ++ ")"
+                Right result -> return $ fileSize result /= file_size
+        Nothing -> return True
+
+
+withExLock :: ByteString -> Daemon a -> Daemon a
+withExLock oid (Daemon a) = do
+    conf <- ask
+    st <- get
+
+    (r,s) <- liftPool $ withExclusiveLock oid  -- oid
+                                         "lock"           -- name
+                                         "lock"           -- description
+                                          Nothing
+                                          (runReaderT (runStateT a st) conf)
+
+    put s
+    return r
+
 
 -- | Load a DayMap from Ceph, throwing errors on failure.
 --
@@ -192,6 +266,9 @@ dayMapFromCeph origin = do
 
 dayOID :: Origin -> ByteString
 dayOID origin = "02_" `BS.append` origin `BS.append` "_days"
+
+latestOID :: Origin -> ByteString
+latestOID origin = "02_" `BS.append` origin `BS.append` "_latest"
 
 writeQueue :: MonadIO m => TBQueue a -> a -> m ()
 writeQueue q = liftIO . atomically . writeTBQueue q
