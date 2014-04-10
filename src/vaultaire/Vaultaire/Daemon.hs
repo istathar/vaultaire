@@ -158,7 +158,6 @@ wrapPool pool_a (Daemon a) = do
     put s
     return r
     
-
 -- Internal
 
 type FileSize = Word64
