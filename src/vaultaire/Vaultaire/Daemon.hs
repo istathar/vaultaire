@@ -143,33 +143,21 @@ refreshOriginDays origin = do
 -- TLDR: Daemon state within will not be updated within the 'outer' monad until
 -- the entire action completes. You will probably never even notice this.
 withLock :: ByteString -> Daemon a -> Daemon a
-withLock oid (Daemon a) = do
-    conf <- ask
-    st <- get
+withLock oid = wrapPool (withSharedLock oid "lock" "lock" "daemon" Nothing)
 
-    (r,s) <- liftPool $ withSharedLock oid
-                                       "lock"           -- name
-                                       "lock"           -- description
-                                       "daemon"         -- lock holder tag
-                                       Nothing
-                                       (runReaderT (runStateT a st) conf)
-
-    put s
-    return r
-
+-- | Same pitfalls as withLock, this one acquires an exclusive lock.
 withExLock :: ByteString -> Daemon a -> Daemon a
-withExLock oid (Daemon a) = do
+withExLock oid = wrapPool (withExclusiveLock oid "lock" "lock" Nothing)
+
+wrapPool :: (Pool (a, OriginDays) -> Pool (b, OriginDays))
+         -> Daemon a -> Daemon b 
+wrapPool pool_a (Daemon a) = do
     conf <- ask
-    st <- get
-
-    (r,s) <- liftPool $ withExclusiveLock oid  -- oid
-                                         "lock"           -- name
-                                         "lock"           -- description
-                                          Nothing
-                                          (runReaderT (runStateT a st) conf)
-
+    st   <- get
+    (r,s) <- liftPool $ pool_a (runReaderT (runStateT a st) conf)
     put s
     return r
+    
 
 -- Internal
 
