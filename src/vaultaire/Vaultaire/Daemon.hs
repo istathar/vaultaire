@@ -20,6 +20,7 @@ module Vaultaire.Daemon
     runDaemon,
     liftPool,
     nextMessage,
+    async,
     refreshOriginDays,
     fetchEpoch,
     fetchNoBuckets,
@@ -36,10 +37,12 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.ByteString (ByteString)
+import Control.Concurrent.Async (Async)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (fromList)
 import Data.Word (Word64)
-import System.Rados.Monadic
+import System.Rados.Monadic hiding (async, Async)
+import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
@@ -99,6 +102,17 @@ liftPool = Daemon . lift . lift
 -- | Pop the next message off an internal FIFO queue of messages.
 nextMessage :: Daemon Message
 nextMessage = messagesIn <$> ask >>= liftIO . atomically . readTBQueue
+
+-- | Run an action in the 'Control.Concurrent.Async' monad.
+-- State will be empty and completely separated from any other thread. This is
+-- to avoid strange memory leaks and complexity.
+--
+-- You do however have access to the same messaging channels, so sending and
+-- receiving messages will work fine and is thread safe.
+async :: Daemon a -> Daemon (Async a)
+async (Daemon a) = do
+    conf <- ask
+    liftPool $ Rados.async (runReaderT (evalStateT a emptyOriginMap) conf)
 
 -- | Fetch the epoch from cache for a given time, it is up to you to refresh
 -- the cache when you need fresh data.
