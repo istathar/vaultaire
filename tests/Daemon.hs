@@ -3,7 +3,7 @@
 module Main where
 
 import Control.Concurrent.Async
-import Data.ByteString
+import Data.ByteString (ByteString)
 import Data.List.NonEmpty (fromList)
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
@@ -27,7 +27,7 @@ suite :: Spec
 suite = do
     describe "Daemon messaging" $ do
         it "starts up and shuts down cleanly" $
-            runDaemon "tcp://localhost:1234" Nothing "test" (return ())
+            runTestDaemon (return ())
             >>= (`shouldBe` ())
 
         it "ignores bad message and replies to good message" $ do
@@ -39,66 +39,87 @@ suite = do
 
     describe "Daemon day map" $ do
         it "loads an origins map" $ do
-            result <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
-                liftPool $ makePonyDayMap dayFileA
-                refreshOriginDays "PONY"
+            result <- runTestDaemon $
                 (,) <$> fetchEpoch "PONY" 42 <*> fetchNoBuckets "PONY" 42
 
             result `shouldBe` (Just 0, Just 8)
 
         it "does not invalidate cache on same filesize" $ do
-            result <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
-                liftPool $ makePonyDayMap dayFileA
-                refreshOriginDays "PONY"
-                liftPool $ makePonyDayMap dayFileB
+            result <- runTestDaemon $ do
+                writePonyDayMap dayFileB
                 refreshOriginDays "PONY"
                 (,) <$> fetchEpoch "PONY" 42 <*> fetchNoBuckets "PONY" 42
 
             result `shouldBe` (Just 0, Just 8)
 
         it "does invalidate cache on different filesize" $ do
-            result <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
-                liftPool $ makePonyDayMap dayFileA
-                refreshOriginDays "PONY"
-                liftPool $ makePonyDayMap dayFileC
+            result <- runTestDaemon $ do
+                writePonyDayMap dayFileC
                 refreshOriginDays "PONY"
                 (,) <$> fetchEpoch "PONY" 300 <*> fetchNoBuckets "PONY" 300
 
             result `shouldBe` (Just 255, Just 254)
 
+    describe "Daemon updateLatest" $ do
+        it "does not clobber higher value" $ do
+            new <- runTestDaemon $ do
+                updateLatest "PONY" 0x41
+                liftPool $ runObject "02_PONY_latest" readFull
+            new `shouldBe` Right "\x42\x00\x00\x00\x00\x00\x00\x00"
+
+        it "does overwrite lower value" $ do
+            new <- runTestDaemon $ do
+                cleanup
+                updateLatest "PONY" 0x43
+                liftPool $ runObject "02_PONY_latest" readFull
+            new `shouldBe` Right "\x43\x00\x00\x00\x00\x00\x00\x00"
+
     describe "Daemon rollover" $  do
         it "correctly rolls over day" $ do
-            new <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
-                liftPool cleanup
-                liftPool $ makePonyDayMap dayFileA
-                refreshOriginDays "PONY"
+            new <- runTestDaemon $ do
                 updateLatest "PONY" 0x42
                 rollOverDay "PONY"
                 liftPool $ runObject "02_PONY_days" readFull
             new `shouldBe` Right dayFileD
 
         it "does not rollover if the day map has been touched" $ do
-            new <- runDaemon "tcp://localhost:1234" Nothing "test" $ do
-                liftPool cleanup
-                liftPool $ makePonyDayMap dayFileB
-                refreshOriginDays "PONY"
-                liftPool $ makePonyDayMap dayFileA
+            new <- runTestDaemon $ do
+                writePonyDayMap dayFileC
+
                 updateLatest "PONY" 0x48
                 rollOverDay "PONY"
+
                 liftPool $ runObject "02_PONY_days" readFull
-            new `shouldBe` Right dayFileA
+            new `shouldBe` Right dayFileC
+
+        it "does basic sanity checking on latest file" $
+            runTestDaemon
+                (do liftPool $ runObject "02_PONY_latest" $ append "garbage"
+                    rollOverDay "PONY")
+                `shouldThrow` anyErrorCall
+
+loadState :: Daemon ()
+loadState = do
+    cleanup
+    writePonyDayMap dayFileA
+    refreshOriginDays "PONY"
+    updateLatest "PONY" 0x42
+
+runTestDaemon :: Daemon a -> IO a
+runTestDaemon a =
+    runDaemon "tcp://localhost:1234" Nothing "test" (loadState >> a)
 
 throwJust :: Monad m => Maybe RadosError -> m ()
 throwJust =
     maybe (return ()) (error . show)
             
-makePonyDayMap :: ByteString -> Pool ()
-makePonyDayMap contents =
+writePonyDayMap :: ByteString -> Daemon ()
+writePonyDayMap contents = liftPool $ 
     runObject "02_PONY_days" (remove >> writeFull contents)
     >>= throwJust
 
-cleanup :: Pool ()
-cleanup = do
+cleanup :: Daemon ()
+cleanup = liftPool $ do
     _ <- runObject "02_PONY_days" remove
     _ <- runObject "02_PONY_latest" remove
     return ()

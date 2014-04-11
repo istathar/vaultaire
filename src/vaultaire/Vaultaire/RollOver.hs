@@ -33,6 +33,9 @@ rollOverDay origin =
             buckets <- fetchNoBuckets origin maxBound >>= mustBucket
             latest <- liftPool $ runObject latest_file readFull >>= mustLatest
 
+            when (BS.length latest /= 8) $
+                error $ "corrupt latest file in origin: " ++ show origin
+
             app <- liftPool . runObject day_file $
                 append (latest `BS.append` build buckets)
 
