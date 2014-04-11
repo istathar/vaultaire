@@ -140,17 +140,18 @@ processMessage = do
     Message rf origin' payload' <- await
 
 
+    -- Append the replyf for this message, maybe a lense would be nice
     BatchState{..} <- get
+    let state' = BatchState (rf:replyFs) normal pending string dayMap start
+    put state'
 
     lift $ processPoints 0 payload' dayMap origin'
-
-    let state' = BatchState (rf:replyFs) normal pending string dayMap start
     
     now <- liftIO getCurrentTime
 
     if batchPeriod `addUTCTime` start > now
-        then yield state'
-        else put state' >> processMessage
+        then get >>= yield
+        else processMessage
 
 processPoints :: Int -> ByteString -> DayMap -> Origin -> (StateT BatchState Daemon) ()
 processPoints offset message day_map origin
