@@ -24,6 +24,7 @@ module Vaultaire.Daemon
     refreshOriginDays,
     fetchEpoch,
     fetchNoBuckets,
+    originDayMap,
     withLock,
     withExLock,
     cacheExpired,
@@ -35,7 +36,7 @@ import Control.Applicative
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import Control.Concurrent.Async (Async)
 import qualified Data.ByteString as BS
@@ -77,6 +78,7 @@ data Message = Message
     { replyF  :: Response -> Daemon () -- ^ Queue a reply to this message. This
                                        --   will be transmitted automatically
                                        --   at a later point.
+    , origin  :: Origin
     , payload :: ByteString
     }
 
@@ -117,34 +119,40 @@ async (Daemon a) = do
 -- | Fetch the epoch from cache for a given time, it is up to you to refresh
 -- the cache when you need fresh data.
 fetchEpoch :: Origin -> Time -> Daemon (Maybe Epoch)
-fetchEpoch origin time = do
+fetchEpoch origin' time = do
     om <- get
-    return $ withDayMap om origin (lookupEpoch time)
+    return $ withDayMap om origin' (lookupEpoch time)
 
 -- | Fetch the number of buckets from cache for a given time
 fetchNoBuckets :: Origin -> Time -> Daemon (Maybe NoBuckets)
-fetchNoBuckets origin time = do
+fetchNoBuckets origin' time = do
     om <- get
-    return $ withDayMap om origin (lookupNoBuckets time)
+    return $ withDayMap om origin' (lookupNoBuckets time)
+
+-- | Fetch the whole day map for an origin
+originDayMap :: Origin -> Daemon (Maybe DayMap)
+originDayMap origin' = do
+    om <- get
+    return $ withDayMap om origin' id
 
 withDayMap :: OriginDays -> Origin -> (DayMap -> a) -> Maybe a
-withDayMap om origin f = f . snd <$> originLookup origin om
+withDayMap om origin' f = f . snd <$> originLookup origin' om
 
 -- | Ensure that the 'DayMap' for a given 'Origin' is up to date. If you need
 -- the day map to be up to date for the entirity of an operation you must use
 -- this within a 'withDayFileLock'.
 refreshOriginDays :: Origin -> Daemon ()
-refreshOriginDays origin = do
+refreshOriginDays origin' = do
     om <- get
     -- If we already have it, reload if modified. Otherwise we just reload.
-    expired <- cacheExpired om origin
+    expired <- cacheExpired om origin'
     when expired $ reload om
   where
     reload om = do
-        result <- liftPool $ dayMapFromCeph origin
+        result <- liftPool $ dayMapFromCeph origin'
         case result of
             Left e -> liftIO $ putStrLn e
-            Right day_map -> put $ originInsert om origin day_map
+            Right day_map -> put $ originInsert origin' day_map om
 
 -- | Read this:
 --
@@ -181,10 +189,10 @@ data Ack = Ack Envelope Response
 
 -- | Check if a cached origin has expired.
 cacheExpired :: OriginDays -> Origin -> Daemon Bool
-cacheExpired om origin =
-    case originLookup origin om of
+cacheExpired om origin' =
+    case originLookup origin' om of
         Just (file_size, _) -> do
-            let day_file = dayOID origin
+            let day_file = dayOID origin'
             st <- liftPool $ runObject day_file stat
             case st of
                 Left e -> error $ "Failed to stat day file: " ++ show day_file
@@ -197,8 +205,8 @@ cacheExpired om origin =
 --
 -- The file size is returned along side the map for cache invalidation.
 dayMapFromCeph :: Origin -> Pool (Either String (FileSize, DayMap))
-dayMapFromCeph origin = do
-    let day_file = dayOID origin
+dayMapFromCeph origin' = do
+    let day_file = dayOID origin'
     result <- runObject day_file readFull
     case result of
         Left e ->
@@ -215,7 +223,7 @@ dayMapFromCeph origin = do
             return $ Right (fromIntegral (BS.length contents), day_map)
 
 dayOID :: Origin -> ByteString
-dayOID origin = "02_" `BS.append` origin `BS.append` "_days"
+dayOID origin'' = "02_" `BS.append` origin'' `BS.append` "_days"
 
 writeQueue :: MonadIO m => TBQueue a -> a -> m ()
 writeQueue q = liftIO . atomically . writeTBQueue q
@@ -251,9 +259,9 @@ listen router msg_chan ack_chan = forever $ do
         [[ZMQ.In]] -> do
             msg <- ZMQ.receiveMulti router
             case msg of
-                [env_a, env_b, message_id, payload'] -> do
+                [env_a, env_b, message_id, origin', payload'] -> do
                     let respond_f = respond (env_a, env_b, message_id)
-                    writeQueue msg_chan $ Message respond_f payload'
+                    writeQueue msg_chan $ Message respond_f origin' payload'
                 n -> liftIO $ putStrLn $
                     "bad message recieved, " ++ show (length n)
                     ++ " parts; ignoring"

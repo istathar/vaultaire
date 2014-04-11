@@ -6,6 +6,7 @@ module Vaultaire.DayMap
     Time,
     lookupEpoch,
     lookupNoBuckets,
+    lookupBoth,
     loadDayMap
 ) where
 
@@ -24,10 +25,10 @@ type Time = Word64
 type DayMap = Map Epoch NoBuckets
 
 lookupEpoch :: Time -> DayMap -> Epoch
-lookupEpoch = (fst .) . lookupGeneric
+lookupEpoch = (fst .) . lookupBoth
 
 lookupNoBuckets :: Time -> DayMap -> NoBuckets
-lookupNoBuckets = (snd .) . lookupGeneric
+lookupNoBuckets = (snd .) . lookupBoth
 
 -- | Simple corruption check of input is done by checking that it is a multiple
 -- of two Word64s
@@ -45,10 +46,9 @@ loadDayMap bs
             then Right loaded
             else Left "bad first entry, must start at zero."
 
--- Internal
 
-lookupGeneric :: Time -> DayMap -> (Epoch, NoBuckets)
-lookupGeneric t dm = 
+lookupBoth :: Time -> DayMap -> (Epoch, NoBuckets)
+lookupBoth t dm = 
     let (left, middle, _) = Map.splitLookup t dm
     in case middle of
         Just m -> if Map.null left -- Corner case, leftmost entry
@@ -56,6 +56,8 @@ lookupGeneric t dm =
                     else Map.findMax left
         Nothing -> Map.findMax left
  
+-- Internal
+
 mustLoadDayMap :: ByteString -> DayMap
 mustLoadDayMap =
     Map.fromList . runUnpacking parse

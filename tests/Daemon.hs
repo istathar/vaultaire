@@ -9,7 +9,7 @@ import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
 import Vaultaire.Broker
 import Vaultaire.RollOver
-import Vaultaire.Daemon
+import Vaultaire.Daemon hiding (async)
 import Vaultaire.Util
 import Control.Applicative
 import System.Rados.Monadic hiding (async)
@@ -34,7 +34,7 @@ suite = do
             msg <- async replyOne
             async sendBadMsg
             reply <- async sendTestMsg
-            wait msg >>= (`shouldBe` "im in ur vaults")
+            wait msg >>= (`shouldBe` ("PONY", "im in ur vaults"))
             wait reply >>= (`shouldBe` ["\x42", ""])
 
     describe "Daemon day map" $ do
@@ -141,19 +141,19 @@ dayFileD = "\x00\x00\x00\x00\x00\x00\x00\x00\
            \\x42\x00\x00\x00\x00\x00\x00\x00\
            \\x08\x00\x00\x00\x00\x00\x00\x00"
 
-replyOne :: IO ByteString
+replyOne :: IO (ByteString, ByteString)
 replyOne =
     runDaemon "tcp://localhost:5561" Nothing "test" $ do
-        Message rep_f msg <- nextMessage
+        Message rep_f origin' msg <- nextMessage
         rep_f Success
-        return msg
+        return (origin', msg)
 
 sendTestMsg :: IO [ByteString]
 sendTestMsg = runZMQ $ do
     s <- socket Dealer
     connect s "tcp://localhost:5560"
     -- Simulate a client sending a sequence number and message
-    sendMulti s $ fromList ["\x42", "im in ur vaults"]
+    sendMulti s $ fromList ["\x42", "PONY", "im in ur vaults"]
     receiveMulti s
 
 sendBadMsg :: IO ()

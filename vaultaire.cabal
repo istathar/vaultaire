@@ -27,10 +27,13 @@ library
   other-modules:
   build-depends:     base >=3 && <5,
                      bytestring,
+                     time,
                      mtl,
                      transformers,
                      semigroups,
                      containers,
+                     pipes,
+                     pipes-concurrency,
                      unordered-containers,
                      zeromq4-haskell,
                      exceptions,

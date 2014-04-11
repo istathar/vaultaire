@@ -4,6 +4,7 @@ module Vaultaire.OriginMap
     OriginMap,
     originLookup,
     originInsert,
+    originDelete,
     emptyOriginMap,
 ) where
 
@@ -17,8 +18,12 @@ type OriginMap = HashMap Origin
 originLookup :: Origin -> OriginMap a -> Maybe a
 originLookup = HashMap.lookup 
 
-originInsert :: OriginMap a -> Origin -> a -> OriginMap a
-originInsert m k v = HashMap.insert k v m
+-- TODO: Unbackwards this
+originInsert :: Origin -> a -> OriginMap a -> OriginMap a
+originInsert = HashMap.insert
+
+originDelete :: Origin -> OriginMap a ->  OriginMap a
+originDelete = HashMap.delete
 
 emptyOriginMap :: OriginMap a
 emptyOriginMap = HashMap.empty
