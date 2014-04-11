@@ -35,24 +35,20 @@ import qualified Data.HashMap.Strict as HashMap
 
 data Stream = Packet Message | Tick
 
-data Write = Write
-    { simple   :: Builder
-    , extended :: [Word64 -> Builder]
-    , strings  :: Builder
-    }
-
 type Address = Word64
 type Payload = Word64
+type Bucket  = Word64
 
 type FlyingThreadMonsterMap = OriginMap (Output Message)
 
-type EpochMap = HashMap
+type EpochMap = HashMap Epoch
+type BucketMap = HashMap Bucket
 
 data BatchState = BatchState
     { replyFs  :: [Response -> Daemon ()]
-    , normal   :: HashMap Epoch Builder
-    , pending  :: HashMap Epoch [Word64 -> Builder]
-    , string   :: HashMap Epoch Builder
+    , normal   :: EpochMap (BucketMap Builder)
+    , pending  :: EpochMap (BucketMap [Word64 -> Builder])
+    , string   :: EpochMap (BucketMap Builder)
     , dayMap   :: DayMap
     , start    :: UTCTime
     }
@@ -166,19 +162,44 @@ processPoints offset message day_map origin
         -- The LSB of the address lets us know if it is an extended message or
         -- not. Set means extended.
         if address `testBit` 0
-            then appendSimple epoch masked_address time payload
-            else appendExtended epoch masked_address time payload
+            then do
+                let message_bytes = runUnpacking (parseMessageBytesAt offset) message
+                appendSimple epoch bucket message_bytes
+                processPoints (offset + 24) message day_map origin
+            else do
+                let len = fromIntegral payload
+                let str = runUnpacking (parseStringAt offset len) message
+                appendExtended epoch bucket address time payload str
+                processPoints (offset + 24 + len) message day_map origin
 
 parseMessageAt :: Int -> Unpacking (Address, Time, Payload)
 parseMessageAt offset = do
     unpackSetPosition offset
     (,,) <$> getWord64LE <*> getWord64LE <*> getWord64LE
 
-appendSimple :: Epoch -> Address -> Time -> Payload -> (StateT BatchState Daemon) ()
-appendSimple = undefined
-    
-appendExtended :: Epoch -> Address -> Time -> Payload -> (StateT BatchState Daemon) ()
-appendExtended = undefined
+parseMessageBytesAt :: Int -> Unpacking ByteString
+parseMessageBytesAt offset = do
+    unpackSetPosition offset
+    getBytes 24
+
+-- | Grab string payload, offset points to beginning of message.
+parseStringAt :: Int -> Int -> Unpacking ByteString
+parseStringAt offset len = do
+    unpackSetPosition (offset + 24)
+    getBytes len
+
+appendSimple :: Epoch -> Bucket -> ByteString -> (StateT BatchState Daemon) ()
+appendSimple epoch bucket bytes = do   
+    let write = byteString bytes
+    normal_epoch_map <- normal <$> get
+    let normal_bucket_map = HashMap.lookupDefault HashMap.empty epoch normal_epoch_map
+    return ()
+    -- put $ HashMap.insertWith (\new old -> new <> old) bucket write normal_bucket_map
+
+
+appendExtended :: Epoch -> Bucket -> Address -> Time -> Payload -> ByteString -> (StateT BatchState Daemon) ()
+appendExtended epoch bucket address time len string = do
+    undefined
     
 write :: Consumer BatchState Daemon ()
 write = undefined
