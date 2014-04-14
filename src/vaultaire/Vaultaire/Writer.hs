@@ -18,6 +18,7 @@ import Control.Applicative
 import Control.Concurrent (threadDelay)
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.STM
+import Debug.Trace
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.Bits
@@ -158,7 +159,8 @@ processMessage = do
 processPoints :: MonadState BatchState m
               => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> m ()
 processPoints offset message day_maps origin
-    | BS.length message >= fromIntegral offset = return ()
+    | trace ("os: "  ++ show offset) False = undefined
+    | fromIntegral offset >= BS.length message = return ()
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (simple_epoch, simple_buckets) = lookupBoth time (fst day_maps)
@@ -170,16 +172,16 @@ processPoints offset message day_maps origin
         -- not. Set means extended.
         if address `testBit` 0
             then do
-                let message_bytes = runUnpacking (getBytesAt offset 24) message
-                appendSimple simple_epoch simple_bucket message_bytes
-                processPoints (offset + 24) message day_maps origin
-            else do
                 let len = fromIntegral payload
                 let str = runUnpacking (getBytesAt (offset + 24) len) message
                 let (ext_epoch, ext_buckets) = lookupBoth time (fst day_maps)
                 let ext_bucket = masked_address `mod` ext_buckets
                 appendExtended ext_epoch ext_bucket address time len str
                 processPoints (offset + 24 + len) message day_maps origin
+            else do
+                let message_bytes = runUnpacking (getBytesAt offset 24) message
+                appendSimple simple_epoch simple_bucket message_bytes
+                processPoints (offset + 24) message day_maps origin
 
 parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
 parseMessageAt offset = do

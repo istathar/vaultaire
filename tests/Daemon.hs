@@ -13,6 +13,7 @@ import Vaultaire.DayMap
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.Util
 import System.Rados.Monadic hiding (async)
+import Control.Applicative
 
 main :: IO ()
 main = do
@@ -39,14 +40,16 @@ suite = do
 
     describe "Daemon day map" $ do
         it "loads an origins map" $ do
-            result <- runTestDaemon $
-                withSimpleDayMap "PONY" (lookupBoth 42)
+            (simple,ext) <- runTestDaemon $
+                (,) <$> withSimpleDayMap "PONY" (lookupBoth 42)
+                    <*> withExtendedDayMap "PONY" (lookupBoth 42)
 
-            result `shouldBe` Just (0, 8)
+            (,) <$> simple <*> ext `shouldBe` Just ((0, 8), (0,15))
 
         it "does not invalidate cache on same filesize" $ do
             result <- runTestDaemon $ do
                 writePonyDayMap "02_PONY_simple_days" dayFileB
+                writePonyDayMap "02_PONY_extended_days" dayFileA
                 refreshOriginDays "PONY"
                 withSimpleDayMap "PONY" (lookupBoth 42)
 
@@ -59,6 +62,14 @@ suite = do
                 withSimpleDayMap "PONY" (lookupBoth 300)
 
             result `shouldBe` Just (255, 254)
+
+            result' <- runTestDaemon $ do
+                writePonyDayMap "02_PONY_extended_days" dayFileC
+                refreshOriginDays "PONY"
+                withExtendedDayMap "PONY" (lookupBoth 300)
+
+            result' `shouldBe` Just (255, 254)
+
 
     describe "Daemon updateSimpleLatest" $ do
         it "does not clobber higher value" $ do
