@@ -1,37 +1,45 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 module Vaultaire.Writer
 (
     startWriter,
+    -- Testing
+    processPoints,
+    appendExtended,
+    appendSimple,
+    BatchState(..),
+    batchStateNow
 ) where
 
-import Vaultaire.Daemon
-import Vaultaire.RollOver
-import Vaultaire.OriginMap
-import Vaultaire.Util(linkThread)
-import Data.Bits
-import qualified Data.ByteString.Char8 as BS
-import Data.Maybe
-import Data.ByteString(ByteString)
-import Data.ByteString.Lazy.Builder
 import Control.Applicative
-import Data.Packer
-import Control.Monad
-import Control.Concurrent.STM
-import Data.Time
-import Control.Monad.State.Strict
-import Pipes
-import Pipes.Lift
-import Pipes.Concurrent
+import Control.Concurrent (threadDelay)
 import qualified Control.Concurrent.Async as Async
-import Control.Concurrent(threadDelay)
-import Data.Word(Word64)
-import Vaultaire.DayMap
-import Data.Monoid
-import Text.Printf
+import Control.Concurrent.STM
+import Control.Monad
+import Control.Monad.State.Strict
+import Data.Bits
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS
+import Data.ByteString.Lazy.Builder
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import Data.Maybe
+import Data.Monoid
+import Data.Packer
+import Data.Time
+import Data.Word (Word64)
+import Pipes
+import Pipes.Concurrent
+import Pipes.Lift
+import Text.Printf
+import Vaultaire.Daemon
+import Vaultaire.DayMap
+import Vaultaire.OriginMap
+import Vaultaire.RollOver
+import Vaultaire.Util (linkThread)
 
 data Stream = Packet Message | Tick
 
@@ -47,8 +55,8 @@ type BucketMap = HashMap Bucket
 data BatchState = BatchState
     { replyFs  :: [Response -> Daemon ()]
     , normal   :: EpochMap (BucketMap Builder)
-    , pending  :: EpochMap (BucketMap [Word64 -> Builder])
-    , string   :: EpochMap (BucketMap Builder)
+    , extended :: EpochMap (BucketMap Builder)
+    , pending  :: EpochMap (BucketMap (Word64, [Word64 -> Builder]))
     , dayMap   :: DayMap
     , start    :: UTCTime
     }
@@ -86,7 +94,7 @@ flyingThreadMonster = do
     send' o = liftIO . atomically . send o
 
     startThread origin' ftm m = do
-        (output, seal, input) <- liftIO $ spawn' (Bounded 16)
+        (output, seal, input) <- liftIO $ spawn' Single
         lift . lift $ async (processBatch origin' seal input)
         must_send <- send' output m
         unless must_send $ error "ftm died immediately, bailing"
@@ -110,11 +118,11 @@ processBatch origin' input seal = do
         Nothing ->
             -- Reply to first message with an error, try again on the next
             -- message. This is a potential DOS of sorts, however is needed
-            -- unless we know when to expire 
+            -- unless we know when to expire
             runEffect $ fromInput input >-> badOrigin
         Just dm -> do
             -- Process for a batch period
-            start_state <- liftIO $ batchStateNow dm 
+            start_state <- liftIO $ batchStateNow dm
             runEffect $ fromInput input >-> evalStateP start_state processMessage >-> write
             liftIO $ atomically seal
 
@@ -128,30 +136,30 @@ feedTicks :: Producer Stream IO b
 feedTicks = forever $ (lift $ threadDelay tickRate) >> yield Tick
 
 -- | Place a message into state, wherever it belongs.
-processMessage :: Pipe Message BatchState (StateT BatchState Daemon) ()
+processMessage :: (MonadState BatchState m, MonadIO m) =>
+               Pipe Message BatchState m ()
 processMessage = do
     -- Most messages simply need to be placed into the correct epoch and
     -- bucket, extended ones are a little more complex in that they have to be
     -- stored as an offset to a pending write to the extended buckets.
     Message rf origin' payload' <- await
 
+    -- Append the replyf for this message
+    s <- get
+    put s{replyFs = (rf:replyFs s)}
 
-    -- Append the replyf for this message, maybe a lense would be nice
-    BatchState{..} <- get
-    let state' = BatchState (rf:replyFs) normal pending string dayMap start
-    put state'
+    lift $ processPoints 0 payload' (dayMap s) origin'
 
-    lift $ processPoints 0 payload' dayMap origin'
-    
     now <- liftIO getCurrentTime
 
-    if batchPeriod `addUTCTime` start > now
+    if batchPeriod `addUTCTime` (start s) > now
         then get >>= yield
         else processMessage
 
-processPoints :: Int -> ByteString -> DayMap -> Origin -> (StateT BatchState Daemon) ()
+processPoints :: MonadState BatchState m
+              => Word64 -> ByteString -> DayMap -> Origin -> m ()
 processPoints offset message day_map origin
-    | BS.length message >= offset = return ()
+    | BS.length message >= fromIntegral offset = return ()
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (epoch, n_buckets) = lookupBoth time day_map
@@ -163,44 +171,68 @@ processPoints offset message day_map origin
         -- not. Set means extended.
         if address `testBit` 0
             then do
-                let message_bytes = runUnpacking (parseMessageBytesAt offset) message
+                let message_bytes = runUnpacking (getBytesAt offset 24) message
                 appendSimple epoch bucket message_bytes
                 processPoints (offset + 24) message day_map origin
             else do
                 let len = fromIntegral payload
-                let str = runUnpacking (parseStringAt offset len) message
-                appendExtended epoch bucket address time payload str
+                let str = runUnpacking (getBytesAt (offset + 24) len) message
+                appendExtended epoch bucket address time len str
                 processPoints (offset + 24 + len) message day_map origin
 
-parseMessageAt :: Int -> Unpacking (Address, Time, Payload)
+parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
 parseMessageAt offset = do
-    unpackSetPosition offset
+    unpackSetPosition (fromIntegral offset)
     (,,) <$> getWord64LE <*> getWord64LE <*> getWord64LE
 
-parseMessageBytesAt :: Int -> Unpacking ByteString
-parseMessageBytesAt offset = do
-    unpackSetPosition offset
-    getBytes 24
+getBytesAt :: Word64 -> Word64 -> Unpacking ByteString
+getBytesAt offset len = do
+    unpackSetPosition (fromIntegral offset)
+    getBytes (fromIntegral len)
 
--- | Grab string payload, offset points to beginning of message.
-parseStringAt :: Int -> Int -> Unpacking ByteString
-parseStringAt offset len = do
-    unpackSetPosition (offset + 24)
-    getBytes len
+-- | This one is pretty simple, simply append to the builder within the bucket
+-- map, which is within an epoch map itself. Yes, this is two map lookups per
+-- insert.
+appendSimple :: MonadState BatchState m
+             => Epoch -> Bucket -> ByteString -> m ()
+appendSimple epoch bucket bytes = do
+    s <- get
+    let builder = byteString bytes
+    let simple_map = HashMap.lookupDefault HashMap.empty epoch (normal s)
+    let simple_map' = HashMap.insertWith (flip (<>)) bucket builder simple_map
+    let normal' = HashMap.insert epoch simple_map' (normal s)
+    put $ s { normal = normal' }
 
-appendSimple :: Epoch -> Bucket -> ByteString -> (StateT BatchState Daemon) ()
-appendSimple epoch bucket bytes = do   
-    let write = byteString bytes
-    normal_epoch_map <- normal <$> get
-    let normal_bucket_map = HashMap.lookupDefault HashMap.empty epoch normal_epoch_map
-    return ()
-    -- put $ HashMap.insertWith (\new old -> new <> old) bucket write normal_bucket_map
-
-
-appendExtended :: Epoch -> Bucket -> Address -> Time -> Payload -> ByteString -> (StateT BatchState Daemon) ()
+appendExtended :: MonadState BatchState m
+               => Epoch -> Bucket -> Address -> Time -> Word64 -> ByteString -> m ()
 appendExtended epoch bucket address time len string = do
-    undefined
-    
+    s <- get
+
+    -- First we write to the simple bucket, inserting a closure that will
+    -- return a builder given an offset of the extended bucket write.
+    let pending_map = HashMap.lookupDefault HashMap.empty epoch (pending s)
+
+    -- Starting from zero, we write to the current offset and point the next
+    -- extended point to the end of that write.
+    let (os, fs) = HashMap.lookupDefault (0, []) bucket pending_map
+    let os' = os + len
+
+    -- Create the closure for the pointer to the extended bucket
+    let prefix = word64LE address <> word64LE time
+    let fs' = (\base_offset -> prefix <> word64LE (base_offset + os)):fs
+
+    -- Update the bucket,
+    let pending_map' = HashMap.insert bucket (os', fs') pending_map
+    let pending' = HashMap.insert epoch pending_map' (pending s)
+
+    -- Now the data goes into the extended bucket.
+    let builder = word64LE len <> byteString string
+    let ext_map= HashMap.lookupDefault HashMap.empty epoch (extended s)
+    let ext_map' = HashMap.insertWith (flip (<>)) bucket builder ext_map
+    let extended' = HashMap.insert epoch ext_map' (extended s)
+
+    put $ s { pending = pending', extended = extended' }
+
 write :: Consumer BatchState Daemon ()
 write = undefined
 

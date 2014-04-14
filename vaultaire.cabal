@@ -23,7 +23,8 @@ library
                      Vaultaire.Broker,
                      Vaultaire.DayMap,
                      Vaultaire.OriginMap,
-                     Vaultaire.Util
+                     Vaultaire.Util,
+                     Vaultaire.Writer
   other-modules:
   build-depends:     base >=3 && <5,
                      bytestring,
@@ -32,6 +33,7 @@ library
                      transformers,
                      semigroups,
                      containers,
+                     lens,
                      pipes,
                      pipes-concurrency,
                      unordered-containers,
@@ -86,6 +88,24 @@ test-suite           daymap-test
                      vaultaire
 
   main-is:           DayMap.hs
+  hs-source-dirs:    tests
+  ghc-options:       -threaded
+
+test-suite           writer-test
+  type:              exitcode-stdio-1.0
+
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     containers,
+                     time,
+                     mtl,
+                     bytestring,
+                     unordered-containers,
+                     vaultaire
+
+  main-is:           Writer.hs
   hs-source-dirs:    tests
   ghc-options:       -threaded
 
