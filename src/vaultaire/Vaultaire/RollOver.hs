@@ -3,8 +3,10 @@
 -- this.
 module Vaultaire.RollOver
 (
-    rollOverDay,
-    updateLatest
+    rollOverSimpleDay,
+    rollOverExtendedDay,
+    updateSimpleLatest,
+    updateExtendedLatest,
 ) where
 
 import Control.Monad.State
@@ -21,20 +23,59 @@ import Vaultaire.OriginMap
 --
 -- All day maps will be invalidated on roll over, it is up to you to ensure
 -- that they are reloaded before next use.
-rollOverDay :: Origin -> Daemon ()
-rollOverDay origin =
-    let day_file = dayOID origin
-        latest_file = latestOID origin
-    in withExLock day_file $ do
-        om <- get
-        expired <- cacheExpired om origin
+rollOverSimpleDay :: Origin -> Daemon ()
+rollOverSimpleDay origin' = do
+    (_, buckets) <- withSimpleDayMap origin' (lookupBoth maxBound)
+                    >>= mustBucket
+    rollOver origin' (simpleDayOID origin') (simpleLatestOID origin') buckets 
 
+rollOverExtendedDay :: Origin -> Daemon ()
+rollOverExtendedDay origin' = do
+    (_, buckets) <- withExtendedDayMap origin' (lookupBoth maxBound)
+                    >>= mustBucket
+    rollOver origin' (extendedDayOID origin') (extendedLatestOID origin') buckets 
+
+mustBucket :: Monad m => Maybe a -> m a
+mustBucket = maybe (error "could not find n_buckets for roll over") return
+
+-- | This compares the given time against the latest one in ceph, and updates
+-- if larger.
+--
+-- You should only call this once with the maximum time of whatever data set
+-- you are writing down. This should be done within the same lock as that
+-- write.
+updateSimpleLatest :: Origin -> Time -> Daemon ()
+updateSimpleLatest origin' = updateLatest (simpleLatestOID origin')
+
+updateExtendedLatest :: Origin -> Time -> Daemon ()
+updateExtendedLatest origin' = updateLatest (extendedLatestOID origin')
+
+-- Internal
+
+updateLatest :: ByteString -> Time -> Daemon ()
+updateLatest oid time = withExLock oid . liftPool $ do
+    result <- runObject oid readFull
+    case result of
+        Right v           -> when (parse v < time) doWrite
+        Left (NoEntity{}) -> doWrite
+        Left e            -> error $ show e
+  where
+    doWrite =
+        runObject oid (writeFull value)
+        >>= maybe (return ()) (error.show)
+    value = runPacking 8 (putWord64LE time)
+    parse = either (const 0) id . tryUnpacking getWord64LE
+
+rollOver :: Origin -> ByteString -> ByteString -> NoBuckets -> Daemon ()
+rollOver origin' day_file latest_file buckets =
+    withExLock (simpleLatestOID origin') $ do
+        om <- get
+        expired <- cacheExpired om origin'
         unless expired $ do
-            buckets <- fetchNoBuckets origin maxBound >>= mustBucket
             latest <- liftPool $ runObject latest_file readFull >>= mustLatest
 
             when (BS.length latest /= 8) $
-                error $ "corrupt latest file in origin: " ++ show origin
+                error $ "corrupt latest file in origin': " ++ show origin'
 
             app <- liftPool . runObject day_file $
                 append (latest `BS.append` build buckets)
@@ -44,34 +85,14 @@ rollOverDay origin =
                 Nothing -> return ()
   where
     build n = runPacking 8 $ putWord64LE n
-    mustBucket = maybe (error "could not find n_buckets for roll over") return
     mustLatest = either (\e -> error $ "could not get latest_file" ++ show e)
                         return
 
--- | This compares the given time against the latest one in ceph, and updates
--- if larger.
---
--- You should only call this once with the maximum time of whatever data set
--- you are writing down. This should be done within the same lock as that
--- write.
-updateLatest :: Origin -> Time -> Daemon ()
-updateLatest origin time = withExLock (latestOID origin) . liftPool $ do
-    let oid = latestOID origin
-    result <- runObject oid readFull
-    case result of
-        Right v           -> when (parse v < time) doWrite
-        Left (NoEntity{}) -> doWrite
-        Left e            -> error $ show e
-  where
-    doWrite =
-        runObject (latestOID origin) (writeFull value)
-        >>= maybe (return ()) (error.show)
-    value = runPacking 8 (putWord64LE time)
-    parse = either (const 0) id . tryUnpacking getWord64LE
+simpleLatestOID :: Origin -> ByteString
+simpleLatestOID origin' = "02_" `BS.append` origin' `BS.append`
+                         "_simple_latest"
 
-
--- Internal
-
-latestOID :: Origin -> ByteString
-latestOID origin = "02_" `BS.append` origin `BS.append` "_latest"
+extendedLatestOID :: Origin -> ByteString
+extendedLatestOID origin' = "02_" `BS.append` origin' `BS.append`
+                           "_extended_latest"
 

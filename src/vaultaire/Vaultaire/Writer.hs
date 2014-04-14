@@ -57,7 +57,7 @@ data BatchState = BatchState
     , normal   :: EpochMap (BucketMap Builder)
     , extended :: EpochMap (BucketMap Builder)
     , pending  :: EpochMap (BucketMap (Word64, [Word64 -> Builder]))
-    , dayMap   :: DayMap
+    , dayMaps  :: (DayMap, DayMap) -- Simple, extended
     , start    :: UTCTime
     }
 
@@ -74,14 +74,12 @@ startWriter b u p = runDaemon b u p $ do
     error "startWriter: impossible"
 
 -- If the incoming message currently has a processing thread running for that
--- origin, feed this into that 'thread iteration'. Otherwise create a new one
--- and feed it in.
---
--- This thread will take care of writing its accumulated things to Ceph when done.
+-- origin, feed the message into that thread. Otherwise create a new one and
+-- feed it in.
 flyingThreadMonster :: Consumer Message (StateT FlyingThreadMonsterMap Daemon) ()
 flyingThreadMonster = do
     m@(Message _ origin' _) <- await
-    ftm <- lift get
+    ftm <- get
     case originLookup origin' ftm of
         Just output -> do
             sent <- send' output m
@@ -103,9 +101,9 @@ flyingThreadMonster = do
 
 batchPeriod = 10 -- seconds
 
-batchStateNow :: DayMap -> IO BatchState
-batchStateNow dm = do
-    BatchState mempty mempty mempty mempty dm <$> getCurrentTime
+batchStateNow :: (DayMap, DayMap) -> IO BatchState
+batchStateNow dms = do
+    BatchState mempty mempty mempty mempty dms <$> getCurrentTime
 
 -- | The flying thread monster has done the hard work for us and sorted
 -- incoming bursts by origin. Now we simply need to process these messages with
@@ -113,16 +111,17 @@ batchStateNow dm = do
 processBatch :: Origin -> Input Message -> STM () -> Daemon ()
 processBatch origin' input seal = do
     refreshOriginDays origin'
-    maybe_dm <- originDayMap origin'
-    case maybe_dm of
+    simple_dm <- withSimpleDayMap origin' id
+    extended_dm  <- withExtendedDayMap origin' id
+    case (,) <$> simple_dm <*> extended_dm of
         Nothing ->
             -- Reply to first message with an error, try again on the next
             -- message. This is a potential DOS of sorts, however is needed
             -- unless we know when to expire
             runEffect $ fromInput input >-> badOrigin
-        Just dm -> do
+        Just dms -> do
             -- Process for a batch period
-            start_state <- liftIO $ batchStateNow dm
+            start_state <- liftIO $ batchStateNow dms
             runEffect $ fromInput input >-> evalStateP start_state processMessage >-> write
             liftIO $ atomically seal
 
@@ -148,7 +147,7 @@ processMessage = do
     s <- get
     put s{replyFs = (rf:replyFs s)}
 
-    lift $ processPoints 0 payload' (dayMap s) origin'
+    lift $ processPoints 0 payload' (dayMaps s) origin'
 
     now <- liftIO getCurrentTime
 
@@ -157,28 +156,30 @@ processMessage = do
         else processMessage
 
 processPoints :: MonadState BatchState m
-              => Word64 -> ByteString -> DayMap -> Origin -> m ()
-processPoints offset message day_map origin
+              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> m ()
+processPoints offset message day_maps origin
     | BS.length message >= fromIntegral offset = return ()
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
-        let (epoch, n_buckets) = lookupBoth time day_map
+        let (simple_epoch, simple_buckets) = lookupBoth time (fst day_maps)
 
         let masked_address = address `clearBit` 0
-        let bucket = masked_address `mod` n_buckets
+        let simple_bucket = masked_address `mod` simple_buckets
 
         -- The LSB of the address lets us know if it is an extended message or
         -- not. Set means extended.
         if address `testBit` 0
             then do
                 let message_bytes = runUnpacking (getBytesAt offset 24) message
-                appendSimple epoch bucket message_bytes
-                processPoints (offset + 24) message day_map origin
+                appendSimple simple_epoch simple_bucket message_bytes
+                processPoints (offset + 24) message day_maps origin
             else do
                 let len = fromIntegral payload
                 let str = runUnpacking (getBytesAt (offset + 24) len) message
-                appendExtended epoch bucket address time len str
-                processPoints (offset + 24 + len) message day_map origin
+                let (ext_epoch, ext_buckets) = lookupBoth time (fst day_maps)
+                let ext_bucket = masked_address `mod` ext_buckets
+                appendExtended ext_epoch ext_bucket address time len str
+                processPoints (offset + 24 + len) message day_maps origin
 
 parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
 parseMessageAt offset = do

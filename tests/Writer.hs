@@ -7,6 +7,7 @@ import Data.Monoid
 import Test.Hspec hiding (pending)
 import Control.Monad.State.Strict
 import qualified Data.HashMap.Strict as HashMap
+import Control.Applicative
 import Vaultaire.Writer
 import Vaultaire.DayMap
 import Data.Time
@@ -50,11 +51,13 @@ suite now = do
                 Nothing -> error "lookup pending"
                 Just fs -> let b = mconcat $ map ($10) (snd fs)
                            in toLazyByteString b `shouldBe` pend_bytes
-startDayMap :: DayMap
-startDayMap =
-    let dm = loadDayMap "\x00\x00\x00\x00\x00\x00\x00\x00\
-                        \\x42\x00\x00\x00\x00\x00\x00\x00"
-    in either error id dm
+startDayMaps :: (DayMap, DayMap)
+startDayMaps =
+    let simple   = loadDayMap "\x00\x00\x00\x00\x00\x00\x00\x00\
+                              \\x42\x00\x00\x00\x00\x00\x00\x00"
+        ext      = loadDayMap "\x00\x00\x00\x00\x00\x00\x00\x00\
+                              \\x42\x00\x00\x00\x00\x00\x00\x00"
+    in either error id $ (,) <$> simple <*> ext
 
 startState :: UTCTime -> BatchState
-startState = BatchState mempty mempty mempty mempty startDayMap
+startState = BatchState mempty mempty mempty mempty startDayMaps

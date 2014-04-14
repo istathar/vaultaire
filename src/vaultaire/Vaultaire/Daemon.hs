@@ -22,14 +22,14 @@ module Vaultaire.Daemon
     nextMessage,
     async,
     refreshOriginDays,
-    fetchEpoch,
-    fetchNoBuckets,
-    originDayMap,
+    withSimpleDayMap,
+    withExtendedDayMap,
     withLock,
     withExLock,
     cacheExpired,
     -- * Helpers
-    dayOID
+    simpleDayOID,
+    extendedDayOID,
 ) where
 
 import Control.Applicative
@@ -62,6 +62,9 @@ data DaemonConfig = DaemonConfig
     { messagesIn :: TBQueue Message
     , ackChan    :: TBQueue Ack
     }
+
+-- Simple and extended day maps
+type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
 
 -- | An acknowledgement of a message recieved, this will be attempted to be
 -- delivered back to the sender of a 'Message'
@@ -116,29 +119,19 @@ async (Daemon a) = do
     conf <- ask
     liftPool $ Rados.async (runReaderT (evalStateT a emptyOriginMap) conf)
 
--- | Fetch the epoch from cache for a given time, it is up to you to refresh
--- the cache when you need fresh data.
-fetchEpoch :: Origin -> Time -> Daemon (Maybe Epoch)
-fetchEpoch origin' time = do
+-- | Fetch the simple day map for a given origin
+withSimpleDayMap :: Origin -> (DayMap -> a) -> Daemon (Maybe a)
+withSimpleDayMap origin' f = do
     om <- get
-    return $ withDayMap om origin' (lookupEpoch time)
+    return $ f . snd . fst <$> originLookup origin' om
 
--- | Fetch the number of buckets from cache for a given time
-fetchNoBuckets :: Origin -> Time -> Daemon (Maybe NoBuckets)
-fetchNoBuckets origin' time = do
+-- | Fetch the extended day map for a given origin
+withExtendedDayMap :: Origin -> (DayMap -> a) -> Daemon (Maybe a)
+withExtendedDayMap origin' f = do
     om <- get
-    return $ withDayMap om origin' (lookupNoBuckets time)
+    return $ f . snd . snd <$> originLookup origin' om
 
--- | Fetch the whole day map for an origin
-originDayMap :: Origin -> Daemon (Maybe DayMap)
-originDayMap origin' = do
-    om <- get
-    return $ withDayMap om origin' id
-
-withDayMap :: OriginDays -> Origin -> (DayMap -> a) -> Maybe a
-withDayMap om origin' f = f . snd <$> originLookup origin' om
-
--- | Ensure that the 'DayMap' for a given 'Origin' is up to date. If you need
+-- | Ensure that the 'DayMap's for a given 'Origin' are up to date. If you need
 -- the day map to be up to date for the entirity of an operation you must use
 -- this within a 'withDayFileLock'.
 refreshOriginDays :: Origin -> Daemon ()
@@ -149,7 +142,7 @@ refreshOriginDays origin' = do
     when expired $ reload om
   where
     reload om = do
-        result <- liftPool $ dayMapFromCeph origin'
+        result <- liftPool $ dayMapsFromCeph origin'
         case result of
             Left e -> liftIO $ putStrLn e
             Right day_map -> put $ originInsert origin' day_map om
@@ -183,7 +176,6 @@ wrapPool pool_a (Daemon a) = do
 -- Internal
 
 type FileSize = Word64
-type OriginDays = OriginMap (FileSize, DayMap)
 type Envelope = (ByteString, ByteString, ByteString)
 data Ack = Ack Envelope Response
 
@@ -191,30 +183,38 @@ data Ack = Ack Envelope Response
 cacheExpired :: OriginDays -> Origin -> Daemon Bool
 cacheExpired om origin' =
     case originLookup origin' om of
-        Just (file_size, _) -> do
-            let day_file = dayOID origin'
-            st <- liftPool $ runObject day_file stat
-            case st of
-                Left e -> error $ "Failed to stat day file: " ++ show day_file
-                                  ++ "( " ++ show e ++ ")"
-                Right result -> return $ fileSize result /= file_size
+        Just ((simple_size, _), (ext_size, _)) -> do
+            simple_expired <- checkDayFile (simpleDayOID origin') simple_size
+            if not simple_expired
+                then checkDayFile (extendedDayOID origin') ext_size
+                else return simple_expired
         Nothing -> return True
+  where
+    checkDayFile file expected_size = do
+        st <- liftPool $ runObject file stat
+        case st of
+            Left e -> error $ "Failed to stat day file: " ++ show file
+                                ++ "( " ++ show e ++ ")"
+            Right result -> return $ fileSize result /= expected_size
 
 
 -- | Load a DayMap from Ceph, throwing errors on failure.
 --
 -- The file size is returned along side the map for cache invalidation.
-dayMapFromCeph :: Origin -> Pool (Either String (FileSize, DayMap))
-dayMapFromCeph origin' = do
-    let day_file = dayOID origin'
-    result <- runObject day_file readFull
-    case result of
-        Left e ->
-            return $ Left $ "Failed to read day file: " ++ show day_file ++
-                            " (" ++ show e ++ ")"
-        Right contents ->
-            tryLoad day_file contents
+dayMapsFromCeph :: Origin -> Pool (Either String ((FileSize, DayMap), (FileSize, DayMap)))
+dayMapsFromCeph origin' = do
+    simple <- tryRead (simpleDayOID origin')
+    extended <- tryRead (extendedDayOID origin')
+    return $ (,) <$> simple <*> extended
   where
+    tryRead file =  do
+        result <- runObject file readFull
+        case result of
+            Left e ->
+                return $ Left $ "Failed to read day file: " ++ show file ++
+                                " (" ++ show e ++ ")"
+            Right contents ->
+                tryLoad file contents
     tryLoad day_file contents = case loadDayMap contents of
         Left e ->
             return $ Left $ "Failed to load day file: " ++
@@ -222,8 +222,11 @@ dayMapFromCeph origin' = do
         Right day_map ->
             return $ Right (fromIntegral (BS.length contents), day_map)
 
-dayOID :: Origin -> ByteString
-dayOID origin'' = "02_" `BS.append` origin'' `BS.append` "_days"
+simpleDayOID :: Origin -> ByteString
+simpleDayOID origin'' = "02_" `BS.append` origin'' `BS.append` "_simple_days"
+
+extendedDayOID :: Origin -> ByteString
+extendedDayOID origin'' = "02_" `BS.append` origin'' `BS.append` "_extended_days"
 
 writeQueue :: MonadIO m => TBQueue a -> a -> m ()
 writeQueue q = liftIO . atomically . writeTBQueue q

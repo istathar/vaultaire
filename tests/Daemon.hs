@@ -9,9 +9,9 @@ import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
 import Vaultaire.Broker
 import Vaultaire.RollOver
+import Vaultaire.DayMap
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.Util
-import Control.Applicative
 import System.Rados.Monadic hiding (async)
 
 main :: IO ()
@@ -40,70 +40,73 @@ suite = do
     describe "Daemon day map" $ do
         it "loads an origins map" $ do
             result <- runTestDaemon $
-                (,) <$> fetchEpoch "PONY" 42 <*> fetchNoBuckets "PONY" 42
+                withSimpleDayMap "PONY" (lookupBoth 42)
 
-            result `shouldBe` (Just 0, Just 8)
+            result `shouldBe` Just (0, 8)
 
         it "does not invalidate cache on same filesize" $ do
             result <- runTestDaemon $ do
-                writePonyDayMap dayFileB
+                writePonyDayMap "02_PONY_simple_days" dayFileB
                 refreshOriginDays "PONY"
-                (,) <$> fetchEpoch "PONY" 42 <*> fetchNoBuckets "PONY" 42
+                withSimpleDayMap "PONY" (lookupBoth 42)
 
-            result `shouldBe` (Just 0, Just 8)
+            result `shouldBe` Just (0, 8)
 
         it "does invalidate cache on different filesize" $ do
             result <- runTestDaemon $ do
-                writePonyDayMap dayFileC
+                writePonyDayMap "02_PONY_simple_days" dayFileC
                 refreshOriginDays "PONY"
-                (,) <$> fetchEpoch "PONY" 300 <*> fetchNoBuckets "PONY" 300
+                withSimpleDayMap "PONY" (lookupBoth 300)
 
-            result `shouldBe` (Just 255, Just 254)
+            result `shouldBe` Just (255, 254)
 
-    describe "Daemon updateLatest" $ do
+    describe "Daemon updateSimpleLatest" $ do
         it "does not clobber higher value" $ do
             new <- runTestDaemon $ do
-                updateLatest "PONY" 0x41
-                liftPool $ runObject "02_PONY_latest" readFull
+                updateSimpleLatest "PONY" 0x41
+                liftPool $ runObject "02_PONY_simple_latest" readFull
             new `shouldBe` Right "\x42\x00\x00\x00\x00\x00\x00\x00"
 
         it "does overwrite lower value" $ do
             new <- runTestDaemon $ do
                 cleanup
-                updateLatest "PONY" 0x43
-                liftPool $ runObject "02_PONY_latest" readFull
+                updateSimpleLatest "PONY" 0x43
+                liftPool $ runObject "02_PONY_simple_latest" readFull
             new `shouldBe` Right "\x43\x00\x00\x00\x00\x00\x00\x00"
 
     describe "Daemon rollover" $  do
         it "correctly rolls over day" $ do
             new <- runTestDaemon $ do
-                updateLatest "PONY" 0x42
-                rollOverDay "PONY"
-                liftPool $ runObject "02_PONY_days" readFull
+                updateSimpleLatest "PONY" 0x42
+                rollOverSimpleDay "PONY"
+                liftPool $ runObject "02_PONY_simple_days" readFull
             new `shouldBe` Right dayFileD
 
         it "does not rollover if the day map has been touched" $ do
             new <- runTestDaemon $ do
-                writePonyDayMap dayFileC
+                writePonyDayMap "02_PONY_simple_days" dayFileC
 
-                updateLatest "PONY" 0x48
-                rollOverDay "PONY"
+                updateSimpleLatest "PONY" 0x48
+                rollOverSimpleDay "PONY"
 
-                liftPool $ runObject "02_PONY_days" readFull
+                liftPool $ runObject "02_PONY_simple_days" readFull
             new `shouldBe` Right dayFileC
 
         it "does basic sanity checking on latest file" $
             runTestDaemon
-                (do liftPool $ runObject "02_PONY_latest" $ append "garbage"
-                    rollOverDay "PONY")
+                (do liftPool $ runObject "02_PONY_simple_latest" $
+                        append "garbage"
+                    rollOverSimpleDay "PONY")
                 `shouldThrow` anyErrorCall
 
 loadState :: Daemon ()
 loadState = do
     cleanup
-    writePonyDayMap dayFileA
+    writePonyDayMap "02_PONY_simple_days" dayFileA
+    writePonyDayMap "02_PONY_extended_days" dayFileB
     refreshOriginDays "PONY"
-    updateLatest "PONY" 0x42
+    updateSimpleLatest "PONY" 0x42
+    updateExtendedLatest "PONY" 0x52
 
 runTestDaemon :: Daemon a -> IO a
 runTestDaemon a =
@@ -113,15 +116,17 @@ throwJust :: Monad m => Maybe RadosError -> m ()
 throwJust =
     maybe (return ()) (error . show)
             
-writePonyDayMap :: ByteString -> Daemon ()
-writePonyDayMap contents = liftPool $ 
-    runObject "02_PONY_days" (remove >> writeFull contents)
+writePonyDayMap :: ByteString -> ByteString -> Daemon ()
+writePonyDayMap oid contents = liftPool $ 
+    runObject oid (writeFull contents)
     >>= throwJust
 
 cleanup :: Daemon ()
 cleanup = liftPool $ do
-    _ <- runObject "02_PONY_days" remove
-    _ <- runObject "02_PONY_latest" remove
+    runObject "02_PONY_simple_days" remove
+    runObject "02_PONY_extended_days" remove
+    runObject "02_PONY_simple_latest" remove
+    runObject "02_PONY_extended_latest" remove
     return ()
 
 dayFileA, dayFileB, dayFileC, dayFileD:: ByteString
