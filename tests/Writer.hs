@@ -11,7 +11,11 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import Control.Applicative
+import Pipes
+import Pipes.Lift
+import Pipes.Parse
 import Vaultaire.Writer
+import Vaultaire.Daemon(Message(..))
 import Vaultaire.DayMap
 import Data.Time
 
@@ -107,6 +111,26 @@ suite now = do
                 Nothing -> error "lookup pending"
                 Just fs -> let b = mconcat . reverse $ map ($2) (snd fs)
                            in toLazyByteString b `shouldBe` pend_bytes
+
+    describe "processMessage" $ do
+        it "yields state immediately with expired time" $ do
+            writes <- evalStateT drawAll $
+                yield (Message undefined "PONY" extendedCompound)
+                >-> evalStateP (startState now) (processMessage 0)
+
+            length writes `shouldBe` 1
+            let w = head writes
+            (HashMap.null $ extended w) `shouldBe` False
+            (HashMap.null $ pending w) `shouldBe` False
+            (HashMap.null $ normal w) `shouldBe` False
+
+        it "does not yield state immmediately with a higher batch period" $ do
+            writes <- evalStateT drawAll $
+                yield (Message undefined "PONY" extendedCompound)
+                >-> evalStateP (startState now) (processMessage 1)
+
+            null writes `shouldBe` True
+
   where
     go = (flip execState) (startState now)
 

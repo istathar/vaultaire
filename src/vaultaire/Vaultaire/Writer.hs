@@ -7,6 +7,7 @@ module Vaultaire.Writer
 (
     startWriter,
     -- Testing
+    processMessage,
     processPoints,
     appendExtended,
     appendSimple,
@@ -18,7 +19,6 @@ import Control.Applicative
 import Control.Concurrent (threadDelay)
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.STM
-import Debug.Trace
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.Bits
@@ -69,16 +69,19 @@ tickRate = 1000000000 `div` 100
 startWriter :: String           -- ^ Broker
             -> Maybe ByteString -- ^ Username for Ceph
             -> ByteString       -- ^ Pool name for Ceph
+            -> NominalDiffTime
             -> IO ()
-startWriter b u p = runDaemon b u p $ do
-    runEffect $ lift nextMessage >~ evalStateP emptyOriginMap flyingThreadMonster
+startWriter broker user pool batch_period = runDaemon broker user pool $ do
+    runEffect $ lift nextMessage
+             >~ evalStateP emptyOriginMap (flyingThreadMonster batch_period)
     error "startWriter: impossible"
 
 -- If the incoming message currently has a processing thread running for that
 -- origin, feed the message into that thread. Otherwise create a new one and
 -- feed it in.
-flyingThreadMonster :: Consumer Message (StateT FlyingThreadMonsterMap Daemon) ()
-flyingThreadMonster = do
+flyingThreadMonster :: NominalDiffTime
+                    -> Consumer Message (StateT FlyingThreadMonsterMap Daemon) ()
+flyingThreadMonster batch_period = do
     m@(Message _ origin' _) <- await
     ftm <- get
     case originLookup origin' ftm of
@@ -87,20 +90,18 @@ flyingThreadMonster = do
             -- If it wasn't sent, the thread has shut itself down.
             if sent
                 then startThread origin' ftm m
-                else flyingThreadMonster
+                else flyingThreadMonster batch_period
         Nothing   -> startThread origin' ftm m
   where
     send' o = liftIO . atomically . send o
 
     startThread origin' ftm m = do
         (output, seal, input) <- liftIO $ spawn' Single
-        lift . lift $ async (processBatch origin' seal input)
+        lift . lift $ async (processBatch batch_period origin' seal input)
         must_send <- send' output m
         unless must_send $ error "ftm died immediately, bailing"
         lift . put $ originInsert origin' output ftm
-        flyingThreadMonster
-
-batchPeriod = 10 -- seconds
+        flyingThreadMonster batch_period
 
 batchStateNow :: (DayMap, DayMap) -> IO BatchState
 batchStateNow dms = do
@@ -109,8 +110,8 @@ batchStateNow dms = do
 -- | The flying thread monster has done the hard work for us and sorted
 -- incoming bursts by origin. Now we simply need to process these messages with
 -- local state, writing to ceph when our collection time has elapsed.
-processBatch :: Origin -> Input Message -> STM () -> Daemon ()
-processBatch origin' input seal = do
+processBatch :: NominalDiffTime -> Origin -> Input Message -> STM () -> Daemon ()
+processBatch batch_period origin' input seal = do
     refreshOriginDays origin'
     simple_dm <- withSimpleDayMap origin' id
     extended_dm  <- withExtendedDayMap origin' id
@@ -123,7 +124,9 @@ processBatch origin' input seal = do
         Just dms -> do
             -- Process for a batch period
             start_state <- liftIO $ batchStateNow dms
-            runEffect $ fromInput input >-> evalStateP start_state processMessage >-> write
+            runEffect $ fromInput input
+                    >-> evalStateP start_state (processMessage batch_period)
+                    >-> write
             liftIO $ atomically seal
 
 badOrigin :: Consumer Message Daemon ()
@@ -131,14 +134,13 @@ badOrigin = do
     Message reply_f _ _ <- await
     lift $ reply_f $ Failure "No such origin"
 
-
 feedTicks :: Producer Stream IO b
 feedTicks = forever $ (lift $ threadDelay tickRate) >> yield Tick
 
 -- | Place a message into state, wherever it belongs.
-processMessage :: (MonadState BatchState m, MonadIO m) =>
-               Pipe Message BatchState m ()
-processMessage = do
+processMessage :: (MonadState BatchState m, MonadIO m)
+               => NominalDiffTime -> Pipe Message BatchState m ()
+processMessage batch_period = do
     -- Most messages simply need to be placed into the correct epoch and
     -- bucket, extended ones are a little more complex in that they have to be
     -- stored as an offset to a pending write to the extended buckets.
@@ -152,14 +154,13 @@ processMessage = do
 
     now <- liftIO getCurrentTime
 
-    if batchPeriod `addUTCTime` (start s) > now
+    if batch_period `addUTCTime` (start s) < now
         then get >>= yield
-        else processMessage
+        else processMessage batch_period
 
 processPoints :: MonadState BatchState m
               => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> m ()
 processPoints offset message day_maps origin
-    | trace ("os: "  ++ show offset) False = undefined
     | fromIntegral offset >= BS.length message = return ()
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
