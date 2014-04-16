@@ -10,7 +10,9 @@ module TestHelpers
     dayFileB,
     dayFileC,
     dayFileD,
-    runTestDaemon
+    runTestDaemon,
+    runTestPool,
+    prettyPrint
 )
 where
 
@@ -18,6 +20,8 @@ import Vaultaire.Daemon
 import Vaultaire.RollOver
 import System.Rados.Monadic
 import Data.ByteString(ByteString)
+import qualified Data.ByteString as BS
+import Numeric(showHex)
 
 cleanup :: Daemon ()
 cleanup = liftPool $ unsafeObjects >>= mapM_ (`runObject` remove)
@@ -60,3 +64,11 @@ throwJust =
 runTestDaemon :: String -> Daemon a -> IO a
 runTestDaemon broker a =
     runDaemon broker Nothing "test" (cleanup >> loadState >> a)
+
+runTestPool :: Pool a -> IO a
+runTestPool = runConnect Nothing (parseConfig "/etc/ceph/ceph.conf")
+              . runPool "test"
+
+prettyPrint :: ByteString -> String
+prettyPrint = concatMap (`showHex` "") . BS.unpack
+

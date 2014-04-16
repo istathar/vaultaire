@@ -85,7 +85,7 @@ suite now = do
             let norm = HashMap.lookup 0 (normal st) >>= HashMap.lookup 4
             case norm of Nothing -> error "simple bucket got lost"
                          Just b -> (toStrict $ toLazyByteString b)
-                                   `shouldBe` normalCompound
+                                   `shouldBe` normalMessage
 
             -- Extended bucket should have the length and string
             let ext = HashMap.lookup 0 (extended st) >>= HashMap.lookup 4
@@ -134,11 +134,21 @@ suite now = do
                 (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
             linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
             sendTestMsg >>= (`shouldBe` ["\x42", ""])
-            bucket <- runTestDaemon "tcp://localhost:1234" $ liftPool $
+            bucket <- runTestPool $ do
                 runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
-            bucket `shouldBe` Right (normalMessage `BS.append` pendingBytes)
+            bucket `shouldBe` Right (normalMessage `BS.append` extendedPointers)
   where
     go = (flip execState) (startState now)
+
+
+extendedPointers :: ByteString
+extendedPointers = "\x05\x00\x00\x00\x00\x00\x00\x00\
+                   \\x02\x00\x00\x00\x00\x00\x00\x00\
+                   \\x00\x00\x00\x00\x00\x00\x00\x00\
+                   \\x05\x00\x00\x00\x00\x00\x00\x00\
+                   \\x03\x00\x00\x00\x00\x00\x00\x00\
+                   \\x1f\x00\x00\x00\x00\x00\x00\x00"
+
 
 sendTestMsg :: IO [ByteString]
 sendTestMsg = runZMQ $ do
@@ -163,7 +173,7 @@ pendingBytes = "\x05\x00\x00\x00\x00\x00\x00\x00\
 
 extendedCompound, normalCompound, normalMessage, extendedMessage :: ByteString
 
-extendedCompound = normalCompound `BS.append` extendedMessage
+extendedCompound = normalMessage `BS.append` extendedMessage
 
 normalCompound = normalMessage `BS.append` normalMessage
 
