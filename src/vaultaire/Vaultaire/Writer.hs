@@ -110,7 +110,7 @@ dispatch batch_period = do
         dispatch batch_period
 
 batchStateNow :: (DayMap, DayMap) -> IO BatchState
-batchStateNow dms = do
+batchStateNow dms =
     BatchState mempty mempty mempty mempty dms <$> getCurrentTime
 
 -- | The dispatcher has done the hard work for us and sorted incoming bursts by
@@ -145,7 +145,7 @@ badOrigin = do
 
 feedTicks :: Output Event -> IO ()
 feedTicks o = runEffect $ tickStream >-> toOutput o
-  where tickStream = forever $ (lift $ threadDelay tickRate) >> yield Tick
+  where tickStream = forever $ lift (threadDelay tickRate) >> yield Tick
         tickRate   = 10000000 `div` 100 -- 100ms
 
 -- | Place a message into state or flush if appropriate.
@@ -160,14 +160,14 @@ processEvents batch_period = do
             -- bucket, extended ones are a little more complex in that they have to be
             -- stored as an offset to a pending write to the extended buckets.
             -- Append the replyf for this message
-            put s{replyFs = (rf:replyFs s)}
+            put s{replyFs = rf:replyFs s}
 
             lift $ processPoints 0 payload' (dayMaps s) origin'
 
             processEvents batch_period
         Tick -> do
             now <- liftIO getCurrentTime
-            if batch_period `addUTCTime` (start s) < now
+            if batch_period `addUTCTime` start s < now
                 then get >>= yield
                 else processEvents batch_period
 
@@ -263,11 +263,12 @@ write origin' = do
     simple_rollover <- stepTwo simple_buckets
     -- Send the acks
     lift $ mapM_ ($ Success) (replyFs s)
-    liftIO $ print (simple_rollover, extended_rollover)
+    when simple_rollover (lift $ rollOverSimpleDay origin')
+    when extended_rollover (lift $ rollOverExtendedDay origin')
   where
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.
-    stepOne s = do
+    stepOne s =
         lift . withExLock (writeLockOID origin') $ liftPool $ do
             -- First pass to get current offsets
             offsets <- forWithKey (extended s) $ \epoch buckets -> do
@@ -282,9 +283,9 @@ write origin' = do
                     case result of
                         Left (NoEntity{..}) ->
                             return 0
-                        Left e -> do
+                        Left e ->
                             error $ "extended bucket read: " ++ show e
-                        Right st -> do
+                        Right st ->
                             return $ fileSize st
 
             -- Second pass to write the extended data
@@ -300,14 +301,12 @@ write origin' = do
 
             -- TODO: Update max
 
-            if findMax offsets > bucketSize
-                then return (offsets, True)
-                else return (offsets, False)
+            return (offsets, findMax offsets > bucketSize)
 
     -- Given two maps, one of offsets and one of closures, we walk through
     -- applying one to the other. We then append that to the map of simple
     -- writes in order to achieve one write.
-    applyOffsets offset_map s = lift $ liftPool $ do
+    applyOffsets offset_map s = lift $ liftPool $
         forWithKey (normal s) $ \epoch buckets -> do
             let pending_buckets = HashMap.lookup epoch (pending s)
             let offset_buckets  = HashMap.lookup epoch offset_map
@@ -329,7 +328,7 @@ write origin' = do
         offsets <- forWithKey simple_buckets $ \epoch buckets -> do
             writes <- forWithKey buckets $ \bucket builder -> do
                 let payload = toStrict $ toLazyByteString builder
-                writeSimple origin' epoch bucket $ payload
+                writeSimple origin' epoch bucket payload
             for writes $ \(async_stat, async_write) -> do
                 w <- waitSafe async_write
                 case w of
@@ -353,12 +352,12 @@ extendedOffset o e b =
     runAsync $ runObject (bucketOID o e b "extended") stat
 
 writeExtended :: Origin -> Epoch -> Bucket -> ByteString -> Pool AsyncWrite
-writeExtended o e b payload = do
+writeExtended o e b payload =
     runAsync $ runObject (bucketOID o e b "extended") (append payload)
 
 writeSimple :: Origin -> Epoch -> Bucket -> ByteString -> Pool (AsyncRead StatResult, AsyncWrite)
-writeSimple o e b payload= do
-    runAsync $ runObject (bucketOID o e b "simple") $ do
+writeSimple o e b payload=
+    runAsync $ runObject (bucketOID o e b "simple") $
         (,) <$> stat <*> writeFull payload
 
 writeLockOID :: Origin -> ByteString
