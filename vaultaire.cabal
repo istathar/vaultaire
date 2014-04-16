@@ -70,7 +70,7 @@ test-suite           daemon-test
                      bytestring,
                      vaultaire,
                      zeromq4-haskell,
-                     rados-haskell >= 3
+                     rados-haskell >= 3.0.1
 
   main-is:           Daemon.hs
   hs-source-dirs:    tests
@@ -107,7 +107,7 @@ test-suite           writer-test
                      mtl,
                      bytestring,
                      unordered-containers,
-                     rados-haskell >= 3,
+                     rados-haskell >= 3.0.1,
                      vaultaire
 
   main-is:           Writer.hs

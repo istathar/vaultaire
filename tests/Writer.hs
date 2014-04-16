@@ -19,11 +19,11 @@ import Pipes.Lift
 import Pipes.Parse
 import Vaultaire.Writer
 import Vaultaire.Daemon
-import Vaultaire.Daemon
 import System.ZMQ4.Monadic hiding (Event)
 import Vaultaire.Util
 import Vaultaire.DayMap
 import Data.Time
+import TestHelpers
 
 main :: IO ()
 main = do
@@ -134,15 +134,11 @@ suite now = do
                 (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
             linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
             sendTestMsg >>= (`shouldBe` ["\x42", ""])
-            bucket <- runTestDaemon $ liftPool $
+            bucket <- runTestDaemon "tcp://localhost:1234" $ liftPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
             bucket `shouldBe` Right (normalMessage `BS.append` pendingBytes)
   where
     go = (flip execState) (startState now)
-
-runTestDaemon :: Daemon a -> IO a
-runTestDaemon =
-    runDaemon "tcp://localhost:1234" Nothing "test"
 
 sendTestMsg :: IO [ByteString]
 sendTestMsg = runZMQ $ do
