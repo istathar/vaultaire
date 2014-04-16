@@ -3,19 +3,25 @@
 module Main where
 
 import Data.ByteString.Lazy.Builder
+import Data.List.NonEmpty (fromList)
 import Data.ByteString.Lazy(toStrict)
 import Data.Monoid
 import Test.Hspec hiding (pending)
 import Control.Monad.State.Strict
 import qualified Data.HashMap.Strict as HashMap
+import System.Rados.Monadic
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import Control.Applicative
 import Pipes
+import Vaultaire.Broker
 import Pipes.Lift
 import Pipes.Parse
 import Vaultaire.Writer
-import Vaultaire.Daemon(Message(..))
+import Vaultaire.Daemon
+import Vaultaire.Daemon
+import System.ZMQ4.Monadic hiding (Event)
+import Vaultaire.Util
 import Vaultaire.DayMap
 import Data.Time
 
@@ -100,23 +106,15 @@ suite now = do
             -- for efficiency.
 
             let pend = HashMap.lookup 0 (pending st) >>= HashMap.lookup 4
-            let pend_bytes = "\x05\x00\x00\x00\x00\x00\x00\x00\
-                             \\x02\x00\x00\x00\x00\x00\x00\x00\
-                             \\x02\x00\x00\x00\x00\x00\x00\x00\
-                             \\x05\x00\x00\x00\x00\x00\x00\x00\
-                             \\x03\x00\x00\x00\x00\x00\x00\x00\
-                             \\x21\x00\x00\x00\x00\x00\x00\x00"
-
             case pend of
                 Nothing -> error "lookup pending"
                 Just fs -> let b = mconcat . reverse $ map ($2) (snd fs)
-                           in toLazyByteString b `shouldBe` pend_bytes
+                           in (toStrict $ toLazyByteString b) `shouldBe` pendingBytes
 
     describe "processMessage" $ do
         it "yields state immediately with expired time" $ do
             writes <- evalStateT drawAll $
-                yield (Message undefined "PONY" extendedCompound)
-                >-> evalStateP (startState now) (processMessage 0)
+                yieldEvents >-> evalStateP (startState now) (processEvents 0)
 
             length writes `shouldBe` 1
             let w = head writes
@@ -126,13 +124,46 @@ suite now = do
 
         it "does not yield state immmediately with a higher batch period" $ do
             writes <- evalStateT drawAll $
-                yield (Message undefined "PONY" extendedCompound)
-                >-> evalStateP (startState now) (processMessage 1)
+                yieldEvents >-> evalStateP (startState now) (processEvents 1)
 
             null writes `shouldBe` True
 
+    describe "full stack" $ do
+        it "writes a message to disk immediately" $ do
+            linkThread $ runZMQ $ startProxy
+                (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
+            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
+            sendTestMsg >>= (`shouldBe` ["\x42", ""])
+            bucket <- runTestDaemon $ liftPool $
+                runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
+            bucket `shouldBe` Right (normalMessage `BS.append` pendingBytes)
   where
     go = (flip execState) (startState now)
+
+runTestDaemon :: Daemon a -> IO a
+runTestDaemon =
+    runDaemon "tcp://localhost:1234" Nothing "test"
+
+sendTestMsg :: IO [ByteString]
+sendTestMsg = runZMQ $ do
+    s <- socket Dealer
+    connect s "tcp://localhost:5560"
+    -- Simulate a client sending a sequence number and message
+    sendMulti s $ fromList ["\x42", "PONY", extendedCompound]
+    receiveMulti s
+
+yieldEvents :: Monad m => Producer Event m ()
+yieldEvents = do
+    yield (Msg $ Message undefined "PONY" extendedCompound)
+    yield Tick
+
+pendingBytes :: ByteString
+pendingBytes = "\x05\x00\x00\x00\x00\x00\x00\x00\
+               \\x02\x00\x00\x00\x00\x00\x00\x00\
+               \\x02\x00\x00\x00\x00\x00\x00\x00\
+               \\x05\x00\x00\x00\x00\x00\x00\x00\
+               \\x03\x00\x00\x00\x00\x00\x00\x00\
+               \\x21\x00\x00\x00\x00\x00\x00\x00"
 
 extendedCompound, normalCompound, normalMessage, extendedMessage :: ByteString
 

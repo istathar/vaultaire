@@ -102,9 +102,12 @@ test-suite           writer-test
                      time,
                      pipes,
                      pipes-parse,
+                     semigroups,
+                     zeromq4-haskell,
                      mtl,
                      bytestring,
                      unordered-containers,
+                     rados-haskell >= 3,
                      vaultaire
 
   main-is:           Writer.hs
