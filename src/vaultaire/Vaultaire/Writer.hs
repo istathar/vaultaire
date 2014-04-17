@@ -54,12 +54,14 @@ type EpochMap = HashMap Epoch
 type BucketMap = HashMap Bucket
 
 data BatchState = BatchState
-    { replyFs  :: [Response -> Daemon ()]
-    , normal   :: EpochMap (BucketMap Builder)
-    , extended :: EpochMap (BucketMap Builder)
-    , pending  :: EpochMap (BucketMap (Word64, [Word64 -> Builder]))
-    , dayMaps  :: (DayMap, DayMap) -- Simple, extended
-    , start    :: UTCTime
+    { replyFs         :: [Response -> Daemon ()]
+    , normal          :: EpochMap (BucketMap Builder)
+    , extended        :: EpochMap (BucketMap Builder)
+    , pending         :: EpochMap (BucketMap (Word64, [Word64 -> Builder]))
+    , latestNormal   :: Time
+    , latestExtended :: Time
+    , dayMaps         :: (DayMap, DayMap) -- Simple, extended
+    , start           :: UTCTime
     }
 
 data Event = Msg Message | Tick
@@ -111,7 +113,7 @@ dispatch batch_period = do
 
 batchStateNow :: (DayMap, DayMap) -> IO BatchState
 batchStateNow dms =
-    BatchState mempty mempty mempty mempty dms <$> getCurrentTime
+    BatchState mempty mempty mempty mempty 0 0 dms <$> getCurrentTime
 
 -- | The dispatcher has done the hard work for us and sorted incoming bursts by
 -- origin. Now we simply need to process these messages with local state,
@@ -159,10 +161,16 @@ processEvents batch_period = do
             -- Most messages simply need to be placed into the correct epoch and
             -- bucket, extended ones are a little more complex in that they have to be
             -- stored as an offset to a pending write to the extended buckets.
-            -- Append the replyf for this message
-            put s{replyFs = rf:replyFs s}
 
-            lift $ processPoints 0 payload' (dayMaps s) origin'
+            (latest_simple, latest_ext) <- lift $
+                processPoints 0 payload' (dayMaps s) origin'
+                              (latestNormal s) (latestExtended s)
+
+
+            s' <- get
+            put s'{ replyFs = rf:replyFs s'
+                 , latestNormal = latest_simple
+                 , latestExtended = latest_ext }
 
             processEvents batch_period
         Tick -> do
@@ -172,9 +180,9 @@ processEvents batch_period = do
                 else processEvents batch_period
 
 processPoints :: MonadState BatchState m
-              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> m ()
-processPoints offset message day_maps origin
-    | fromIntegral offset >= BS.length message = return ()
+              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> Time -> Time -> m (Time,Time)
+processPoints offset message day_maps origin latest_simple latest_ext
+    | fromIntegral offset >= BS.length message = return (latest_simple, latest_ext)
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (simple_epoch, simple_buckets) = lookupBoth time (fst day_maps)
@@ -191,11 +199,15 @@ processPoints offset message day_maps origin
                 let (ext_epoch, ext_buckets) = lookupBoth time (fst day_maps)
                 let ext_bucket = masked_address `mod` ext_buckets
                 appendExtended ext_epoch ext_bucket address time len str
-                processPoints (offset + 24 + len) message day_maps origin
+                let t | time > latest_ext = time
+                      | otherwise         = latest_ext
+                processPoints (offset + 24 + len) message day_maps origin latest_simple t
             else do
                 let message_bytes = runUnpacking (getBytesAt offset 24) message
                 appendSimple simple_epoch simple_bucket message_bytes
-                processPoints (offset + 24) message day_maps origin
+                let t | time > latest_simple = time
+                      | otherwise            = latest_simple
+                processPoints (offset + 24) message day_maps origin t latest_ext
 
 parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
 parseMessageAt offset = do
@@ -259,12 +271,20 @@ write :: Origin -> Consumer BatchState Daemon ()
 write origin' = do
     s <- await
     (offsets, extended_rollover) <- stepOne s
+
     simple_buckets  <- applyOffsets offsets s
     simple_rollover <- stepTwo simple_buckets
-    -- Send the acks
-    lift $ mapM_ ($ Success) (replyFs s)
-    when simple_rollover (lift $ rollOverSimpleDay origin')
-    when extended_rollover (lift $ rollOverExtendedDay origin')
+    
+    -- Update latest files after the writes have gone down to disk, in case
+    -- something happens between now and sending all the acks.
+    lift $ do
+        updateSimpleLatest origin' (latestNormal s)
+        updateExtendedLatest origin' (latestExtended s)
+        mapM_ ($ Success) (replyFs s)
+
+        -- 4. Do any rollovers
+        when simple_rollover (rollOverSimpleDay origin')
+        when extended_rollover (rollOverExtendedDay origin')
   where
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.

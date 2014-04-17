@@ -34,20 +34,20 @@ suite :: UTCTime -> Spec
 suite now = do
     describe "appendSimple" $ do
         it "generates a single builder from one append" $ do
-            let st = go $ appendSimple 0 1 "HAI"
+            let (_, st) = go $ appendSimple 0 1 "HAI"
             let builder = HashMap.lookup 0 (normal st) >>= HashMap.lookup 1
             case builder of Nothing -> error "lookup"
                             Just b  -> toLazyByteString b `shouldBe` "HAI"
 
         it "generates a single builder from one append" $ do
-            let st = go $ appendSimple 0 1 "A" >> appendSimple 0 1 "B"
+            let (_, st) = go $ appendSimple 0 1 "A" >> appendSimple 0 1 "B"
             let builder = HashMap.lookup 0 (normal st) >>= HashMap.lookup 1
             case builder of Nothing -> error "lookup"
                             Just b  -> toLazyByteString b `shouldBe` "AB"
 
     describe "appendExtended" $
         it "creates appropriate builders and extended map" $ do
-            let st = go $ appendExtended 0 1 0x42 0x90 2 "BC"
+            let (_, st) = go $ appendExtended 0 1 0x42 0x90 2 "BC"
 
             let ext_bytes = "\x02\x00\x00\x00\x00\x00\x00\x00\&BC"
             let ext = HashMap.lookup 0 (extended st) >>= HashMap.lookup 1
@@ -65,18 +65,23 @@ suite now = do
 
     describe "processPoints" $ do
         it "handles multiple normal points" $ do
-            let st = go $ processPoints 0 normalCompound startDayMaps "PONY"
+            let (latest, st) = go $ processPoints 0 normalCompound
+                                                    startDayMaps "PONY" 0 0
             HashMap.null (extended st) `shouldBe` True
             HashMap.null (pending st) `shouldBe` True
             HashMap.null (normal st) `shouldBe` False
             let norm = HashMap.lookup 0 (normal st) >>= HashMap.lookup 4
             case norm of Nothing -> error "bucket got lost"
                          Just b -> toStrict (toLazyByteString b)
+
                                    `shouldBe` normalCompound
+
             HashMap.null (normal st) `shouldBe` False
+            latest `shouldBe` (2, 0)
 
         it "handles multiple normal and extended points" $ do
-            let st = go $ processPoints 0 extendedCompound startDayMaps "PONY"
+            let (latest, st) = go $ processPoints 0 extendedCompound
+                                                      startDayMaps "PONY" 0 0
             HashMap.null (extended st) `shouldBe` False
             HashMap.null (pending st) `shouldBe` False
             HashMap.null (normal st) `shouldBe` False
@@ -108,6 +113,8 @@ suite now = do
                 Just fs -> let b = mconcat . reverse $ map ($2) (snd fs)
                            in toStrict (toLazyByteString b) `shouldBe` pendingBytes
 
+            latest `shouldBe` (2,3)
+
     describe "processMessage" $ do
         it "yields state immediately with expired time" $ do
             writes <- evalStateT drawAll $
@@ -127,11 +134,27 @@ suite now = do
 
     describe "full stack" $
         it "writes a message to disk immediately" $ do
+            -- Clean up latest files so that we can test that we are writing
+            -- correct values
+            runTestDaemon "tcp://localhost:1234" $ liftPool $ do
+                runObject "02_PONY_extended_latest" remove
+                runObject "02_PONY_simple_latest" remove
+
             linkThread $ runZMQ $ startProxy
                 (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
             linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
             sendTestMsg >>= (`shouldBe` ["\x42", ""])
 
+            let objs = [ "02_PONY_00000000000000000004_00000000000000000000_extended"
+                       , "02_PONY_00000000000000000004_00000000000000000000_simple"
+                       , "02_PONY_extended_latest"
+                       , "02_PONY_simple_latest"
+                       , "02_PONY_simple_days"
+                       , "02_PONY_write_lock"
+                       , "02_PONY_extended_days"]
+
+            runTestPool objects >>= (`shouldBe` objs) -- order is somehow preserved
+ 
             simple <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
             simple `shouldBe` Right (normalMessage `BS.append` extendedPointers)
@@ -139,9 +162,16 @@ suite now = do
             ext <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_extended" readFull
             ext `shouldBe` Right extendedBytes
-  where
-    go = flip execState (startState now)
 
+            runTestPool (runObject "02_PONY_extended_latest" readFull)
+                >>= (`shouldBe` Right "\x03\x00\x00\x00\x00\x00\x00\x00")
+
+            runTestPool (runObject "02_PONY_simple_latest" readFull)
+                >>= (`shouldBe` Right "\x02\x00\x00\x00\x00\x00\x00\x00")
+
+  where
+
+    go = flip runState (startState now)
 
 extendedBytes :: ByteString
 extendedBytes = "\x1f\x00\x00\x00\x00\x00\x00\x00\
@@ -156,7 +186,6 @@ extendedPointers = "\x05\x00\x00\x00\x00\x00\x00\x00\
                    \\x05\x00\x00\x00\x00\x00\x00\x00\
                    \\x03\x00\x00\x00\x00\x00\x00\x00\
                    \\x1f\x00\x00\x00\x00\x00\x00\x00"
-
 
 sendTestMsg :: IO [ByteString]
 sendTestMsg = runZMQ $ do
@@ -209,4 +238,4 @@ startDayMaps =
     in either error id $ (,) <$> norm <*> ext
 
 startState :: UTCTime -> BatchState
-startState = BatchState mempty mempty mempty mempty startDayMaps
+startState = BatchState mempty mempty mempty mempty 0 0 startDayMaps
