@@ -2,28 +2,28 @@
 
 module Main where
 
-import Data.ByteString.Lazy.Builder
-import Data.List.NonEmpty (fromList)
-import Data.ByteString.Lazy(toStrict)
-import Data.Monoid
-import Test.Hspec hiding (pending)
-import Control.Monad.State.Strict
-import qualified Data.HashMap.Strict as HashMap
-import System.Rados.Monadic
-import Data.ByteString(ByteString)
-import qualified Data.ByteString as BS
 import Control.Applicative
+import Control.Monad.State.Strict
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import Data.ByteString.Lazy (toStrict)
+import Data.ByteString.Lazy.Builder
+import qualified Data.HashMap.Strict as HashMap
+import Data.List.NonEmpty (fromList)
+import Data.Monoid
+import Data.Time
 import Pipes
-import Vaultaire.Broker
 import Pipes.Lift
 import Pipes.Parse
-import Vaultaire.Writer
-import Vaultaire.Daemon
+import System.Rados.Monadic
 import System.ZMQ4.Monadic hiding (Event)
-import Vaultaire.Util
-import Vaultaire.DayMap
-import Data.Time
+import Test.Hspec hiding (pending)
 import TestHelpers
+import Vaultaire.Broker
+import Vaultaire.Daemon
+import Vaultaire.DayMap
+import Vaultaire.Util
+import Vaultaire.Writer
 
 main :: IO ()
 main = do
@@ -45,7 +45,7 @@ suite now = do
             case builder of Nothing -> error "lookup"
                             Just b  -> toLazyByteString b `shouldBe` "AB"
 
-    describe "appendExtended" $ do
+    describe "appendExtended" $
         it "creates appropriate builders and extended map" $ do
             let st = go $ appendExtended 0 1 0x42 0x90 2 "BC"
 
@@ -66,36 +66,33 @@ suite now = do
     describe "processPoints" $ do
         it "handles multiple normal points" $ do
             let st = go $ processPoints 0 normalCompound startDayMaps "PONY"
-            (HashMap.null $ extended st) `shouldBe` True
-            (HashMap.null $ pending st) `shouldBe` True
-            (HashMap.null $ normal st) `shouldBe` False
+            HashMap.null (extended st) `shouldBe` True
+            HashMap.null (pending st) `shouldBe` True
+            HashMap.null (normal st) `shouldBe` False
             let norm = HashMap.lookup 0 (normal st) >>= HashMap.lookup 4
             case norm of Nothing -> error "bucket got lost"
-                         Just b -> (toStrict $ toLazyByteString b)
+                         Just b -> toStrict (toLazyByteString b)
                                    `shouldBe` normalCompound
-            (HashMap.null $ normal st) `shouldBe` False
+            HashMap.null (normal st) `shouldBe` False
 
         it "handles multiple normal and extended points" $ do
             let st = go $ processPoints 0 extendedCompound startDayMaps "PONY"
-            (HashMap.null $ extended st) `shouldBe` False
-            (HashMap.null $ pending st) `shouldBe` False
-            (HashMap.null $ normal st) `shouldBe` False
+            HashMap.null (extended st) `shouldBe` False
+            HashMap.null (pending st) `shouldBe` False
+            HashMap.null (normal st) `shouldBe` False
 
             -- Simple bucket should have only simple points
             let norm = HashMap.lookup 0 (normal st) >>= HashMap.lookup 4
             case norm of Nothing -> error "simple bucket got lost"
-                         Just b -> (toStrict $ toLazyByteString b)
+                         Just b -> toStrict (toLazyByteString b)
                                    `shouldBe` normalMessage
 
             -- Extended bucket should have the length and string
             let ext = HashMap.lookup 0 (extended st) >>= HashMap.lookup 4
             case ext of
                 Nothing -> error "extended bucket got lost"
-                Just b -> (toStrict $ toLazyByteString b)
-                          `shouldBe` "\x1f\x00\x00\x00\x00\x00\x00\x00\
-                                      \\&This computer is made of warms.\
-                                      \\x04\x00\x00\x00\x00\x00\x00\x00\
-                                      \\&Yay!"
+                Just b -> toStrict (toLazyByteString b)
+                          `shouldBe` extendedBytes
 
             -- Pending bucket should have a closure that creates a pointer to
             -- the extended bucket given an offset. These should point to 0x0
@@ -109,7 +106,7 @@ suite now = do
             case pend of
                 Nothing -> error "lookup pending"
                 Just fs -> let b = mconcat . reverse $ map ($2) (snd fs)
-                           in (toStrict $ toLazyByteString b) `shouldBe` pendingBytes
+                           in toStrict (toLazyByteString b) `shouldBe` pendingBytes
 
     describe "processMessage" $ do
         it "yields state immediately with expired time" $ do
@@ -118,9 +115,9 @@ suite now = do
 
             length writes `shouldBe` 1
             let w = head writes
-            (HashMap.null $ extended w) `shouldBe` False
-            (HashMap.null $ pending w) `shouldBe` False
-            (HashMap.null $ normal w) `shouldBe` False
+            HashMap.null (extended w) `shouldBe` False
+            HashMap.null (pending w) `shouldBe` False
+            HashMap.null (normal w) `shouldBe` False
 
         it "does not yield state immmediately with a higher batch period" $ do
             writes <- evalStateT drawAll $
@@ -128,18 +125,29 @@ suite now = do
 
             null writes `shouldBe` True
 
-    describe "full stack" $ do
+    describe "full stack" $
         it "writes a message to disk immediately" $ do
             linkThread $ runZMQ $ startProxy
                 (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
             linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
             sendTestMsg >>= (`shouldBe` ["\x42", ""])
-            bucket <- runTestPool $ do
-                runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
-            bucket `shouldBe` Right (normalMessage `BS.append` extendedPointers)
-  where
-    go = (flip execState) (startState now)
 
+            simple <- runTestPool $
+                runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
+            simple `shouldBe` Right (normalMessage `BS.append` extendedPointers)
+
+            ext <- runTestPool $
+                runObject "02_PONY_00000000000000000004_00000000000000000000_extended" readFull
+            ext `shouldBe` Right extendedBytes
+  where
+    go = flip execState (startState now)
+
+
+extendedBytes :: ByteString
+extendedBytes = "\x1f\x00\x00\x00\x00\x00\x00\x00\
+                \\&This computer is made of warms.\
+                \\x04\x00\x00\x00\x00\x00\x00\x00\
+                \\&Yay!"
 
 extendedPointers :: ByteString
 extendedPointers = "\x05\x00\x00\x00\x00\x00\x00\x00\
