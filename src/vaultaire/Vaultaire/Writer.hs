@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE BangPatterns       #-}
 
 module Vaultaire.Writer
 (
@@ -54,14 +55,14 @@ type EpochMap = HashMap Epoch
 type BucketMap = HashMap Bucket
 
 data BatchState = BatchState
-    { replyFs         :: [Response -> Daemon ()]
-    , normal          :: EpochMap (BucketMap Builder)
-    , extended        :: EpochMap (BucketMap Builder)
-    , pending         :: EpochMap (BucketMap (Word64, [Word64 -> Builder]))
-    , latestNormal   :: Time
-    , latestExtended :: Time
-    , dayMaps         :: (DayMap, DayMap) -- Simple, extended
-    , start           :: UTCTime
+    { replyFs        :: ![Response -> Daemon ()]
+    , normal         :: !(EpochMap (BucketMap Builder))
+    , extended       :: !(EpochMap (BucketMap Builder))
+    , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
+    , latestNormal   :: !Time
+    , latestExtended :: !Time
+    , dayMaps        :: !(DayMap, DayMap) -- Simple, extended
+    , start          :: !UTCTime
     }
 
 data Event = Msg Message | Tick
@@ -199,14 +200,14 @@ processPoints offset message day_maps origin latest_simple latest_ext
                 let (ext_epoch, ext_buckets) = lookupBoth time (fst day_maps)
                 let ext_bucket = masked_address `mod` ext_buckets
                 appendExtended ext_epoch ext_bucket address time len str
-                let t | time > latest_ext = time
-                      | otherwise         = latest_ext
+                let !t | time > latest_ext = time
+                       | otherwise         = latest_ext
                 processPoints (offset + 24 + len) message day_maps origin latest_simple t
             else do
                 let message_bytes = runUnpacking (getBytesAt offset 24) message
                 appendSimple simple_epoch simple_bucket message_bytes
-                let t | time > latest_simple = time
-                      | otherwise            = latest_simple
+                let !t | time > latest_simple = time
+                       | otherwise            = latest_simple
                 processPoints (offset + 24) message day_maps origin t latest_ext
 
 parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
@@ -229,7 +230,7 @@ appendSimple epoch bucket bytes = do
     let builder = byteString bytes
     let simple_map = HashMap.lookupDefault HashMap.empty epoch (normal s)
     let simple_map' = HashMap.insertWith (flip (<>)) bucket builder simple_map
-    let normal' = HashMap.insert epoch simple_map' (normal s)
+    let !normal' = HashMap.insert epoch simple_map' (normal s)
     put $ s { normal = normal' }
 
 appendExtended :: MonadState BatchState m
