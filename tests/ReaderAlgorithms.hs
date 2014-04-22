@@ -23,7 +23,7 @@ data AddrStartEnd = AddrStartEnd Word64 Word64 Word64
 instance Arbitrary AddrStartEnd where
     arbitrary = do
         addr  <- elements [0..9]
-        start <-  div 2 <$> arbitrary `suchThat` (> 0)
+        start <- div 2 <$> arbitrary `suchThat` (> 0)
         end   <- arbitrary `suchThat` (> start)
         return $ AddrStartEnd addr start end
 
