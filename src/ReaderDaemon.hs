@@ -32,18 +32,22 @@ import Control.Applicative
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
+import Control.Concurrent.STM.TQueue
+import Control.Concurrent.STM(atomically)
 import Control.Monad
 import "mtl" Control.Monad.Error ()
-import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.List.NonEmpty (fromList)
+import Data.List.Split (chunksOf)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Time.Clock
-import GHC.Conc
+import GHC.Conc (getNumCapabilities)
 import Network.BSD (getHostName)
 import Options.Applicative hiding (reader)
+import Pipes
+import qualified Pipes.Prelude as Pipes
 import System.Environment (getProgName)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
@@ -64,7 +68,8 @@ data Options = Options {
     optGlobalWorkers  :: !Int,
     argGlobalPoolName :: !String,
     optGlobalUserName :: !String,
-    argBrokerHost     :: !String
+    argBrokerHost     :: !String,
+    optParallelReads  :: !Int
 }
 
 data Reply = Reply {
@@ -97,57 +102,117 @@ output telemetry k v u = liftIO $ do
 reader
     :: ByteString
     -> ByteString
+    -> Int
     -> Mutexes
     -> IO ()
-reader pool' user' Mutexes{..} = do
+reader pool' user' n_threads Mutexes{..} = do
     _ <- liftIO $ takeMVar radosLock
     Rados.runConnect (Just user') (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
         liftIO $ putMVar radosLock True
         Rados.runPool pool' $ forever $ do
-
             [envelope', client', origin', request'] <- liftIO $ takeMVar inbound
             a1 <- liftIO $ getCurrentTime
 
             case parseRequestMessage (Origin origin') request' of
                 Left err -> do
                     output telemetry "error" (show err) ""
-                Right qs -> do
-                    output telemetry "request" (printf "%d" (length qs)) "ranges"
+                Right requests -> do
+                    output telemetry "request" (printf "%d" (length requests)) "ranges"
 
-                    forM_ qs $ \q -> do
+                    -- We have a valid request, so create a work pool of these
+                    -- requests. 
+                    request_q <- liftIO $ newTQueueIO
+                    liftIO $ atomically $ mapM_ (writeTQueue request_q) requests
 
-                        let o  = requestOrigin q
-                        let s  = requestSource q
-                        let t1 = requestAlpha q
-                        let t2 = requestOmega q
+                    -- Spawn an appropriate number of worker threads, each of
+                    -- these will stream results back to the client over the
+                    -- supplied channel within the context of their respective
+                    -- requests.
+                    threads <- replicateM n_threads $ Rados.async $
+                        processRequests (envelope', client') request_q
 
-                        let is = Bucket.calculateTimemarks t1 t2
+                    liftIO $ mapM_ Async.wait threads
 
-                        forM_ is $ \i -> do
-                            m <- if o == Origin "BENHUR"
-                                then return $ demoWave o i
-                                else Bucket.readVaultObject o s i
-
-                            unless (Map.null m) $ do
-                                let ps = Bucket.pointsInRange t1 t2 m
-
-                                let y' = encodePoints ps
-
-                                let message' = case compress y' of
-                                                Just b' -> b'
-                                                Nothing -> S.empty
-
-                                liftIO $ writeChan outbound (Reply envelope' client' message')
-
-                        a2 <- liftIO $ getCurrentTime
-                        let delta = diffUTCTime a2 a1
-                        let deltaFloat = (fromRational $ toRational delta) :: Float
-                        let deltaPadded = printf "%9.3f" deltaFloat
-                        output telemetry "duration" deltaPadded "seconds"
-
+            a2 <- liftIO $ getCurrentTime
+            let delta = diffUTCTime a2 a1
+            let deltaFloat = (fromRational $ toRational delta) :: Float
+            let deltaPadded = printf "%9.3f" deltaFloat
+            output telemetry "duration" deltaPadded "seconds"
 
             liftIO $ writeChan outbound (Reply envelope' client' S.empty)
 
+  where
+    -- | Pop requests off the queue until it is empty, streaming responses back
+    -- as they are built.
+    processRequests :: (ByteString, ByteString) -> TQueue Request -> Rados.Pool ()
+    processRequests ident@(envelope, client) request_q = do
+        work <- liftIO $ atomically $ tryReadTQueue request_q
+        case work of
+            Just request -> do
+                runEffect $ bucketTimemarks request
+                            >-> chunk 16
+                            >-> retrieveBuckets request
+                            >-> filterRange request
+                            >-> pleaseEncodePoints
+                            >-> tryCompress
+                            >-> buildReply envelope client
+                            >-> transmitResponse outbound
+                processRequests ident request_q
+            Nothing -> return ()
+
+    transmitResponse :: Chan Reply -> Consumer Reply Rados.Pool ()
+    transmitResponse ch = forever $
+        await >>= (lift . liftIO . writeChan ch)
+
+    -- |
+    -- Produce time marks from a request
+    bucketTimemarks :: Request -> Producer [Timemark] Rados.Pool ()
+    bucketTimemarks Request{..} =
+        yield $ Bucket.calculateTimemarks requestAlpha requestOmega
+
+    -- |
+    -- Split time marks up into manageable chunks as to not blow all our memory
+    chunk :: Int -> Pipe [Timemark] [Timemark] Rados.Pool ()
+    chunk n = Pipes.mapFoldable (chunksOf n)
+
+    -- |
+    -- Retrieve a chunk of time marks from the vault and retrieve the Map
+    -- Timestamp Point associated with that range, these must be yielded in
+    -- chronological order.
+    --
+    -- The results must also have null maps filtered out due to no points
+    -- encoding and compressing to an empty string, which is a terminator.
+    retrieveBuckets :: Request -> Pipe [Timemark] (Map Timestamp Point) Rados.Pool ()
+    retrieveBuckets Request{..} =
+        Pipes.mapM (readBuckets) >-> Pipes.concat >-> Pipes.filter (not . Map.null)
+      where
+        readBuckets :: [Timemark] -> Rados.Pool [Map Timestamp Point]
+        readBuckets intervals = do
+            async_replies <- forM intervals $ \i -> Rados.async $ do
+                -- readVaultObject should probably be changed to expose a rados
+                -- AsyncRequest directly. Untill then we use a
+                -- Control.Concurrent.Async
+                if requestOrigin == Origin "BENHUR"
+                    then return $ demoWave requestOrigin i
+                    else Bucket.readVaultObject requestOrigin requestSource i
+            liftIO $ mapM Async.wait async_replies
+
+    -- |
+    -- All points that are not within the requested range must be dropped
+    filterRange :: Request -> Pipe (Map Timestamp Point) [Point] Rados.Pool ()
+    filterRange Request{..} = Pipes.map (Bucket.pointsInRange requestAlpha requestOmega)
+
+    -- |
+    -- Silly naming due to collision, suggestions welcome
+    pleaseEncodePoints :: Pipe [Point] ByteString Rados.Pool ()
+    pleaseEncodePoints = Pipes.map encodePoints
+
+    -- | Pass along compressions that do not fail
+    tryCompress :: Pipe ByteString ByteString Rados.Pool ()
+    tryCompress = Pipes.mapFoldable compress
+
+    buildReply :: ByteString -> ByteString -> Pipe ByteString Reply Rados.Pool ()
+    buildReply envelope client = Pipes.map (Reply envelope client)
 
 demoWave
     :: Origin
@@ -189,7 +254,7 @@ contentsReader pool user Mutexes{..} = do
             d <- liftIO $ takeMVar directory
             let origin = Origin request
             --
-            -- Check if we need to return the demo source, otherwise 
+            -- Check if we need to return the demo source, otherwise
             -- return an actual contents list.
             --
             burst <- if origin == (Origin "BENHUR")
@@ -277,7 +342,7 @@ receiver broker Mutexes{..} d = do
 
 
 readerProgram :: Options -> MVar () -> IO ()
-readerProgram (Options d w pool user broker) quitV = do
+readerProgram (Options d w pool user broker readerParallelism) quitV = do
     putStrLn $ "readerd starting (vaultaire v" ++ VERSION ++ ")"
 
     msgV <- newEmptyMVar
@@ -307,7 +372,7 @@ readerProgram (Options d w pool user broker) quitV = do
 
     -- Startup reader threads
     replicateM_ w $
-        linkThread $ reader (S.pack pool) (S.pack user) u
+        linkThread $ reader (S.pack pool) (S.pack user) readerParallelism u
 
     linkThread $ contentsReader (S.pack pool) (S.pack user) u
 
@@ -350,6 +415,13 @@ toplevel = Options
     <*> argument str
             (metavar "BROKER" <>
              help "Host name or IP address of broker to pull from")
+    <*> option
+            (long "parallel-reads" <>
+             short 'r' <>
+             metavar "PARALLELREADS" <>
+             value num <>
+             showDefault <>
+             help "Number of reads to execute simultaneously")
   where
     num = unsafePerformIO $ getNumCapabilities
 
