@@ -10,6 +10,7 @@ import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import qualified Data.HashMap.Strict as HashMap
 import Data.List.NonEmpty (fromList)
+import Data.List(sort)
 import Data.Monoid
 import Data.Time
 import Pipes
@@ -145,15 +146,15 @@ suite now = do
             linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
             sendTestMsg >>= (`shouldBe` ["\x42", ""])
 
-            let objs = [ "02_PONY_00000000000000000004_00000000000000000000_extended"
-                       , "02_PONY_00000000000000000004_00000000000000000000_simple"
-                       , "02_PONY_extended_latest"
-                       , "02_PONY_simple_latest"
-                       , "02_PONY_simple_days"
-                       , "02_PONY_write_lock"
-                       , "02_PONY_extended_days"]
+            let expected = sort [ "02_PONY_00000000000000000004_00000000000000000000_extended"
+                                , "02_PONY_00000000000000000004_00000000000000000000_simple"
+                                , "02_PONY_extended_latest"
+                                , "02_PONY_simple_latest"
+                                , "02_PONY_simple_days"
+                                , "02_PONY_write_lock"
+                                , "02_PONY_extended_days"]
 
-            runTestPool objects >>= (`shouldBe` objs) -- order is somehow preserved
+            runTestPool (sort <$> objects) >>= (`shouldBe` expected)
  
             simple <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
