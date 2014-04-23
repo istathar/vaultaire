@@ -48,13 +48,13 @@ library
                      stm,
                      async,
                      rados-haskell >= 3
-  hs-source-dirs:    src/vaultaire/
+  hs-source-dirs:    lib
   default-language:  Haskell2010
   ghc-options:
 
 executable broker
-  hs-source-dirs:    src/broker
-  main-is:           Main.hs
+  hs-source-dirs:    src
+  main-is:           Broker.hs
   other-modules:
   build-depends:     base >=3 && <5,
                      bytestring,

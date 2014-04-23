@@ -66,7 +66,7 @@ updateLatest oid time = withExLock oid . liftPool $ do
     value = runPacking 8 (putWord64LE time)
     parse = either (const 0) id . tryUnpacking getWord64LE
 
-rollOver :: Origin -> ByteString -> ByteString -> NoBuckets -> Daemon ()
+rollOver :: Origin -> ByteString -> ByteString -> NumBuckets -> Daemon ()
 rollOver origin' day_file latest_file buckets =
     withExLock (simpleLatestOID origin') $ do
         om <- get

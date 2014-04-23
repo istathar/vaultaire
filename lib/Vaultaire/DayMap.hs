@@ -1,11 +1,11 @@
 module Vaultaire.DayMap
 (
     DayMap,
-    NoBuckets,
+    NumBuckets,
     Epoch,
     Time,
     lookupEpoch,
-    lookupNoBuckets,
+    lookupNumBuckets,
     lookupBoth,
     loadDayMap
 ) where
@@ -19,16 +19,16 @@ import Control.Applicative
 import Data.Packer
 
 type Epoch = Word64
-type NoBuckets = Word64
+type NumBuckets = Word64
 
 type Time = Word64
-type DayMap = Map Epoch NoBuckets
+type DayMap = Map Epoch NumBuckets
 
 lookupEpoch :: Time -> DayMap -> Epoch
 lookupEpoch = (fst .) . lookupBoth
 
-lookupNoBuckets :: Time -> DayMap -> NoBuckets
-lookupNoBuckets = (snd .) . lookupBoth
+lookupNumBuckets :: Time -> DayMap -> NumBuckets
+lookupNumBuckets = (snd .) . lookupBoth
 
 -- | Simple corruption check of input is done by checking that it is a multiple
 -- of two Word64s
@@ -47,7 +47,7 @@ loadDayMap bs
             else Left "bad first entry, must start at zero."
 
 
-lookupBoth :: Time -> DayMap -> (Epoch, NoBuckets)
+lookupBoth :: Time -> DayMap -> (Epoch, NumBuckets)
 lookupBoth t dm = 
     let (left, middle, _) = Map.splitLookup t dm
     in case middle of
