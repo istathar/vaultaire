@@ -36,13 +36,13 @@ suite now = do
     describe "appendSimple" $ do
         it "generates a single builder from one append" $ do
             let (_, st) = go $ appendSimple 0 1 "HAI"
-            let builder = HashMap.lookup 0 (normal st) >>= HashMap.lookup 1
+            let builder = HashMap.lookup 0 (simple st) >>= HashMap.lookup 1
             case builder of Nothing -> error "lookup"
                             Just b  -> toLazyByteString b `shouldBe` "HAI"
 
         it "generates a single builder from one append" $ do
             let (_, st) = go $ appendSimple 0 1 "A" >> appendSimple 0 1 "B"
-            let builder = HashMap.lookup 0 (normal st) >>= HashMap.lookup 1
+            let builder = HashMap.lookup 0 (simple st) >>= HashMap.lookup 1
             case builder of Nothing -> error "lookup"
                             Just b  -> toLazyByteString b `shouldBe` "AB"
 
@@ -65,33 +65,33 @@ suite now = do
                            in toLazyByteString b `shouldBe` pend_bytes
 
     describe "processPoints" $ do
-        it "handles multiple normal points" $ do
-            let (latest, st) = go $ processPoints 0 normalCompound
+        it "handles multiple simple points" $ do
+            let (latest, st) = go $ processPoints 0 simpleCompound
                                                     startDayMaps "PONY" 0 0
             HashMap.null (extended st) `shouldBe` True
             HashMap.null (pending st) `shouldBe` True
-            HashMap.null (normal st) `shouldBe` False
-            let norm = HashMap.lookup 0 (normal st) >>= HashMap.lookup 4
+            HashMap.null (simple st) `shouldBe` False
+            let norm = HashMap.lookup 0 (simple st) >>= HashMap.lookup 4
             case norm of Nothing -> error "bucket got lost"
                          Just b -> toStrict (toLazyByteString b)
 
-                                   `shouldBe` normalCompound
+                                   `shouldBe` simpleCompound
 
-            HashMap.null (normal st) `shouldBe` False
+            HashMap.null (simple st) `shouldBe` False
             latest `shouldBe` (2, 0)
 
-        it "handles multiple normal and extended points" $ do
+        it "handles multiple simple and extended points" $ do
             let (latest, st) = go $ processPoints 0 extendedCompound
                                                       startDayMaps "PONY" 0 0
             HashMap.null (extended st) `shouldBe` False
             HashMap.null (pending st) `shouldBe` False
-            HashMap.null (normal st) `shouldBe` False
+            HashMap.null (simple st) `shouldBe` False
 
             -- Simple bucket should have only simple points
-            let norm = HashMap.lookup 0 (normal st) >>= HashMap.lookup 4
+            let norm = HashMap.lookup 0 (simple st) >>= HashMap.lookup 4
             case norm of Nothing -> error "simple bucket got lost"
                          Just b -> toStrict (toLazyByteString b)
-                                   `shouldBe` normalMessage
+                                   `shouldBe` simpleMessage
 
             -- Extended bucket should have the length and string
             let ext = HashMap.lookup 0 (extended st) >>= HashMap.lookup 4
@@ -125,7 +125,7 @@ suite now = do
             let w = head writes
             HashMap.null (extended w) `shouldBe` False
             HashMap.null (pending w) `shouldBe` False
-            HashMap.null (normal w) `shouldBe` False
+            HashMap.null (simple w) `shouldBe` False
 
         it "does not yield state immmediately with a higher batch period" $ do
             writes <- evalStateT drawAll $
@@ -156,9 +156,9 @@ suite now = do
 
             runTestPool (sort <$> objects) >>= (`shouldBe` expected)
  
-            simple <- runTestPool $
+            sim <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
-            simple `shouldBe` Right (normalMessage `BS.append` extendedPointers)
+            sim `shouldBe` Right (simpleMessage `BS.append` extendedPointers)
 
             ext <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_extended" readFull
@@ -209,13 +209,13 @@ pendingBytes = "\x05\x00\x00\x00\x00\x00\x00\x00\
                \\x03\x00\x00\x00\x00\x00\x00\x00\
                \\x21\x00\x00\x00\x00\x00\x00\x00"
 
-extendedCompound, normalCompound, normalMessage, extendedMessage :: ByteString
+extendedCompound, simpleCompound, simpleMessage, extendedMessage :: ByteString
 
-extendedCompound = normalMessage `BS.append` extendedMessage
+extendedCompound = simpleMessage `BS.append` extendedMessage
 
-normalCompound = normalMessage `BS.append` normalMessage
+simpleCompound = simpleMessage `BS.append` simpleMessage
 
-normalMessage =
+simpleMessage =
     "\x04\x00\x00\x00\x00\x00\x00\x00\
     \\x02\x00\x00\x00\x00\x00\x00\x00\
     \\x01\x00\x00\x00\x00\x00\x00\x00"

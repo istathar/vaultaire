@@ -56,7 +56,7 @@ type BucketMap = HashMap Bucket
 
 data BatchState = BatchState
     { replyFs        :: ![Response -> Daemon ()]
-    , normal         :: !(EpochMap (BucketMap Builder))
+    , simple         :: !(EpochMap (BucketMap Builder))
     , extended       :: !(EpochMap (BucketMap Builder))
     , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
     , latestNormal   :: !Time
@@ -228,10 +228,10 @@ appendSimple :: MonadState BatchState m
 appendSimple epoch bucket bytes = do
     s <- get
     let builder = byteString bytes
-    let simple_map = HashMap.lookupDefault HashMap.empty epoch (normal s)
+    let simple_map = HashMap.lookupDefault HashMap.empty epoch (simple s)
     let simple_map' = HashMap.insertWith (flip (<>)) bucket builder simple_map
-    let !normal' = HashMap.insert epoch simple_map' (normal s)
-    put $ s { normal = normal' }
+    let !simple' = HashMap.insert epoch simple_map' (simple s)
+    put $ s { simple = simple' }
 
 appendExtended :: MonadState BatchState m
                => Epoch -> Bucket -> Address -> Time -> Word64 -> ByteString -> m ()
@@ -328,7 +328,7 @@ write origin' = do
     -- applying one to the other. We then append that to the map of simple
     -- writes in order to achieve one write.
     applyOffsets offset_map s = lift $ liftPool $
-        forWithKey (normal s) $ \epoch buckets -> do
+        forWithKey (simple s) $ \epoch buckets -> do
             let pending_buckets = HashMap.lookup epoch (pending s)
             let offset_buckets  = HashMap.lookup epoch offset_map
             forWithKey buckets $ \bucket builder -> do
