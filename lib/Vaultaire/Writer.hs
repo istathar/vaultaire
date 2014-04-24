@@ -59,7 +59,7 @@ data BatchState = BatchState
     , simple         :: !(EpochMap (BucketMap Builder))
     , extended       :: !(EpochMap (BucketMap Builder))
     , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
-    , latestNormal   :: !Time
+    , latestSimple   :: !Time
     , latestExtended :: !Time
     , dayMaps        :: !(DayMap, DayMap) -- Simple, extended
     , start          :: !UTCTime
@@ -165,12 +165,12 @@ processEvents batch_period = do
 
             (latest_simple, latest_ext) <- lift $
                 processPoints 0 payload' (dayMaps s) origin'
-                              (latestNormal s) (latestExtended s)
+                              (latestSimple s) (latestExtended s)
 
 
             s' <- get
             put s'{ replyFs = rf:replyFs s'
-                 , latestNormal = latest_simple
+                 , latestSimple = latest_simple
                  , latestExtended = latest_ext }
 
             processEvents batch_period
@@ -279,7 +279,7 @@ write origin' = do
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
     lift $ do
-        updateSimpleLatest origin' (latestNormal s)
+        updateSimpleLatest origin' (latestSimple s)
         updateExtendedLatest origin' (latestExtended s)
         mapM_ ($ Success) (replyFs s)
 
