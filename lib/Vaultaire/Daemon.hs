@@ -47,7 +47,8 @@ import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
-import Vaultaire.Util (linkThread)
+import qualified Control.Concurrent.Async as Async
+import Control.Concurrent(myThreadId, killThread, ThreadId)
 
 -- User facing API
 
@@ -95,11 +96,35 @@ runDaemon :: String           -- ^ Broker for ZMQ
 runDaemon broker ceph_user pool (Daemon a) = do
     msg_chan <- atomically $ newTBQueue 4
     ack_chan <- atomically $ newTBQueue 16
-    linkThread $ messenger broker msg_chan ack_chan
 
-    runConnect ceph_user (parseConfig "/etc/ceph/ceph.conf") . runPool pool $
+    parent_tid <- myThreadId
+    messenger_a <- Async.async $ messenger broker msg_chan ack_chan
+    -- Ensure that any exceptions are re-thrown in a third thread.
+    monitor_a <- Async.async $ monitorMessenger messenger_a parent_tid
+
+    r <- runConnect ceph_user (parseConfig "/etc/ceph/ceph.conf") . runPool pool $
         runReaderT (evalStateT a emptyOriginMap) (DaemonConfig msg_chan ack_chan)
 
+    Async.cancel monitor_a
+    Async.cancel messenger_a
+
+    return r
+
+-- | Handle messsenger thread shutting down or throwing an exception
+-- explicitly. On normal shutdown, this thread must be killed by the parent
+-- thread before the messenger thread is shutdown..
+monitorMessenger :: Async () -> ThreadId -> IO ()
+monitorMessenger thread parent = do
+    result <- Async.waitCatch thread
+    case result of
+        Left e ->
+            putStrLn $ "Messenger thread exploded, killing parent: " ++ 
+                       show e
+        Right _ ->
+            putStrLn "Messenger thread exited, killing parent."
+
+    killThread parent
+            
 -- | Lift an action from the librados 'Pool' monad.
 liftPool :: Pool a -> Daemon a
 liftPool = Daemon . lift . lift

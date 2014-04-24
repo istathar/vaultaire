@@ -11,6 +11,7 @@ import Vaultaire.Broker
 import Vaultaire.RollOver
 import Vaultaire.DayMap
 import Vaultaire.Daemon hiding (async)
+import Control.Concurrent.MVar
 import Vaultaire.Util
 import System.Rados.Monadic hiding (async)
 import Control.Applicative
@@ -33,11 +34,29 @@ suite = do
             >>= (`shouldBe` ())
 
         it "ignores bad message and replies to good message" $ do
-            msg <- async replyOne
+            shutdown <- newEmptyMVar
+            msg <- async $ replyOne shutdown
+
             async sendBadMsg
-            reply <- async sendTestMsg
+            rep <- async $ sendTestMsg "\x42"
+            wait rep >>= (`shouldBe` ["\x42", ""])
+
+            putMVar shutdown ()
             wait msg >>= (`shouldBe` ("PONY", "im in ur vaults"))
-            wait reply >>= (`shouldBe` ["\x42", ""])
+
+        it "replies to mutliple messages" $ do
+            shutdown <- newEmptyMVar
+            msg <- async $ replyTwo shutdown
+
+            rep_a <- async $ sendTestMsg "\x43"
+            rep_b <- async $ sendTestMsg "\x44"
+
+            wait rep_a >>= (`shouldBe` ["\x43", ""])
+            wait rep_b >>= (`shouldBe` ["\x44", ""])
+
+            putMVar shutdown ()
+            wait msg >>= (`shouldBe` (("PONY", "im in ur vaults")
+                                     ,("PONY", "im in ur vaults")))
 
     describe "Daemon day map" $ do
         it "loads an origins map" $ do
@@ -111,19 +130,32 @@ suite = do
                     rollOverSimpleDay "PONY")
                 `shouldThrow` anyErrorCall
            
-replyOne :: IO (ByteString, ByteString)
-replyOne =
+replyOne :: MVar () -> IO (ByteString, ByteString)
+replyOne shutdown =
     runDaemon "tcp://localhost:5561" Nothing "test" $ do
+        r <- reply
+        liftIO $ takeMVar shutdown
+        return r
+
+reply :: Daemon (ByteString, ByteString)
+reply = do
         Message rep_f origin' msg <- nextMessage
         rep_f Success
         return (origin', msg)
 
-sendTestMsg :: IO [ByteString]
-sendTestMsg = runZMQ $ do
+replyTwo :: MVar () -> IO ((ByteString, ByteString), (ByteString, ByteString))
+replyTwo shutdown =
+    runDaemon "tcp://localhost:5561" Nothing "test" $ do
+        r <- (,) <$> reply <*> reply
+        liftIO $ takeMVar shutdown
+        return r
+
+sendTestMsg :: ByteString -> IO [ByteString]
+sendTestMsg identifier = runZMQ $ do
     s <- socket Dealer
     connect s "tcp://localhost:5560"
     -- Simulate a client sending a sequence number and message
-    sendMulti s $ fromList ["\x42", "PONY", "im in ur vaults"]
+    sendMulti s $ fromList [identifier, "PONY", "im in ur vaults"]
     receiveMulti s
 
 sendBadMsg :: IO ()
