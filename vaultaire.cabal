@@ -50,7 +50,7 @@ library
                      rados-haskell >= 3
   hs-source-dirs:    lib
   default-language:  Haskell2010
-  ghc-options:
+  ghc-options:       -fwarn-incomplete-patterns
 
 executable broker
   hs-source-dirs:    src
@@ -60,7 +60,7 @@ executable broker
                      bytestring,
                      zeromq4-haskell,
                      vaultaire
-  ghc-options:       -threaded
+  ghc-options:       -fwarn-incomplete-patterns -threaded
   default-language:  Haskell2010
 
 test-suite           daemon-test
@@ -79,7 +79,7 @@ test-suite           daemon-test
 
   main-is:           Daemon.hs
   hs-source-dirs:    tests
-  ghc-options:       -threaded
+  ghc-options:       -fwarn-incomplete-patterns -threaded
 
 test-suite           daymap-test
   type:              exitcode-stdio-1.0
@@ -94,7 +94,8 @@ test-suite           daymap-test
 
   main-is:           DayMap.hs
   hs-source-dirs:    tests
-  ghc-options:       -threaded
+  ghc-options:       -fwarn-incomplete-patterns -threaded
+
 
 test-suite           writer-test
   type:              exitcode-stdio-1.0
@@ -117,7 +118,7 @@ test-suite           writer-test
 
   main-is:           Writer.hs
   hs-source-dirs:    tests
-  ghc-options:       -threaded
+  ghc-options:       -fwarn-incomplete-patterns -threaded
 
 test-suite           reader-algorithms-test
   type:              exitcode-stdio-1.0
@@ -135,7 +136,7 @@ test-suite           reader-algorithms-test
 
   main-is:           ReaderAlgorithms.hs
   hs-source-dirs:    tests
-  ghc-options:       -threaded
+  ghc-options:       -fwarn-incomplete-patterns -threaded
 
 
 benchmark writer-bench
@@ -149,7 +150,7 @@ benchmark writer-bench
                      rados-haskell,
                      criterion,
                      vaultaire
-  ghc-options:       -threaded -O2
+  ghc-options:       -fwarn-incomplete-patterns -threaded -O2
   default-language:  Haskell2010
 
 benchmark reader-algorithms
@@ -162,5 +163,5 @@ benchmark reader-algorithms
                      vector,
                      spool,
                      vaultaire
-  ghc-options:       -threaded -O2
+  ghc-options:       -fwarn-incomplete-patterns -threaded -O2
   default-language:  Haskell2010
