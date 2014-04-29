@@ -87,8 +87,8 @@ dispatch batch_period = do
             sent <- send' output event
             -- If it wasn't sent, the thread has shut itself down.
             if sent
-                then startThread origin' dispatch_map event
-                else dispatch batch_period
+                then dispatch batch_period
+                else startThread origin' dispatch_map event
         Nothing   -> startThread origin' dispatch_map event
   where
     send' o = liftIO . atomically . send o
@@ -96,7 +96,7 @@ dispatch batch_period = do
     startThread origin' dispatch_map m = do
         (output, seal, input) <- liftIO $ spawn' Single
 
-        liftIO $ Async.async $ feedTicks output
+        liftIO $ Async.async (feedTicks output) >>= Async.link
 
         lift . lift $
             async (processBatch batch_period origin' seal input)

@@ -18,6 +18,7 @@ import Data.Monoid
 import System.Rados.Monadic
 import Data.Bits
 import TestHelpers (runTestDaemon, runTestPool)
+import Control.Concurrent(threadDelay)
 
 createDays :: Word64 -> Word64 -> IO ()
 createDays simple_buckets ext_buckets = runTestPool $ do
@@ -64,10 +65,7 @@ main = do
 
     let !points = simplePoints [0..10000]
 
-    runTest points >>= print
-    print "Running second points"
-    runTest points >>= print
-
     defaultMain 
-            [ bench "simple points" $ nfIO $ runTest points
+            [ bench "10000 simple points over 1000 addresses" $
+                nfIO $ runTest points
             ]
