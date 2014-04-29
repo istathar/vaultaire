@@ -4,9 +4,8 @@ module Vaultaire.DayMap
     NumBuckets,
     Epoch,
     Time,
-    lookupEpoch,
-    lookupNumBuckets,
-    lookupBoth,
+    lookupFirst,
+    lookupRange,
     loadDayMap
 ) where
 
@@ -23,12 +22,6 @@ type NumBuckets = Word64
 
 type Time = Word64
 type DayMap = Map Epoch NumBuckets
-
-lookupEpoch :: Time -> DayMap -> Epoch
-lookupEpoch = (fst .) . lookupBoth
-
-lookupNumBuckets :: Time -> DayMap -> NumBuckets
-lookupNumBuckets = (snd .) . lookupBoth
 
 -- | Simple corruption check of input is done by checking that it is a multiple
 -- of two Word64s
@@ -47,14 +40,25 @@ loadDayMap bs
             else Left "bad first entry, must start at zero."
 
 
-lookupBoth :: Time -> DayMap -> (Epoch, NumBuckets)
-lookupBoth t dm = 
-    let (left, middle, _) = Map.splitLookup t dm
-    in case middle of
-        Just m -> if Map.null left -- Corner case, leftmost entry
-                    then (t, m)
-                    else Map.findMax left
-        Nothing -> Map.findMax left
+lookupFirst :: Time -> DayMap -> (Epoch, NumBuckets)
+lookupFirst = (fst .) . splitRemainder
+
+-- Return first and the remainder that is later than that.
+splitRemainder :: Time -> DayMap -> ((Epoch, NumBuckets), DayMap)
+splitRemainder t dm = 
+    let (left, middle, right) = Map.splitLookup t dm
+        first = case middle of
+            Just m -> if Map.null left -- Corner case, leftmost entry
+                        then (t, m)
+                        else Map.findMax left
+            Nothing -> Map.findMax left
+    in (first, right)
+
+lookupRange :: Time -> Time -> DayMap -> [(Epoch, NumBuckets)]
+lookupRange start end dm =
+    let (first, remainder) = splitRemainder start dm
+        (rest,_) = Map.split end remainder
+    in first : Map.toList rest
  
 -- Internal
 

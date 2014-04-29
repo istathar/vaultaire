@@ -39,15 +39,10 @@ import Pipes hiding (for)
 import Pipes.Concurrent
 import Pipes.Lift
 import System.Rados.Monadic hiding (async)
-import Text.Printf
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.RollOver
-
-type Address = Word64
-type Payload = Word64
-type Bucket  = Word64
 
 type DispatchMap = OriginMap (Output Event)
 
@@ -186,7 +181,7 @@ processPoints offset message day_maps origin latest_simple latest_ext
     | fromIntegral offset >= BS.length message = return (latest_simple, latest_ext)
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
-        let (simple_epoch, simple_buckets) = lookupBoth time (fst day_maps)
+        let (simple_epoch, simple_buckets) = lookupFirst time (fst day_maps)
 
         let masked_address = address `clearBit` 0
         let simple_bucket = masked_address `mod` simple_buckets
@@ -197,7 +192,7 @@ processPoints offset message day_maps origin latest_simple latest_ext
             then do
                 let len = fromIntegral payload
                 let str = runUnpacking (getBytesAt (offset + 24) len) message
-                let (ext_epoch, ext_buckets) = lookupBoth time (fst day_maps)
+                let (ext_epoch, ext_buckets) = lookupFirst time (fst day_maps)
                 let ext_bucket = masked_address `mod` ext_buckets
                 appendExtended ext_epoch ext_bucket address time len str
                 let !t | time > latest_ext = time
@@ -245,7 +240,7 @@ appendExtended epoch bucket address time len string = do
     -- Starting from zero, we write to the current offset and point the next
     -- extended point to the end of that write.
     let (os, fs) = HashMap.lookupDefault (0, []) bucket pending_map
-    let os' = os + len
+    let os' = os + len + 8
 
     -- Create the closure for the pointer to the extended bucket
     let prefix = word64LE address <> word64LE time
@@ -320,8 +315,6 @@ write origin' = do
                         Just e -> error $ "extended bucket write: " ++ show e
                         Nothing -> return ()
 
-            -- TODO: Update max
-
             return (offsets, findMax offsets > bucketSize)
 
     -- Given two maps, one of offsets and one of closures, we walk through
@@ -384,9 +377,3 @@ writeSimple o e b payload=
 writeLockOID :: Origin -> ByteString
 writeLockOID o = "02_" `BS.append` o `BS.append` "_write_lock"
 
-bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
-bucketOID origin epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
-                                                      (BS.unpack origin)
-                                                      bucket
-                                                      epoch
-                                                      kind

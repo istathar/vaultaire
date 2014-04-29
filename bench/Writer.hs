@@ -17,7 +17,7 @@ import Data.List.NonEmpty (fromList)
 import Data.Monoid
 import System.Rados.Monadic
 import Data.Bits
-import TestHelpers (runTestPool)
+import TestHelpers (runTestDaemon, runTestPool)
 
 createDays :: Word64 -> Word64 -> IO ()
 createDays simple_buckets ext_buckets = runTestPool $ do
@@ -52,13 +52,9 @@ makeSimplePoint n =
   where
     uniqueAddresses = 1000 * 2
 
-deleteAll :: IO ()
-deleteAll = 
-    runTestPool $ unsafeObjects >>= mapM_ (`runObject` remove)
-
 main :: IO ()
 main = do
-    deleteAll
+    runTestDaemon "tcp://localhost:1234" (return ())
     createDays 32 32
 
     linkThread $ runZMQ $ startProxy

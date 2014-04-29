@@ -5,19 +5,28 @@ module Vaultaire.ReaderAlgorithms
 (
     filter,
     deDuplicate,
-    Point(..)
+    Point(..),
+    processBucket,
+    mergeSimpleExtended,
 ) where
 
+import qualified Data.Vector.Storable as V
 import Control.Applicative
+import Data.Packer
 import Control.Monad
+import Data.Monoid
 import Control.Monad.Primitive
 import qualified Data.Vector.Algorithms.Merge as M
 import Data.Vector.Generic.Mutable (MVector)
 import qualified Data.Vector.Generic.Mutable as M
+import Data.ByteString(ByteString)
 import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
 import Prelude hiding (filter)
+import Data.ByteString.Lazy.Builder
+import Data.ByteString.Lazy (toStrict)
+import Data.Vector.Storable.ByteString
 
 data Point = Point { address :: !Word64
                    , time    :: !Word64
@@ -97,3 +106,36 @@ deDuplicate input
                         M.unsafeWrite buf write_ptr elt
 
                     go buf elt (succ read_ptr) (succ write_ptr) len
+
+-- | Filter and de-duplicate a bucket in-place. The original bytestring will be
+-- garbage after completion.
+processBucket :: (PrimMonad m, Functor m)
+              => ByteString -> Word64 -> Word64 -> Word64 -> m ByteString 
+processBucket bucket addr start end =
+    vectorToByteString <$> (V.thaw (byteStringToVector bucket)
+                            >>= filter addr start end
+                            >>= deDuplicate
+                            >>= V.freeze)
+
+-- | Merge a simple and extended bucket into one bytestring, suitable for wire
+-- transfer.
+mergeSimpleExtended :: (PrimMonad m, Functor m)
+                    => ByteString -> ByteString
+                    -> Word64 -> Word64 -> Word64
+                    -> m ByteString
+mergeSimpleExtended simple extended addr start end = do
+    de_duped <- byteStringToVector <$> processBucket simple addr start end
+    return $ toStrict $ toLazyByteString $ V.foldl' merge mempty de_duped
+  where
+    merge acc (Point addr' time' os) =
+        let bytes = runUnpacking (getExtendedBytes os) extended
+            bldr = word64LE addr' <> word64LE time' <> byteString bytes
+        in acc <> bldr
+
+    -- First word is the length, then the string. We return the length and the
+    -- string as a string.
+    getExtendedBytes offset = do
+        unpackSetPosition (fromIntegral offset)
+        len <- getWord64LE
+        unpackSetPosition (fromIntegral offset)
+        getBytes (fromIntegral len + 8)

@@ -25,13 +25,13 @@ import Vaultaire.OriginMap
 -- that they are reloaded before next use.
 rollOverSimpleDay :: Origin -> Daemon ()
 rollOverSimpleDay origin' = do
-    (_, buckets) <- withSimpleDayMap origin' (lookupBoth maxBound)
+    (_, buckets) <- withSimpleDayMap origin' (lookupFirst maxBound)
                     >>= mustBucket
     rollOver origin' (simpleDayOID origin') (simpleLatestOID origin') buckets 
 
 rollOverExtendedDay :: Origin -> Daemon ()
 rollOverExtendedDay origin' = do
-    (_, buckets) <- withExtendedDayMap origin' (lookupBoth maxBound)
+    (_, buckets) <- withExtendedDayMap origin' (lookupFirst maxBound)
                     >>= mustBucket
     rollOver origin' (extendedDayOID origin') (extendedLatestOID origin') buckets 
 

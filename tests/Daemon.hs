@@ -38,7 +38,7 @@ suite = do
             msg <- async $ replyOne shutdown
 
             async sendBadMsg
-            rep <- async $ sendTestMsg "\x42"
+            rep <- async $ sendPonyMsg "\x42"
             wait rep >>= (`shouldBe` ["\x42", ""])
 
             putMVar shutdown ()
@@ -48,8 +48,8 @@ suite = do
             shutdown <- newEmptyMVar
             msg <- async $ replyTwo shutdown
 
-            rep_a <- async $ sendTestMsg "\x43"
-            rep_b <- async $ sendTestMsg "\x44"
+            rep_a <- async $ sendPonyMsg "\x43"
+            rep_b <- async $ sendPonyMsg "\x44"
 
             wait rep_a >>= (`shouldBe` ["\x43", ""])
             wait rep_b >>= (`shouldBe` ["\x44", ""])
@@ -61,8 +61,8 @@ suite = do
     describe "Daemon day map" $ do
         it "loads an origins map" $ do
             (simple,ext) <- runTestDaemon "tcp://localhost:1234" $
-                (,) <$> withSimpleDayMap "PONY" (lookupBoth 42)
-                    <*> withExtendedDayMap "PONY" (lookupBoth 42)
+                (,) <$> withSimpleDayMap "PONY" (lookupFirst 42)
+                    <*> withExtendedDayMap "PONY" (lookupFirst 42)
 
             (,) <$> simple <*> ext `shouldBe` Just ((0, 8), (0,15))
 
@@ -71,7 +71,7 @@ suite = do
                 writePonyDayMap "02_PONY_simple_days" dayFileB
                 writePonyDayMap "02_PONY_extended_days" dayFileA
                 refreshOriginDays "PONY"
-                withSimpleDayMap "PONY" (lookupBoth 42)
+                withSimpleDayMap "PONY" (lookupFirst 42)
 
             result `shouldBe` Just (0, 8)
 
@@ -79,14 +79,14 @@ suite = do
             result <- runTestDaemon "tcp://localhost:1234" $ do
                 writePonyDayMap "02_PONY_simple_days" dayFileC
                 refreshOriginDays "PONY"
-                withSimpleDayMap "PONY" (lookupBoth 300)
+                withSimpleDayMap "PONY" (lookupFirst 300)
 
             result `shouldBe` Just (255, 254)
 
             result' <- runTestDaemon "tcp://localhost:1234" $ do
                 writePonyDayMap "02_PONY_extended_days" dayFileC
                 refreshOriginDays "PONY"
-                withExtendedDayMap "PONY" (lookupBoth 300)
+                withExtendedDayMap "PONY" (lookupFirst 300)
 
             result' `shouldBe` Just (255, 254)
 
@@ -150,8 +150,8 @@ replyTwo shutdown =
         liftIO $ takeMVar shutdown
         return r
 
-sendTestMsg :: ByteString -> IO [ByteString]
-sendTestMsg identifier = runZMQ $ do
+sendPonyMsg :: ByteString -> IO [ByteString]
+sendPonyMsg identifier = runZMQ $ do
     s <- socket Dealer
     connect s "tcp://localhost:5560"
     -- Simulate a client sending a sequence number and message

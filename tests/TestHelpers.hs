@@ -12,16 +12,23 @@ module TestHelpers
     dayFileD,
     runTestDaemon,
     runTestPool,
-    prettyPrint
+    prettyPrint,
+    extendedCompound,
+    simpleCompound,
+    simpleMessage,
+    extendedMessage,
+    sendTestMsg,
 )
 where
 
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import Data.List.NonEmpty (fromList)
+import Numeric (showHex)
+import System.Rados.Monadic
+import System.ZMQ4.Monadic
 import Vaultaire.Daemon
 import Vaultaire.RollOver
-import System.Rados.Monadic
-import Data.ByteString(ByteString)
-import qualified Data.ByteString as BS
-import Numeric(showHex)
 
 cleanup :: Daemon ()
 cleanup = liftPool $ unsafeObjects >>= mapM_ (`runObject` remove)
@@ -53,14 +60,14 @@ dayFileD = "\x00\x00\x00\x00\x00\x00\x00\x00\
            \\x08\x00\x00\x00\x00\x00\x00\x00"
 
 writePonyDayMap :: ByteString -> ByteString -> Daemon ()
-writePonyDayMap oid contents = liftPool $ 
+writePonyDayMap oid contents = liftPool $
     runObject oid (writeFull contents)
     >>= throwJust
 
 throwJust :: Monad m => Maybe RadosError -> m ()
 throwJust =
     maybe (return ()) (error . show)
- 
+
 runTestDaemon :: String -> Daemon a -> IO a
 runTestDaemon broker a =
     runDaemon broker Nothing "test" (cleanup >> loadState >> a)
@@ -72,3 +79,31 @@ runTestPool = runConnect Nothing (parseConfig "/etc/ceph/ceph.conf")
 prettyPrint :: ByteString -> String
 prettyPrint = concatMap (`showHex` "") . BS.unpack
 
+extendedCompound, simpleCompound, simpleMessage, extendedMessage :: ByteString
+
+extendedCompound = simpleMessage `BS.append` extendedMessage
+
+simpleCompound = simpleMessage `BS.append` simpleMessage
+
+simpleMessage =
+    "\x04\x00\x00\x00\x00\x00\x00\x00\
+    \\x02\x00\x00\x00\x00\x00\x00\x00\
+    \\x01\x00\x00\x00\x00\x00\x00\x00"
+
+extendedMessage =
+    "\x05\x00\x00\x00\x00\x00\x00\x00\
+    \\x02\x00\x00\x00\x00\x00\x00\x00\
+    \\x1f\x00\x00\x00\x00\x00\x00\x00\
+    \\&This computer is made of warms.\
+    \\x05\x00\x00\x00\x00\x00\x00\x00\
+    \\x03\x00\x00\x00\x00\x00\x00\x00\
+    \\x04\x00\x00\x00\x00\x00\x00\x00\
+    \\&Yay!"
+
+sendTestMsg :: IO [ByteString]
+sendTestMsg = runZMQ $ do
+    s <- socket Dealer
+    connect s "tcp://localhost:5560"
+    -- Simulate a client sending a sequence number and message
+    sendMulti s $ fromList ["\x42", "PONY", extendedCompound]
+    receiveMulti s

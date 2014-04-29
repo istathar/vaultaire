@@ -53,22 +53,23 @@ suite = do
                 \must start at zero."
 
     describe "lookup" $ do
-        it "handles left boundary correctly" $ do
-            lookupEpoch 0 simple `shouldBe` 0
-            lookupNumBuckets 0 simple `shouldBe` 100
+        it "handles left boundary correctly" $
+            lookupFirst 0 simple `shouldBe` (0, 100)
 
-        it "handles right boundary correcly" $ do
-            lookupEpoch 10 simple `shouldBe` 0
-            lookupNumBuckets 10 simple `shouldBe` 100
+        it "handles right boundary correcly" $
+            lookupFirst 10 simple `shouldBe` (0, 100)
 
-        it "handles beyond right boundary correcly" $ do
-            lookupEpoch 11 simple `shouldBe` 10
-            lookupNumBuckets 11 simple `shouldBe` 200
+        it "handles beyond right boundary correcly" $
+            lookupFirst 11 simple `shouldBe` (10, 200)
 
-        it "handles beyond end" $ do
-            lookupEpoch 31 simple `shouldBe` 30
-            lookupNumBuckets 31 simple `shouldBe` 300
+        it "handles beyond end" $
+            lookupFirst 31 simple `shouldBe` (30, 300)
 
-        it "handle single entry" $ do
-            lookupEpoch 50 singleEntry `shouldBe` 0
-            lookupNumBuckets 50 singleEntry `shouldBe` 100
+        it "handle single entry" $
+            lookupFirst 50 singleEntry `shouldBe` (0, 100)
+
+        it "returns ranges" $ do
+            lookupRange 0 1 simple `shouldBe` [(0, 100)]
+            lookupRange 3 10 simple `shouldBe` [(0, 100)]
+            lookupRange 0 11 simple `shouldBe` [(0, 100), (10, 200)]
+            lookupRange 3 11 simple `shouldBe` [(0, 100), (10, 200)]

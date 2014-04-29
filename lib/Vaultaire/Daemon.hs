@@ -16,6 +16,10 @@ module Vaultaire.Daemon
     Daemon,
     Response(..),
     Message(..),
+    ReplyF,
+    Address,
+    Payload,
+    Bucket,
     -- * Functions
     runDaemon,
     liftPool,
@@ -30,25 +34,27 @@ module Vaultaire.Daemon
     -- * Helpers
     simpleDayOID,
     extendedDayOID,
+    bucketOID
 ) where
 
 import Control.Applicative
+import Control.Concurrent (ThreadId, killThread, myThreadId)
+import Control.Concurrent.Async (Async)
+import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
-import Control.Concurrent.Async (Async)
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Word (Word64)
-import System.Rados.Monadic hiding (async, Async)
+import System.Rados.Monadic hiding (Async, async)
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
+import Text.Printf
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
-import qualified Control.Concurrent.Async as Async
-import Control.Concurrent(myThreadId, killThread, ThreadId)
 
 -- User facing API
 
@@ -69,22 +75,28 @@ type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
 
 -- | An acknowledgement of a message recieved, this will be attempted to be
 -- delivered back to the sender of a 'Message'
-data Response = Success            -- ^ Signifies to the client to not
-                                   --   retransmit.
-              | Failure ByteString -- ^ Only sent in response to an invalid
-                                   --   message that will never be accepted.
+data Response = Success             -- ^ Signifies to the client to not
+                                    --   retransmit.
+              | Response ByteString -- ^ A good response
+              | Failure ByteString  -- ^ Only sent in response to an invalid
+                                    --   message that will never be accepted.
 
 -- | Represents a request made by a client. This could be a request to write a
 -- point or a query.
 --
 -- All mesages follow the same asyncronous response, reply pattern.
 data Message = Message
-    { replyF  :: Response -> Daemon () -- ^ Queue a reply to this message. This
-                                       --   will be transmitted automatically
-                                       --   at a later point.
+    { replyF  :: ReplyF -- ^ Queue a reply to this message. This
+                        --   will be transmitted automatically
+                        --   at a later point.
     , origin  :: Origin
     , payload :: ByteString
     }
+
+type ReplyF  = Response -> Daemon ()
+type Address = Word64
+type Payload = Word64
+type Bucket  = Word64
 
 -- | This will go as far as to connect to Ceph and begin listening for
 -- messages.
@@ -118,13 +130,13 @@ monitorMessenger thread parent = do
     result <- Async.waitCatch thread
     case result of
         Left e ->
-            putStrLn $ "Messenger thread exploded, killing parent: " ++ 
+            putStrLn $ "Messenger thread exploded, killing parent: " ++
                        show e
         Right _ ->
             putStrLn "Messenger thread exited, killing parent."
 
     killThread parent
-            
+
 -- | Lift an action from the librados 'Pool' monad.
 liftPool :: Pool a -> Daemon a
 liftPool = Daemon . lift . lift
@@ -190,14 +202,14 @@ withExLock :: ByteString -> Daemon a -> Daemon a
 withExLock oid = wrapPool (withExclusiveLock oid "lock" "lock" Nothing)
 
 wrapPool :: (Pool (a, OriginDays) -> Pool (b, OriginDays))
-         -> Daemon a -> Daemon b 
+         -> Daemon a -> Daemon b
 wrapPool pool_a (Daemon a) = do
     conf <- ask
     st   <- get
     (r,s) <- liftPool $ pool_a (runReaderT (runStateT a st) conf)
     put s
     return r
-    
+
 -- Internal
 
 type FileSize = Word64
@@ -256,14 +268,6 @@ extendedDayOID origin'' = "02_" `BS.append` origin'' `BS.append` "_extended_days
 writeQueue :: MonadIO m => TBQueue a -> a -> m ()
 writeQueue q = liftIO . atomically . writeTBQueue q
 
--- | Queue a response to a ZMQ message. The Envelope contains three idents,
---   which will allow the message first to reach the broker, then the client,
---   then finally for the client to distinguish these messages from each-other.
-respond :: Envelope -> Response -> Daemon ()
-respond env resp = do
-    ack_chan <- ackChan <$> ask
-    writeQueue ack_chan (Ack env resp)
-
 messenger :: String
           -> TBQueue Message
           -> TBQueue Ack
@@ -300,9 +304,23 @@ listen router msg_chan ack_chan = forever $ do
     -- Send all acks every iteration
     sendAcks router ack_chan
 
+-- | Queue a response to a ZMQ message. The Envelope contains three idents,
+--   which will allow the message first to reach the broker, then the client,
+--   then finally for the client to distinguish these messages from each-other.
+respond :: Envelope -> Response -> Daemon ()
+respond env resp = do
+    ack_chan <- ackChan <$> ask
+    writeQueue ack_chan (Ack env resp)
+
 responseToPayload :: Response -> ByteString
-responseToPayload Success = ""        -- An empty response signifies success
-responseToPayload (Failure msg) = msg -- Any response signifieds failure
+-- An empty response signifies success
+responseToPayload Success = ""
+-- 1 for failure
+responseToPayload (Failure msg) =
+    "\x01\x00\x00\x00\x00\x00\x00\x00" `BS.append` msg
+-- 2 for response
+responseToPayload (Response msg) =
+    "\x02\x00\x00\x00\x00\x00\x00\x00" `BS.append` msg
 
 -- This depletes the entire queue of messages.
 sendAcks :: ZMQ.Socket z ZMQ.Router -> TBQueue Ack -> ZMQ.ZMQ z ()
@@ -315,3 +333,11 @@ sendAcks router ack_chan = do
             let reply = fromList [env_a, env_b, message_id, payload']
             ZMQ.sendMulti router reply
             sendAcks router ack_chan
+
+
+bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
+bucketOID origin' epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
+                                                      (BS.unpack origin')
+                                                      bucket
+                                                      epoch
+                                                      kind

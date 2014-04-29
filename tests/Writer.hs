@@ -9,7 +9,6 @@ import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import qualified Data.HashMap.Strict as HashMap
-import Data.List.NonEmpty (fromList)
 import Data.List(sort)
 import Data.Monoid
 import Data.Time
@@ -102,7 +101,8 @@ suite now = do
 
             -- Pending bucket should have a closure that creates a pointer to
             -- the extended bucket given an offset. These should point to 0x0
-            -- and then 0x1f reference the offset. (so 0x2 0x21 given os 0x2)
+            -- and then 0x27 (length 0x1f + header 0x8) reference the offset.
+            -- (so 0x2 0x21 given os 0x2)
             --
             -- Note that to achieve the expected ordering we must reverse the
             -- list before concatenation. This is due to prepending to the list
@@ -137,8 +137,8 @@ suite now = do
         it "writes a message to disk immediately" $ do
             -- Clean up latest files so that we can test that we are writing
             -- correct values
-            runTestDaemon "tcp://localhost:1234" $ liftPool $ do
-                runObject "02_PONY_extended_latest" remove
+            _ <- runTestDaemon "tcp://localhost:1234" $ liftPool $ do
+                _ <- runObject "02_PONY_extended_latest" remove
                 runObject "02_PONY_simple_latest" remove
 
             linkThread $ runZMQ $ startProxy
@@ -171,7 +171,6 @@ suite now = do
                 >>= (`shouldBe` Right "\x02\x00\x00\x00\x00\x00\x00\x00")
 
   where
-
     go = flip runState (startState now)
 
 extendedBytes :: ByteString
@@ -186,15 +185,7 @@ extendedPointers = "\x05\x00\x00\x00\x00\x00\x00\x00\
                    \\x00\x00\x00\x00\x00\x00\x00\x00\
                    \\x05\x00\x00\x00\x00\x00\x00\x00\
                    \\x03\x00\x00\x00\x00\x00\x00\x00\
-                   \\x1f\x00\x00\x00\x00\x00\x00\x00"
-
-sendTestMsg :: IO [ByteString]
-sendTestMsg = runZMQ $ do
-    s <- socket Dealer
-    connect s "tcp://localhost:5560"
-    -- Simulate a client sending a sequence number and message
-    sendMulti s $ fromList ["\x42", "PONY", extendedCompound]
-    receiveMulti s
+                   \\x27\x00\x00\x00\x00\x00\x00\x00"
 
 yieldEvents :: Monad m => Producer Event m ()
 yieldEvents = do
@@ -207,28 +198,7 @@ pendingBytes = "\x05\x00\x00\x00\x00\x00\x00\x00\
                \\x02\x00\x00\x00\x00\x00\x00\x00\
                \\x05\x00\x00\x00\x00\x00\x00\x00\
                \\x03\x00\x00\x00\x00\x00\x00\x00\
-               \\x21\x00\x00\x00\x00\x00\x00\x00"
-
-extendedCompound, simpleCompound, simpleMessage, extendedMessage :: ByteString
-
-extendedCompound = simpleMessage `BS.append` extendedMessage
-
-simpleCompound = simpleMessage `BS.append` simpleMessage
-
-simpleMessage =
-    "\x04\x00\x00\x00\x00\x00\x00\x00\
-    \\x02\x00\x00\x00\x00\x00\x00\x00\
-    \\x01\x00\x00\x00\x00\x00\x00\x00"
-
-extendedMessage =
-    "\x05\x00\x00\x00\x00\x00\x00\x00\
-    \\x02\x00\x00\x00\x00\x00\x00\x00\
-    \\x1f\x00\x00\x00\x00\x00\x00\x00\
-    \\&This computer is made of warms.\
-    \\x05\x00\x00\x00\x00\x00\x00\x00\
-    \\x03\x00\x00\x00\x00\x00\x00\x00\
-    \\x04\x00\x00\x00\x00\x00\x00\x00\
-    \\&Yay!"
+               \\x29\x00\x00\x00\x00\x00\x00\x00"
 
 startDayMaps :: (DayMap, DayMap)
 startDayMaps =

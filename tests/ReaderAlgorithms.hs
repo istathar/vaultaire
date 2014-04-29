@@ -10,6 +10,7 @@ import Test.Hspec
 import Data.Word
 import Test.Hspec.QuickCheck
 import Control.Monad.ST
+import Data.ByteString(ByteString)
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
 import qualified Vaultaire.ReaderAlgorithms as A
@@ -54,6 +55,34 @@ suite = do
 
         it "should retain no duplicates" $ property propNoDuplicates
         it "should sort" $ property propSorted
+
+    describe "merging" $
+        it "correctly merges a pointer record and extended bucket" $
+            let merged = runST $ A.mergeSimpleExtended pointerRecord
+                                                       extendedRecord
+                                                       5
+                                                       minBound
+                                                       maxBound
+            in merged `shouldBe` mergedRecord
+
+pointerRecord :: ByteString
+pointerRecord =
+    "\x05\x00\x00\x00\x00\x00\x00\x00\
+    \\x02\x00\x00\x00\x00\x00\x00\x00\
+    \\x02\x00\x00\x00\x00\x00\x00\x00"
+
+extendedRecord :: ByteString
+extendedRecord =
+    "\x00\x00\
+    \\x03\x00\x00\x00\x00\x00\x00\x00\
+    \\x41\x42\x43"
+
+mergedRecord :: ByteString
+mergedRecord = 
+    "\x05\x00\x00\x00\x00\x00\x00\x00\
+    \\x02\x00\x00\x00\x00\x00\x00\x00\
+    \\x03\x00\x00\x00\x00\x00\x00\x00\
+    \\&ABC"
 
 propNoDuplicates :: Vector Point -> Bool
 propNoDuplicates v =
