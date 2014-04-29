@@ -65,6 +65,7 @@ main = do
     let !points = simplePoints [0..10000]
 
     runTest points >>= print
+    print "Running second points"
     runTest points >>= print
 
     defaultMain 

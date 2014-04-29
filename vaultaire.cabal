@@ -167,7 +167,7 @@ benchmark writer-bench
   hs-source-dirs:    bench, tests
   main-is:           Writer.hs
   type:              exitcode-stdio-1.0
-  build-depends:     base >=4.6 && <4.7,
+  build-depends:     base >=3 && <5,
                      bytestring,
                      zeromq4-haskell,
                      semigroups,
@@ -181,7 +181,7 @@ benchmark reader-algorithms
   hs-source-dirs:    bench
   main-is:           ReaderAlgorithms.hs
   type:              exitcode-stdio-1.0
-  build-depends:     base >=4.6 && <4.7,
+  build-depends:     base >=3 && <5,
                      bytestring,
                      criterion,
                      vector,
