@@ -1,6 +1,6 @@
-{-# LANGUAGE EmptyDataDecls        #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE EmptyDataDecls    #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Vaultaire.Reader
 (
@@ -14,17 +14,17 @@ module Vaultaire.Reader
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.ST
 import Control.Monad.Cont
+import Control.Monad.ST
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Packer
-import System.Rados.Monadic
 import Pipes
+import System.Rados.Monadic
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
-import Vaultaire.ReaderAlgorithms(processBucket, mergeSimpleExtended)
+import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
 
 
 data Simple
@@ -47,15 +47,15 @@ startReader :: String           -- ^ Broker
             -> ByteString       -- ^ Pool name for Ceph
             -> IO ()
 startReader broker user pool = runDaemon broker user pool $
-    forever $ 
-        nextMessage >>= handleRequest
+    forever $ nextMessage >>= handleRequest
 
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply_f origin' payload') =
-    case classifyPayload payload' of
+handleRequest (Message reply_f origin' payload') = do
+    () <- case classifyPayload payload' of
         SomeRequest r@Simple{}   -> processSimple r origin' reply_f
         SomeRequest r@Extended{} -> processExtended r origin' reply_f
         SomeRequest r@Invalid{}  -> processInvalid r reply_f
+    reply_f Success
 
 processSimple :: Request Simple -> Origin -> ReplyF -> Daemon ()
 processSimple s@(Simple (ReadDetails _ start end)) origin' reply_f = do
@@ -77,6 +77,7 @@ readSimple origin' (Simple (ReadDetails addr start end)) fail_f = forever $ do
     let bucket_oid = bucketOID origin' epoch bucket "simple"
     contents <- lift $ liftPool $ runObject bucket_oid readFull
     case contents of
+        Left (NoEntity{}) -> return ()
         Left e -> do
             liftIO $ putStrLn $ "Ceph error getting simple bucket: " ++ show e
             lift $ fail_f "Failed to retrieve bucket"
@@ -114,6 +115,7 @@ readExtended origin' (Extended (ReadDetails addr start end)) fail_f = forever $ 
   where
     getBuckets a_simple a_extended = do
         maybe_simple <- look a_simple >>= (\c -> case c of
+            Left (NoEntity{}) -> return Nothing
             Left e -> do
                 liftIO $ putStrLn $ "Ceph error getting simple bucket: " ++ show e
                 fail_f "Failed to retrieve bucket"
@@ -121,12 +123,13 @@ readExtended origin' (Extended (ReadDetails addr start end)) fail_f = forever $ 
             Right unprocessed -> return $ Just unprocessed)
 
         maybe_extended <- look a_extended >>= (\c -> case c of
+            Left (NoEntity{}) -> return Nothing
             Left e -> do
                 liftIO $ putStrLn $ "Ceph error getting extended bucket: " ++ show e
                 fail_f "Failed to retrieve bucket"
                 return Nothing
             Right unprocessed -> return $ Just unprocessed)
-        
+
         return $ (,) <$> maybe_simple <*> maybe_extended
 
 processInvalid :: Request Invalid -> ReplyF -> Daemon ()

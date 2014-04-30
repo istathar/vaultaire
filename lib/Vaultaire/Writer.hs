@@ -191,8 +191,10 @@ processPoints offset message day_maps origin latest_simple latest_ext
         if address `testBit` 0
             then do
                 let len = fromIntegral payload
-                let str = runUnpacking (getBytesAt (offset + 24) len) message
-                let (ext_epoch, ext_buckets) = lookupFirst time (fst day_maps)
+                let str | len == 0 = "" -- will fail bounds check without this
+                        | otherwise =
+                            runUnpacking (getBytesAt (offset + 24) len) message
+                let (ext_epoch, ext_buckets) = lookupFirst time (snd day_maps)
                 let ext_bucket = masked_address `mod` ext_buckets
                 appendExtended ext_epoch ext_bucket address time len str
                 let !t | time > latest_ext = time
@@ -268,7 +270,7 @@ write origin' = do
     s <- await
     (offsets, extended_rollover) <- stepOne s
 
-    simple_buckets  <- applyOffsets offsets s
+    let simple_buckets = applyOffsets offsets (simple s) (pending s)
     simple_rollover <- stepTwo simple_buckets
     
     -- Update latest files after the writes have gone down to disk, in case
@@ -320,22 +322,21 @@ write origin' = do
     -- Given two maps, one of offsets and one of closures, we walk through
     -- applying one to the other. We then append that to the map of simple
     -- writes in order to achieve one write.
-    applyOffsets offset_map s = lift $ liftPool $
-        forWithKey (simple s) $ \epoch buckets -> do
-            let pending_buckets = HashMap.lookup epoch (pending s)
-            let offset_buckets  = HashMap.lookup epoch offset_map
-            forWithKey buckets $ \bucket builder -> do
-                let pendings = pending_buckets >>= HashMap.lookup bucket
-                let offsets  = offset_buckets >>= HashMap.lookup bucket
-                case pendings of
-                    -- No associated extended points, just simple points
-                    Nothing -> return builder
-                    -- Otherwise apply the offsets and concatenate
-                    Just fs -> return $ case offsets of
-                        Nothing -> error "No offset for extended point!"
-                        Just os ->
-                            let ext = mconcat $ reverse $ map ($os) (snd fs)
-                            in builder <> ext
+    applyOffsets offset_map =
+        HashMap.foldlWithKey' applyEpochs 
+      where
+        applyEpochs simple_map' epoch =
+            HashMap.foldlWithKey' (applyBuckets epoch) simple_map' 
+
+        applyBuckets epoch simple_map'' bucket (_, fs) =
+            let offset = HashMap.lookup epoch offset_map >>= HashMap.lookup bucket
+                simple_buckets = HashMap.lookupDefault HashMap.empty epoch simple_map''
+            in case offset of
+                Nothing -> error "No offset for extended point!"
+                Just os ->
+                    let builder = mconcat $ reverse $ map ($os) fs
+                        simple_buckets' = HashMap.insertWith (<>) bucket builder simple_buckets
+                    in HashMap.insert epoch simple_buckets' simple_map''
 
     -- Final write,
     stepTwo simple_buckets = lift $ liftPool $ do
@@ -370,7 +371,7 @@ writeExtended o e b payload =
     runAsync $ runObject (bucketOID o e b "extended") (append payload)
 
 writeSimple :: Origin -> Epoch -> Bucket -> ByteString -> Pool (AsyncRead StatResult, AsyncWrite)
-writeSimple o e b payload=
+writeSimple o e b payload =
     runAsync $ runObject (bucketOID o e b "simple") $
         (,) <$> stat <*> writeFull payload
 

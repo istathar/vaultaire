@@ -158,7 +158,7 @@ suite now = do
  
             sim <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
-            sim `shouldBe` Right (simpleMessage `BS.append` extendedPointers)
+            sim `shouldBe` Right (extendedPointers `BS.append` simpleMessage)
 
             ext <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_extended" readFull

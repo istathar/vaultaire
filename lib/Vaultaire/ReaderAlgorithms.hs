@@ -10,23 +10,23 @@ module Vaultaire.ReaderAlgorithms
     mergeSimpleExtended,
 ) where
 
-import qualified Data.Vector.Storable as V
 import Control.Applicative
-import Data.Packer
 import Control.Monad
-import Data.Monoid
 import Control.Monad.Primitive
+import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
+import Data.ByteString.Lazy.Builder
+import Data.Monoid
+import Data.Packer
 import qualified Data.Vector.Algorithms.Merge as M
 import Data.Vector.Generic.Mutable (MVector)
 import qualified Data.Vector.Generic.Mutable as M
-import Data.ByteString(ByteString)
+import qualified Data.Vector.Storable as V
+import Data.Vector.Storable.ByteString
 import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
 import Prelude hiding (filter)
-import Data.ByteString.Lazy.Builder
-import Data.ByteString.Lazy (toStrict)
-import Data.Vector.Storable.ByteString
 
 data Point = Point { address :: !Word64
                    , time    :: !Word64
@@ -110,7 +110,7 @@ deDuplicate input
 -- | Filter and de-duplicate a bucket in-place. The original bytestring will be
 -- garbage after completion.
 processBucket :: (PrimMonad m, Functor m)
-              => ByteString -> Word64 -> Word64 -> Word64 -> m ByteString 
+              => ByteString -> Word64 -> Word64 -> Word64 -> m ByteString
 processBucket bucket addr start end =
     vectorToByteString <$> (V.thaw (byteStringToVector bucket)
                             >>= filter addr start end

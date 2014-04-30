@@ -33,7 +33,6 @@ makeDayFile n = toStrict $ toLazyByteString b
   where
     b = word64LE 0 <> word64LE (n * 2)
     
-    
 runTest :: ByteString -> IO [ByteString]
 runTest msg =
     runZMQ $ do

@@ -1,22 +1,22 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
 
-import Data.List(sort)
 import Control.Applicative
-import Test.Hspec
-import Data.Word
-import Test.Hspec.QuickCheck
 import Control.Monad.ST
-import Data.ByteString(ByteString)
+import Data.ByteString (ByteString)
+import Data.List (sort)
+import Data.Vector.Storable (Vector)
+import qualified Data.Vector.Storable as V
+import Data.Word
+import Test.Hspec
+import Test.Hspec.QuickCheck
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
+import Vaultaire.ReaderAlgorithms (Point (..))
 import qualified Vaultaire.ReaderAlgorithms as A
-import Vaultaire.ReaderAlgorithms (Point(..))
-import Data.Vector.Storable(Vector)
-import qualified Data.Vector.Storable as V
 
 data AddrStartEnd = AddrStartEnd Word64 Word64 Word64
   deriving Show
@@ -78,7 +78,7 @@ extendedRecord =
     \\x41\x42\x43"
 
 mergedRecord :: ByteString
-mergedRecord = 
+mergedRecord =
     "\x05\x00\x00\x00\x00\x00\x00\x00\
     \\x02\x00\x00\x00\x00\x00\x00\x00\
     \\x03\x00\x00\x00\x00\x00\x00\x00\
@@ -99,17 +99,17 @@ propSorted v =
     in s v' == v'
 
 propFilterNoLater :: AddrStartEnd -> Vector Point -> Bool
-propFilterNoLater (AddrStartEnd addr start end) v = 
+propFilterNoLater (AddrStartEnd addr start end) v =
     let v' = runST $ V.thaw v >>= A.filter addr start end >>= V.freeze
     in V.null $ V.filter ((> end) . A.time) v'
 
 propFilterNoEarlier :: AddrStartEnd -> Vector Point -> Bool
-propFilterNoEarlier (AddrStartEnd addr start end) v = 
+propFilterNoEarlier (AddrStartEnd addr start end) v =
     let v' = runST $ V.thaw v >>= A.filter addr start end >>= V.freeze
     in V.null $ V.filter ((< start) . A.time) v'
 
 propFilterEqual :: AddrStartEnd -> Vector Point -> Bool
-propFilterEqual (AddrStartEnd addr start end) v = 
+propFilterEqual (AddrStartEnd addr start end) v =
     let v'  = runST $ V.thaw v >>= A.filter addr start end >>= V.freeze
         v'' = V.filter filt v
 

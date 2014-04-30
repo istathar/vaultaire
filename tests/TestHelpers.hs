@@ -18,6 +18,7 @@ module TestHelpers
     simpleMessage,
     extendedMessage,
     sendTestMsg,
+    startTestDaemons,
 )
 where
 
@@ -29,6 +30,10 @@ import System.Rados.Monadic
 import System.ZMQ4.Monadic
 import Vaultaire.Daemon
 import Vaultaire.RollOver
+import Vaultaire.Broker
+import Vaultaire.Reader(startReader)
+import Vaultaire.Writer(startWriter)
+import Vaultaire.Util
 
 cleanup :: Daemon ()
 cleanup = liftPool $ unsafeObjects >>= mapM_ (`runObject` remove)
@@ -107,3 +112,13 @@ sendTestMsg = runZMQ $ do
     -- Simulate a client sending a sequence number and message
     sendMulti s $ fromList ["\x42", "PONY", extendedCompound]
     receiveMulti s
+
+startTestDaemons :: IO ()
+startTestDaemons = do
+    linkThread $ runZMQ $ startProxy
+        (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
+    linkThread $ runZMQ $ startProxy
+        (Router,"tcp://*:5570") (Dealer,"tcp://*:5571") "tcp://*:5001"
+    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
+    linkThread $ startReader "tcp://localhost:5571" Nothing "test"
+
