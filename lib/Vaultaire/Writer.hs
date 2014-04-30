@@ -268,7 +268,7 @@ appendExtended epoch bucket address time len string = do
 write :: Origin -> Consumer BatchState Daemon ()
 write origin' = do
     s <- await
-    (offsets, extended_rollover) <- stepOne s
+    (offsets, extended_rollover) <- writeExtendedBuckets s
 
     let simple_buckets = applyOffsets offsets (simple s) (pending s)
     simple_rollover <- stepTwo simple_buckets
@@ -286,7 +286,7 @@ write origin' = do
   where
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.
-    stepOne s =
+    writeExtendedBuckets s =
         lift . withExLock (writeLockOID origin') $ liftPool $ do
             -- First pass to get current offsets
             offsets <- forWithKey (extended s) $ \epoch buckets -> do
@@ -311,6 +311,7 @@ write origin' = do
                 writes <- forWithKey buckets $ \bucket builder -> do
                     let payload = toStrict $ toLazyByteString builder
                     writeExtended origin' epoch bucket payload
+
                 for writes $ \async_write -> do
                     result <- waitSafe async_write
                     case result of
