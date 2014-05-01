@@ -1,0 +1,149 @@
+{-# LANGUAGE RecordWildCards #-}
+module Main where
+import Text.Trifecta
+import Vaultaire.Broker
+import Vaultaire.Util
+import Control.Monad
+import System.ZMQ4.Monadic
+import Options.Applicative hiding (Parser, option)
+import qualified Data.ByteString.Char8 as BS
+import Data.Maybe(fromJust)
+import qualified Options.Applicative as O
+import System.Directory
+import Data.Word(Word32)
+import Vaultaire.Reader(startReader)
+import Vaultaire.Writer(startWriter)
+
+data Options = Options
+  { pool      :: String
+  , user      :: String
+  , broker    :: String
+  , component :: Component }
+
+data Component = Broker
+               | Reader
+               | Writer { batchPeriod :: Word32 }
+
+-- | Command line option parsing
+
+helpfulParser :: Options -> O.ParserInfo Options
+helpfulParser os = info (helper <*> optionsParser os) fullDesc
+
+optionsParser :: Options -> O.Parser Options
+optionsParser Options{..} = Options <$> parsePool
+                                    <*> parseUser
+                                    <*> parseBroker
+                                    <*> parseComponents
+  where
+    parsePool = strOption $
+           long "pool"
+        <> short 'p'
+        <> metavar "POOL"
+        <> value pool
+        <> showDefault
+        <> help "Ceph pool name for storage"
+
+    parseUser = strOption $ 
+           long "user"
+        <> short 'u'
+        <> metavar "USER"
+        <> value user
+        <> showDefault
+        <> help "Ceph user for access to storage"
+
+    parseBroker = strOption $ 
+           long "broker"
+        <> short 'b'
+        <> metavar "BROKER"
+        <> value broker
+        <> showDefault
+        <> help "Vault broker host name or IP address"
+
+    parseComponents = subparser
+       (   parseBrokerComponent
+       <> parseReaderComponent
+       <> parseWriterComponent )
+
+    parseBrokerComponent = command "broker" $
+        info (pure Broker) (progDesc "Start a broker deamon")
+
+    parseReaderComponent = command "writer" $
+        info (pure Broker) (progDesc "Start a writer daemon")
+
+    parseWriterComponent = command "reader" $
+        info writerOptionsParser (progDesc "Start a writer daemon")
+
+writerOptionsParser :: O.Parser Component
+writerOptionsParser = Writer <$> O.option (
+       long "batch_period"
+    <> short 'p'
+    <> value 4
+    <> showDefault
+    <> help "Number of seconds to wait before flushing writes" )
+
+-- | Config file parsing
+
+parseConfig :: FilePath -> IO Options
+parseConfig fp = do
+    exists <- doesFileExist fp
+    if exists
+        then do
+            maybe_ls <- parseFromFile configParser fp
+            case maybe_ls of
+                Just ls -> return $ mergeConfig ls defaultConfig
+                Nothing  -> error "Failed to parse config"
+        else return defaultConfig
+  where
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost" Broker
+    mergeConfig ls Options{..} = fromJust $ 
+        Options <$> lookup "pool" ls `mplus` pure pool
+                <*> lookup "user" ls `mplus` pure user
+                <*> lookup "broker" ls `mplus` pure broker
+                <*> pure Broker
+
+configParser :: Parser [(String, String)]
+configParser = some $ liftA2 (,)
+    (spaces *> possibleKeys <* spaces <* char '=')
+    (spaces *> (stringLiteral <|> stringLiteral'))
+
+possibleKeys :: Parser String
+possibleKeys =
+        string "pool"
+    <|> string "user"
+    <|> string "broker"
+
+main :: IO ()
+main = do
+    defaults <- parseConfig "/etc/vaultaire.conf"
+    opts <- execParser $ helpfulParser defaults
+    case opts of
+        Options _ _ _ Broker ->
+            runBroker
+        Options pool user broker Reader ->
+            runReader pool user broker
+        Options pool user broker (Writer batch_period) ->
+            runWriter pool user broker batch_period
+
+runBroker :: IO ()
+runBroker = runZMQ $ do
+    void $ async $ startProxy (Router,"tcp://*:5560")
+                              (Dealer,"tcp://*:5561")
+                              "tcp://*:5000"
+
+    void $ async $ startProxy (Router,"tcp://*:5570")
+                              (Dealer,"tcp://*:5571")
+                              "tcp://*:5001"
+    waitForever
+
+runReader :: String -> String -> String -> IO ()
+runReader pool user broker =
+    startReader ("tcp://" ++ broker ++ ":5561")
+                (Just $ BS.pack user)
+                (BS.pack pool)
+
+runWriter :: String -> String -> String -> Word32 -> IO ()
+runWriter pool user broker poll_period =
+    startWriter ("tcp://" ++ broker ++ ":5571")
+                (Just $ BS.pack user)
+                (BS.pack pool)
+                (fromIntegral poll_period)
