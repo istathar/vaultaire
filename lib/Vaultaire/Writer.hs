@@ -1,8 +1,8 @@
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE BangPatterns       #-}
 
 module Vaultaire.Writer
 (
@@ -38,11 +38,13 @@ import Data.Word (Word64)
 import Pipes hiding (for)
 import Pipes.Concurrent
 import Pipes.Lift
+import System.Log.Logger
 import System.Rados.Monadic hiding (async)
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.RollOver
+import Vaultaire.Util(fatal)
 
 type DispatchMap = OriginMap (Output Event)
 
@@ -69,9 +71,10 @@ startWriter :: String           -- ^ Broker
             -> NominalDiffTime
             -> IO ()
 startWriter broker user pool batch_period = runDaemon broker user pool $ do
+    liftIO $ infoM "Writer.startWriter" "Writer daemon starting"
     runEffect $ lift nextMessage
              >~ evalStateP emptyOriginMap (dispatch batch_period)
-    error "startWriter: impossible"
+    fatal "Writer.startWriter" "impossible"
 
 -- If the incoming message currently has a processing thread running for that
 -- origin, feed the message into that thread. Otherwise create a new one and
@@ -98,12 +101,16 @@ dispatch batch_period = do
 
         liftIO $ Async.async (feedTicks output) >>= Async.link
 
-        lift . lift $
+        -- The entire origin has a shared lock taken at this point for the
+        -- duration of this batch period. Any rollovers of this origin will
+        -- have to synchronize.
+        lift . lift $ withLock (originLockOID origin') $
             async (processBatch batch_period origin' seal input)
             >>= liftIO . Async.link
 
         must_send <- send' output m
-        unless must_send $ error "thread died immediately, bailing"
+        unless must_send $
+            fatal "Writer.dispatch" "thread died immediately, bailing"
         lift . put $ originInsert origin' output dispatch_map
         dispatch batch_period
 
@@ -115,13 +122,13 @@ batchStateNow dms =
 -- origin. Now we simply need to process these messages with local state,
 -- writing to ceph when our collection time has elapsed.
 processBatch :: NominalDiffTime -> Origin -> Input Event -> STM () -> Daemon ()
-processBatch batch_period origin' input seal = do
+processBatch period origin' input seal = do
     refreshOriginDays origin'
     simple_dm <- withSimpleDayMap origin' id
     extended_dm  <- withExtendedDayMap origin' id
     case (,) <$> simple_dm <*> extended_dm of
         Nothing ->
-            -- Reply to first message with an error, try again on the next
+            -- Reply to first message with an fatal, try again on the next
             -- message. This is a potential DOS of sorts, however is needed
             -- unless we know when to expire
             runEffect $ fromInput input >-> badOrigin
@@ -129,7 +136,7 @@ processBatch batch_period origin' input seal = do
             -- Process for a batch period
             start_state <- liftIO $ batchStateNow dms
             runEffect $ fromInput input
-                    >-> evalStateP start_state (processEvents batch_period)
+                    >-> evalStateP start_state (processEvents period)
                     >-> write origin'
             liftIO $ atomically seal
 
@@ -148,15 +155,19 @@ feedTicks o = runEffect $ tickStream >-> toOutput o
 
 -- | Place a message into state or flush if appropriate.
 processEvents :: (MonadState BatchState m, MonadIO m)
-               => NominalDiffTime -> Pipe Event BatchState m ()
+              => NominalDiffTime -> Pipe Event BatchState m ()
 processEvents batch_period = do
     event <- await
     s <- get
     case event of
         Msg (Message rf origin' payload') -> do
-            -- Most messages simply need to be placed into the correct epoch and
-            -- bucket, extended ones are a little more complex in that they have to be
-            -- stored as an offset to a pending write to the extended buckets.
+            liftIO $ debugM "Writer.processEvents" $
+                            "Processing payload (" ++ show (BS.length payload')
+                            ++ " bytes)"
+            -- Most messages simply need to be placed into the correct epoch
+            -- and bucket, extended ones are a little more complex in that they
+            -- have to be stored as an offset to a pending write to the
+            -- extended buckets.
 
             (latest_simple, latest_ext) <- lift $
                 processPoints 0 payload' (dayMaps s) origin'
@@ -272,7 +283,7 @@ write origin' = do
 
     let simple_buckets = applyOffsets offsets (simple s) (pending s)
     simple_rollover <- stepTwo simple_buckets
-    
+
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
     lift $ do
@@ -302,7 +313,8 @@ write origin' = do
                         Left (NoEntity{..}) ->
                             return 0
                         Left e ->
-                            error $ "extended bucket read: " ++ show e
+                            fatal "Writer.writeExtendedBuckets" $
+                                "extended bucket read: " ++ show e
                         Right st ->
                             return $ fileSize st
 
@@ -315,7 +327,8 @@ write origin' = do
                 for writes $ \async_write -> do
                     result <- waitSafe async_write
                     case result of
-                        Just e -> error $ "extended bucket write: " ++ show e
+                        Just e -> fatal "Writer.writeExtendedBuckets" $ 
+                            "extended bucket write: " ++ show e
                         Nothing -> return ()
 
             return (offsets, findMax offsets > bucketSize)
@@ -324,16 +337,17 @@ write origin' = do
     -- applying one to the other. We then append that to the map of simple
     -- writes in order to achieve one write.
     applyOffsets offset_map =
-        HashMap.foldlWithKey' applyEpochs 
+        HashMap.foldlWithKey' applyEpochs
       where
         applyEpochs simple_map' epoch =
-            HashMap.foldlWithKey' (applyBuckets epoch) simple_map' 
+            HashMap.foldlWithKey' (applyBuckets epoch) simple_map'
 
         applyBuckets epoch simple_map'' bucket (_, fs) =
             let offset = HashMap.lookup epoch offset_map >>= HashMap.lookup bucket
                 simple_buckets = HashMap.lookupDefault HashMap.empty epoch simple_map''
             in case offset of
-                Nothing -> error "No offset for extended point!"
+                Nothing -> fatal "Writer.applyOffsets"
+                                 "No offset for extended point!"
                 Just os ->
                     let builder = mconcat $ reverse $ map ($os) fs
                         simple_buckets' = HashMap.insertWith (<>) bucket builder simple_buckets
@@ -348,12 +362,14 @@ write origin' = do
             for writes $ \(async_stat, async_write) -> do
                 w <- waitSafe async_write
                 case w of
-                    Just e -> error $ "simple bucket write: " ++ show e
+                    Just e -> fatal "Writer.stepTwo" $
+                                    "simple bucket write: " ++ show e
                     Nothing -> do
                         r <- look async_stat
                         case r of
                             Left NoEntity{} -> return 0
-                            Left e   -> error $ "simple bucket read" ++ show e
+                            Left e   -> fatal "Writer.stepTwo" $
+                                              "simple bucket read: " ++ show e
                             Right st -> return $ fileSize st
         return $ findMax offsets > bucketSize
 
@@ -378,4 +394,3 @@ writeSimple o e b payload =
 
 writeLockOID :: Origin -> ByteString
 writeLockOID o = "02_" `BS.append` o `BS.append` "_write_lock"
-

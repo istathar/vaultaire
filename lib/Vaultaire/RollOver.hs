@@ -7,6 +7,7 @@ module Vaultaire.RollOver
     rollOverExtendedDay,
     updateSimpleLatest,
     updateExtendedLatest,
+    originLockOID,
 ) where
 
 import Control.Monad.State
@@ -87,6 +88,9 @@ rollOver origin' day_file latest_file buckets =
     build n = runPacking 8 $ putWord64LE n
     mustLatest = either (\e -> error $ "could not get latest_file" ++ show e)
                         return
+
+originLockOID :: Origin -> ByteString
+originLockOID = simpleLatestOID
 
 simpleLatestOID :: Origin -> ByteString
 simpleLatestOID origin' = "02_" `BS.append` origin' `BS.append`

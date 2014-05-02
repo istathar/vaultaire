@@ -49,12 +49,14 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Word (Word64)
+import System.Log.Logger
 import System.Rados.Monadic hiding (Async, async)
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 import Text.Printf
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
+import Vaultaire.Util
 
 -- User facing API
 
@@ -130,10 +132,11 @@ monitorMessenger thread parent = do
     result <- Async.waitCatch thread
     case result of
         Left e ->
-            putStrLn $ "Messenger thread exploded, killing parent: " ++
-                       show e
+            errorM "Daemon.monitorMessenger" $
+                   "Messenger thread exploded, killing parent: " ++ show e
         Right _ ->
-            putStrLn "Messenger thread exited, killing parent."
+            errorM "Daemon.monitorMessenger"
+                   "Messenger thread exited, killing parent."
 
     killThread parent
 
@@ -230,12 +233,13 @@ cacheExpired om origin' =
     checkDayFile file expected_size = do
         st <- liftPool $ runObject file stat
         case st of
-            Left e -> error $ "Failed to stat day file: " ++ show file
-                                ++ "( " ++ show e ++ ")"
+            Left e -> fatal "Daemon.cacheExpired" $
+                            "Failed to stat day file: " ++ show file
+                            ++ "( " ++ show e ++ ")"
             Right result -> return $ fileSize result /= expected_size
 
 
--- | Load a DayMap from Ceph, throwing errors on failure.
+-- | Load a DayMap from Ceph
 --
 -- The file size is returned along side the map for cache invalidation.
 dayMapsFromCeph :: Origin -> Pool (Either String ((FileSize, DayMap), (FileSize, DayMap)))
@@ -299,7 +303,7 @@ listen router msg_chan ack_chan = forever $ do
                     ++ " parts; ignoring"
         -- Timeout, do nothing.
         [[]]        -> return ()
-        _           -> error "daemon listen: unpossible"
+        _           -> fatal "Daemon.listen" "impossible"
 
     -- Send all acks every iteration
     sendAcks router ack_chan

@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Main where
 import Text.Trifecta
 import Vaultaire.Broker
@@ -13,11 +14,14 @@ import System.Directory
 import Data.Word(Word32)
 import Vaultaire.Reader(startReader)
 import Vaultaire.Writer(startWriter)
+import System.Log.Logger
+import System.Log.Handler.Syslog
 
 data Options = Options
   { pool      :: String
   , user      :: String
   , broker    :: String
+  , debug     :: Bool
   , component :: Component }
 
 data Component = Broker
@@ -33,6 +37,7 @@ optionsParser :: Options -> O.Parser Options
 optionsParser Options{..} = Options <$> parsePool
                                     <*> parseUser
                                     <*> parseBroker
+                                    <*> parseDebug
                                     <*> parseComponents
   where
     parsePool = strOption $
@@ -59,6 +64,11 @@ optionsParser Options{..} = Options <$> parsePool
         <> showDefault
         <> help "Vault broker host name or IP address"
 
+    parseDebug = switch $
+           long "debug"
+        <> short 'd'
+        <> help "Set log level to DEBUG"
+
     parseComponents = subparser
        (   parseBrokerComponent
        <> parseReaderComponent
@@ -67,10 +77,10 @@ optionsParser Options{..} = Options <$> parsePool
     parseBrokerComponent = command "broker" $
         info (pure Broker) (progDesc "Start a broker deamon")
 
-    parseReaderComponent = command "writer" $
-        info (pure Broker) (progDesc "Start a writer daemon")
+    parseReaderComponent = command "reader" $
+        info (pure Reader) (progDesc "Start a writer daemon")
 
-    parseWriterComponent = command "reader" $
+    parseWriterComponent = command "writer" $
         info writerOptionsParser (progDesc "Start a writer daemon")
 
 writerOptionsParser :: O.Parser Component
@@ -94,11 +104,12 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost" Broker
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False Broker
     mergeConfig ls Options{..} = fromJust $ 
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
                 <*> lookup "broker" ls `mplus` pure broker
+                <*> pure debug
                 <*> pure Broker
 
 configParser :: Parser [(String, String)]
@@ -115,14 +126,18 @@ possibleKeys =
 main :: IO ()
 main = do
     defaults <- parseConfig "/etc/vaultaire.conf"
-    opts <- execParser $ helpfulParser defaults
-    case opts of
-        Options _ _ _ Broker ->
-            runBroker
-        Options pool user broker Reader ->
-            runReader pool user broker
-        Options pool user broker (Writer batch_period) ->
-            runWriter pool user broker batch_period
+    Options{..} <- execParser $ helpfulParser defaults
+
+    let log_level = if debug then DEBUG else WARNING
+    logger <- openlog "vaultaire" [PID] USER log_level
+    updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
+
+    debugM "Main.main" "Logger initialized, starting component"
+
+    case component of
+        Broker -> runBroker
+        Reader -> runReader pool user broker
+        Writer batch_period -> runWriter pool user broker batch_period
 
 runBroker :: IO ()
 runBroker = runZMQ $ do
@@ -133,6 +148,8 @@ runBroker = runZMQ $ do
     void $ async $ startProxy (Router,"tcp://*:5570")
                               (Dealer,"tcp://*:5571")
                               "tcp://*:5001"
+
+    liftIO $ debugM "Main.runBroker" "Proxies started."
     waitForever
 
 runReader :: String -> String -> String -> IO ()
