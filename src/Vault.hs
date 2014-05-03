@@ -123,10 +123,12 @@ possibleKeys =
     <|> string "user"
     <|> string "broker"
 
+parseArgsWithConfig :: FilePath -> IO Options
+parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
+
 main :: IO ()
 main = do
-    defaults <- parseConfig "/etc/vaultaire.conf"
-    Options{..} <- execParser $ helpfulParser defaults
+    Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
     let log_level = if debug then DEBUG else WARNING
     logger <- openlog "vaultaire" [PID] USER log_level
