@@ -54,6 +54,26 @@ library
   default-language:  Haskell2010
   ghc-options:       -fwarn-incomplete-patterns
 
+
+executable marquised
+  build-depends:     base >=4.6 && <4.7,
+                     lz4,
+                     zeromq4-haskell,
+                     containers,
+                     trifecta,
+                     optparse-applicative,
+                     MissingH,
+                     text,
+                     mtl,
+                     bytestring,
+                     async,
+                     saltine
+                     
+  main-is:           Marquise.hs
+  hs-source-dirs:    lib
+  include-dirs:      .
+  default-language:  Haskell2010
+
 executable vault
   hs-source-dirs:    src
   main-is:           Vault.hs
