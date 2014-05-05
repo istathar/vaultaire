@@ -1,0 +1,11 @@
+message DataRequestMulti {
+        repeated RequestSource  requests = 1;
+}
+
+message DataRequest {
+        required fixed64        address = 1;
+        required fixed64        alpha = 2;
+        required fixed64        omega = 3;
+}
+
+// vim: set expandtab tabstop=8:
