@@ -4,6 +4,9 @@ all:
 test:
 	cabal test
 
+%:
+	cabal build $@
+
 ifdef V
 MAKEFLAGS=-R
 else
