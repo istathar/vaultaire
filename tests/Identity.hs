@@ -15,11 +15,11 @@ import Data.List (foldl', groupBy, nubBy, sort)
 import Data.List.NonEmpty (fromList)
 import Data.Monoid
 import Data.Word
+import System.Exit
 import System.ZMQ4.Monadic
 import Test.QuickCheck
-import Test.QuickCheck.Test
-import System.Exit
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
+import Test.QuickCheck.Test
 import TestHelpers
 
 data TestPoint = SimplePoint

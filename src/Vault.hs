@@ -1,21 +1,21 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
-import Text.Trifecta
-import Vaultaire.Broker
-import Vaultaire.Util
 import Control.Monad
-import System.ZMQ4.Monadic
-import Options.Applicative hiding (Parser, option)
 import qualified Data.ByteString.Char8 as BS
-import Data.Maybe(fromJust)
+import Data.Maybe (fromJust)
+import Data.Word (Word32)
+import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
-import Data.Word(Word32)
-import Vaultaire.Reader(startReader)
-import Vaultaire.Writer(startWriter)
-import System.Log.Logger
 import System.Log.Handler.Syslog
+import System.Log.Logger
+import System.ZMQ4.Monadic
+import Text.Trifecta
+import Vaultaire.Broker
+import Vaultaire.Reader (startReader)
+import Vaultaire.Util
+import Vaultaire.Writer (startWriter)
 
 data Options = Options
   { pool      :: String
@@ -48,7 +48,7 @@ optionsParser Options{..} = Options <$> parsePool
         <> showDefault
         <> help "Ceph pool name for storage"
 
-    parseUser = strOption $ 
+    parseUser = strOption $
            long "user"
         <> short 'u'
         <> metavar "USER"
@@ -56,7 +56,7 @@ optionsParser Options{..} = Options <$> parsePool
         <> showDefault
         <> help "Ceph user for access to storage"
 
-    parseBroker = strOption $ 
+    parseBroker = strOption $
            long "broker"
         <> short 'b'
         <> metavar "BROKER"
@@ -105,7 +105,7 @@ parseConfig fp = do
         else return defaultConfig
   where
     defaultConfig = Options "vaultaire" "vaultaire" "localhost" False Broker
-    mergeConfig ls Options{..} = fromJust $ 
+    mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
                 <*> lookup "broker" ls `mplus` pure broker

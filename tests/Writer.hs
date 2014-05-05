@@ -9,7 +9,7 @@ import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import qualified Data.HashMap.Strict as HashMap
-import Data.List(sort)
+import Data.List (sort)
 import Data.Monoid
 import Data.Time
 import Pipes
@@ -155,7 +155,7 @@ suite now = do
                                 , "02_PONY_extended_days"]
 
             runTestPool (sort <$> objects) >>= (`shouldBe` expected)
- 
+
             sim <- runTestPool $
                 runObject "02_PONY_00000000000000000004_00000000000000000000_simple" readFull
             sim `shouldBe` Right (extendedPointers `BS.append` simpleMessage)

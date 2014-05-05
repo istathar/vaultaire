@@ -2,8 +2,8 @@
 
 module Marquise.Contents where
 
-import Data.Text (Text)
 import Data.Int (Int64)
+import Data.Text (Text)
 
 data SourceTag = SourceTag {
     field :: Text,
@@ -15,8 +15,8 @@ data Source = Source {
 }
 
 contents :: String -> Chan [SourceTag] -> IO ()
-contents endpoint source_chan = 
+contents endpoint source_chan =
     withContext $ \c -> withSocket c Req $ \s -> do
         connect s endpoint
-        
-    
+
+

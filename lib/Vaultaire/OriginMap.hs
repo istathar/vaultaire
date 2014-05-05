@@ -8,15 +8,15 @@ module Vaultaire.OriginMap
     emptyOriginMap,
 ) where
 
-import Data.ByteString(ByteString)
-import Data.HashMap.Strict(HashMap)
+import Data.ByteString (ByteString)
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 
 type Origin = ByteString
 type OriginMap = HashMap Origin
 
 originLookup :: Origin -> OriginMap a -> Maybe a
-originLookup = HashMap.lookup 
+originLookup = HashMap.lookup
 
 -- TODO: Unbackwards this
 originInsert :: Origin -> a -> OriginMap a -> OriginMap a

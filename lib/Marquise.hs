@@ -1,21 +1,21 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 module Main where
 
+import qualified Control.Concurrent.Async as Async
 import Control.Monad
 import Control.Monad.Error
-import Options.Applicative
 import qualified Data.ByteString.Char8 as BS
+import Options.Applicative
 import qualified System.ZMQ4.Monadic as Zero
-import qualified Control.Concurrent.Async as Async
 
 import Marquise.Config
 
 data CmdOptions = CmdOptions {
     optConfigFile :: !String,
-    optDebug :: !Bool
+    optDebug      :: !Bool
 }
 
 printDebug :: MonadIO m => Bool -> String -> m ()
@@ -47,7 +47,7 @@ marquiseD (CmdOptions cfgFile debug) = do
     case cfg of
         Nothing -> do
             putStrLn "Failed to parse config."
-        Just ConfigOptions{..} -> 
+        Just ConfigOptions{..} ->
             Zero.runZMQ $ do
                 let writer = "tcp://" ++ writerAddr ++ ":5560"
                 printDebug debug ("Listening on " ++ listenAddr)
@@ -55,7 +55,7 @@ marquiseD (CmdOptions cfgFile debug) = do
                 router <- Zero.socket Zero.Router
                 Zero.setReceiveHighWM (Zero.restrict 0) router
                 Zero.bind router listenAddr
-                forever $ do 
+                forever $ do
                     msg <- Zero.receive router
                     liftIO $ printDebug debug $ "Got a message: " ++ (BS.unpack msg)
   where

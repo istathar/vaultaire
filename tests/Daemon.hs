@@ -2,20 +2,20 @@
 
 module Main where
 
+import Control.Applicative
 import Control.Concurrent.Async
+import Control.Concurrent.MVar
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty (fromList)
+import System.Rados.Monadic hiding (async)
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
-import Vaultaire.Broker
-import Vaultaire.RollOver
-import Vaultaire.DayMap
-import Vaultaire.Daemon hiding (async)
-import Control.Concurrent.MVar
-import Vaultaire.Util
-import System.Rados.Monadic hiding (async)
-import Control.Applicative
 import TestHelpers
+import Vaultaire.Broker
+import Vaultaire.Daemon hiding (async)
+import Vaultaire.DayMap
+import Vaultaire.RollOver
+import Vaultaire.Util
 
 main :: IO ()
 main = do
@@ -129,7 +129,7 @@ suite = do
                         append "garbage"
                     rollOverSimpleDay "PONY")
                 `shouldThrow` anyErrorCall
-           
+
 replyOne :: MVar () -> IO (ByteString, ByteString)
 replyOne shutdown =
     runDaemon "tcp://localhost:5561" Nothing "test" $ do

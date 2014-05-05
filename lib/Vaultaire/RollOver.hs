@@ -28,13 +28,13 @@ rollOverSimpleDay :: Origin -> Daemon ()
 rollOverSimpleDay origin' = do
     (_, buckets) <- withSimpleDayMap origin' (lookupFirst maxBound)
                     >>= mustBucket
-    rollOver origin' (simpleDayOID origin') (simpleLatestOID origin') buckets 
+    rollOver origin' (simpleDayOID origin') (simpleLatestOID origin') buckets
 
 rollOverExtendedDay :: Origin -> Daemon ()
 rollOverExtendedDay origin' = do
     (_, buckets) <- withExtendedDayMap origin' (lookupFirst maxBound)
                     >>= mustBucket
-    rollOver origin' (extendedDayOID origin') (extendedLatestOID origin') buckets 
+    rollOver origin' (extendedDayOID origin') (extendedLatestOID origin') buckets
 
 mustBucket :: Monad m => Maybe a -> m a
 mustBucket = maybe (error "could not find n_buckets for roll over") return

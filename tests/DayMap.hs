@@ -3,9 +3,9 @@
 module Main where
 
 import Data.ByteString
+import qualified Data.Map as Map
 import Test.Hspec
 import Vaultaire.DayMap
-import qualified Data.Map as Map
 
 main :: IO ()
 main = hspec suite

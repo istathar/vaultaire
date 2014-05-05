@@ -9,13 +9,13 @@ module Vaultaire.DayMap
     loadDayMap
 ) where
 
-import Data.Word(Word64)
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Control.Applicative
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Packer
+import Data.Word (Word64)
 
 type Epoch = Word64
 type NumBuckets = Word64
@@ -45,7 +45,7 @@ lookupFirst = (fst .) . splitRemainder
 
 -- Return first and the remainder that is later than that.
 splitRemainder :: Time -> DayMap -> ((Epoch, NumBuckets), DayMap)
-splitRemainder t dm = 
+splitRemainder t dm =
     let (left, middle, right) = Map.splitLookup t dm
         first = case middle of
             Just m -> if Map.null left -- Corner case, leftmost entry
@@ -59,7 +59,7 @@ lookupRange start end dm =
     let (first, remainder) = splitRemainder start dm
         (rest,_) = Map.split end remainder
     in first : Map.toList rest
- 
+
 -- Internal
 
 mustLoadDayMap :: ByteString -> DayMap

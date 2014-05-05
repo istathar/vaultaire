@@ -28,12 +28,12 @@ import Data.List.NonEmpty (fromList)
 import Numeric (showHex)
 import System.Rados.Monadic
 import System.ZMQ4.Monadic
-import Vaultaire.Daemon
-import Vaultaire.RollOver
 import Vaultaire.Broker
-import Vaultaire.Reader(startReader)
-import Vaultaire.Writer(startWriter)
+import Vaultaire.Daemon
+import Vaultaire.Reader (startReader)
+import Vaultaire.RollOver
 import Vaultaire.Util
+import Vaultaire.Writer (startWriter)
 
 cleanup :: Daemon ()
 cleanup = liftPool $ unsafeObjects >>= mapM_ (`runObject` remove)

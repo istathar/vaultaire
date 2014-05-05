@@ -44,7 +44,7 @@ import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.RollOver
-import Vaultaire.Util(fatal)
+import Vaultaire.Util (fatal)
 
 type DispatchMap = OriginMap (Output Event)
 
@@ -327,7 +327,7 @@ write origin' = do
                 for writes $ \async_write -> do
                     result <- waitSafe async_write
                     case result of
-                        Just e -> fatal "Writer.writeExtendedBuckets" $ 
+                        Just e -> fatal "Writer.writeExtendedBuckets" $
                             "extended bucket write: " ++ show e
                         Nothing -> return ()
 
