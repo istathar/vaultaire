@@ -37,6 +37,7 @@ library
                      containers,
                      primitive,
                      spool,
+                     hslogger,
                      lens,
                      pipes,
                      pipes-concurrency,
@@ -55,13 +56,17 @@ library
   default-language:  Haskell2010
   ghc-options:       -fwarn-incomplete-patterns
 
-executable broker
+executable vault
   hs-source-dirs:    src
-  main-is:           Broker.hs
+  main-is:           Vault.hs
   other-modules:
   build-depends:     base >=3 && <5,
                      bytestring,
                      zeromq4-haskell,
+                     optparse-applicative,
+                     trifecta,
+                     directory,
+                     hslogger,
                      vaultaire
   ghc-options:       -fwarn-incomplete-patterns -threaded
   default-language:  Haskell2010
