@@ -67,6 +67,6 @@ tags: $(SOURCES)
 	if [ "$(HOTHASKTAGS)" ] ; then /bin/echo -e "CTAGS\ttags" ; fi
 	-$(CTAGS) $^ > tags $(REDIRECT)
 
-format: $(CORE_SOURCES) $(TEST_SOURCES)
+format: $(SOURCES)
 	stylish-haskell -i $^
 
