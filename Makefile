@@ -1,8 +1,18 @@
-all:
+all: build
+
+.PHONY: all build test
+
+build:
+	@/bin/echo -e "CABAL\tbuild"
 	cabal build
 
-test:
+test: dist/setup-config
+	@/bin/echo -e "CABAL\ttest"
 	cabal test
+
+dist/setup-config:
+	@/bin/echo -e "CABAL\tinstall --only-dependencies"
+	cabal install --only-dependencies --enable-tests --enable-benchmarks
 
 %:
 	cabal build $@
