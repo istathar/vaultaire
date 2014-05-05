@@ -1,17 +1,17 @@
 package vaultaire;
 
 // Sent to chevalier.
-message DataSourceResponseBurst {
-        repeated DataSource sources = 1;
+message ContentsResponseBurst {
+        repeated ContentsResponse sources = 1;
         optional string error = 2;
 }
 
-message DataSourceResponse {
-        message Tag {
+message ContentsResponse {
+        message SourceTag {
                 required string field = 1;
                 required string value = 2;
         }
-        repeated Tag     source = 1;
+        repeated SourceTag      source = 1;
 }
 
 // vim: set expandtab tabstop=8:
