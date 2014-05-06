@@ -1,4 +1,4 @@
-all: tags build
+all: build
 
 #
 # Top-level targets. This is ugly. A program to extract these from the .cabal
@@ -31,7 +31,7 @@ endif
 # language-specific fashion.
 #
 
-build:
+build: dist/setup-config tags
 	@/bin/echo -e "CABAL\tbuild"
 	cabal build
 
@@ -69,4 +69,8 @@ tags: $(SOURCES)
 
 format: $(SOURCES)
 	stylish-haskell -i $^
+
+clean:
+	-cabal clean
+	-rm tags
 
