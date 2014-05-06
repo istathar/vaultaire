@@ -18,7 +18,6 @@ import Data.Monoid
 import System.Rados.Monadic
 import Data.Bits
 import TestHelpers (runTestDaemon, runTestPool)
-import Control.Concurrent(threadDelay)
 
 createDays :: Word64 -> Word64 -> IO ()
 createDays simple_buckets ext_buckets = runTestPool $ do
