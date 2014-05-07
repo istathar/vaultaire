@@ -12,6 +12,9 @@ writer-test: dist/build/writer-test/writer-test
 daymap-test: dist/build/daymap-test/daymap-test
 writer-test: dist/build/writer-test/writer-test
 identity-test: dist/build/identity-test/identity-test
+writer-bench: dist/build/writer-bench/writer-bench
+reader-bench: dist/build/reader-bench/reader-bench
+
 
 #
 # Setup
@@ -39,9 +42,8 @@ test: dist/setup-config tags
 	@/bin/echo -e "CABAL\ttest"
 	cabal test
 
-dist/setup-config:
-	@/bin/echo -e "CABAL\tinstall --only-dependencies"
-	cabal install --only-dependencies --enable-tests --enable-benchmarks
+dist/setup-config: vaultaire.cabal
+	cabal configure --enable-tests --enable-benchmarks -v0 2>/dev/null || /bin/echo -e "CABAL\tinstall --only-dependencies" && cabal install --only-dependencies --enable-tests --enable-benchmarks
 	@/bin/echo -e "CABAL\tconfigure"
 	cabal configure --enable-tests --enable-benchmarks
 
