@@ -29,11 +29,15 @@ library
                      Vaultaire.Util,
                      Vaultaire.Writer,
                      Vaultaire.Reader,
-                     Vaultaire.ReaderAlgorithms
+                     Vaultaire.ReaderAlgorithms,
+                     Vaultaire.ContentsEncoding,
+                     Vaultaire.ContentsServer
+
   other-modules:
 
   build-depends:     base >=3 && <5,
                      bytestring,
+                     text,
                      time,
                      mtl,
                      transformers,

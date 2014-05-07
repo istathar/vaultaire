@@ -51,7 +51,7 @@ dist/setup-config: vaultaire.cabal
 
 # This will match writer-test/writer-test, so we have to strip the directory
 # portion off. Annoying, but you can't use two '%' in a pattern rule.
-dist/build/%: dist/setup-config $(SOURCES)
+dist/build/%: dist/setup-config tags $(SOURCES)
 	@/bin/echo -e "CABAL\tbuild $@"
 	cabal build $(notdir $@)
 
