@@ -11,6 +11,7 @@ reader-algorithms: dist/build/reader-algorithms/reader-algorithms
 writer-test: dist/build/writer-test/writer-test
 daymap-test: dist/build/daymap-test/daymap-test
 writer-test: dist/build/writer-test/writer-test
+contents-test: dist/build/contents-test/contents-test
 identity-test: dist/build/identity-test/identity-test
 writer-bench: dist/build/writer-bench/writer-bench
 reader-bench: dist/build/reader-bench/reader-bench

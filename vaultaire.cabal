@@ -230,8 +230,9 @@ test-suite           reader-algorithms-test
 
 
 test-suite           identity-test
+  hs-source-dirs:    tests
+  main-is:           Identity.hs
   type:              exitcode-stdio-1.0
-
   default-language:  Haskell2010
 
   build-depends:     base >=3 && <5,
@@ -246,8 +247,31 @@ test-suite           identity-test
                      zeromq4-haskell,
                      vaultaire
 
-  main-is:           Identity.hs
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
+
+test-suite           contents-test
   hs-source-dirs:    tests
+  main-is:           ContentsTest.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     containers,
+                     QuickCheck,
+                     vector,
+                     rados-haskell,
+                     semigroups,
+                     mtl,
+                     bytestring,
+                     zeromq4-haskell,
+                     vaultaire
 
   ghc-options:       -O2
                      -threaded
