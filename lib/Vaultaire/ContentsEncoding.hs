@@ -1,7 +1,7 @@
 --
 -- Data vault for metrics
 --
--- Copyright © 2013-     Anchor Systems, Pty Ltd and Others
+-- Copyright © 2013-2014 Anchor Systems, Pty Ltd and Others
 --
 -- The code in this file, and the program it is a part of, is
 -- made available to you by its authors as open source software:
@@ -12,7 +12,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Vaultaire.Contents
+module Vaultaire.ContentsEncoding
 (
     SourceTag(..),
     DataRequest(..),
@@ -104,7 +104,4 @@ data ContentsResponseBurst = ContentsResponseBurst {
 
 instance Encode ContentsResponseBurst
 instance Decode ContentsResponseBurst
-
-
-
 
