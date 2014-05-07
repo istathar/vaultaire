@@ -45,7 +45,7 @@ test: dist/setup-config tags
 dist/setup-config: vaultaire.cabal
 	cabal configure --enable-tests --enable-benchmarks -v0 2>/dev/null || /bin/echo -e "CABAL\tinstall --only-dependencies" && cabal install --only-dependencies --enable-tests --enable-benchmarks
 	@/bin/echo -e "CABAL\tconfigure"
-	cabal configure --enable-tests --enable-benchmarks
+	cabal configure --enable-tests --enable-benchmarks --enable-library-profiling --enable-executable-profiling
 
 
 # This will match writer-test/writer-test, so we have to strip the directory

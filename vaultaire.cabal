@@ -18,6 +18,9 @@ source-repository    head
 
 
 library
+  hs-source-dirs:    lib
+  default-language:  Haskell2010
+
   exposed-modules:   Vaultaire.Daemon,
                      Vaultaire.RollOver,
                      Vaultaire.Broker,
@@ -28,6 +31,7 @@ library
                      Vaultaire.Reader,
                      Vaultaire.ReaderAlgorithms
   other-modules:
+
   build-depends:     base >=3 && <5,
                      bytestring,
                      time,
@@ -52,12 +56,22 @@ library
                      type-level,
                      protobuf,
                      rados-haskell >= 3
-  hs-source-dirs:    lib
-  default-language:  Haskell2010
-  ghc-options:       -fwarn-incomplete-patterns
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
+  ghc-prof-options:  -fprof-auto
 
 
 executable marquised
+  hs-source-dirs:    lib
+  main-is:           Marquise.hs
+  default-language:  Haskell2010
+  include-dirs:      .
   build-depends:     base >=4.6 && <4.7,
                      lz4,
                      zeromq4-haskell,
@@ -71,15 +85,12 @@ executable marquised
                      async,
                      saltine
                      
-  main-is:           Marquise.hs
-  hs-source-dirs:    lib
-  include-dirs:      .
-  default-language:  Haskell2010
 
 executable vault
   hs-source-dirs:    src
   main-is:           Vault.hs
-  other-modules:
+  default-language:  Haskell2010
+
   build-depends:     base >=3 && <5,
                      bytestring,
                      zeromq4-haskell,
@@ -88,12 +99,21 @@ executable vault
                      directory,
                      hslogger,
                      vaultaire
-  ghc-options:       -fwarn-incomplete-patterns -threaded
-  default-language:  Haskell2010
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
+  ghc-prof-options:  -fprof-auto
+
 
 test-suite           daemon-test
+  hs-source-dirs:    tests
+  main-is:           Daemon.hs
   type:              exitcode-stdio-1.0
-
   default-language:  Haskell2010
 
   build-depends:     base >=3 && <5,
@@ -105,13 +125,12 @@ test-suite           daemon-test
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1
 
-  main-is:           Daemon.hs
-  hs-source-dirs:    tests
   ghc-options:       -fwarn-incomplete-patterns -threaded
 
 test-suite           daymap-test
+  hs-source-dirs:    tests
+  main-is:           DayMap.hs
   type:              exitcode-stdio-1.0
-
   default-language:  Haskell2010
 
   build-depends:     base >=3 && <5,
@@ -120,9 +139,12 @@ test-suite           daymap-test
                      bytestring,
                      vaultaire
 
-  main-is:           DayMap.hs
-  hs-source-dirs:    tests
-  ghc-options:       -fwarn-incomplete-patterns -threaded
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
 
 
 test-suite           writer-test
@@ -146,11 +168,19 @@ test-suite           writer-test
 
   main-is:           Writer.hs
   hs-source-dirs:    tests
-  ghc-options:       -fwarn-incomplete-patterns -threaded
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
 
 test-suite           reader-test
+  hs-source-dirs:    tests
+  main-is:           Reader.hs
   type:              exitcode-stdio-1.0
-
   default-language:  Haskell2010
 
   build-depends:     base >=3 && <5,
@@ -167,13 +197,18 @@ test-suite           reader-test
                      rados-haskell >= 3.0.1,
                      vaultaire
 
-  main-is:           Reader.hs
-  hs-source-dirs:    tests
-  ghc-options:       -fwarn-incomplete-patterns -threaded
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
 
 test-suite           reader-algorithms-test
+  hs-source-dirs:    tests
+  main-is:           ReaderAlgorithms.hs
   type:              exitcode-stdio-1.0
-
   default-language:  Haskell2010
 
   build-depends:     base >=3 && <5,
@@ -185,9 +220,14 @@ test-suite           reader-algorithms-test
                      bytestring,
                      vaultaire
 
-  main-is:           ReaderAlgorithms.hs
-  hs-source-dirs:    tests
-  ghc-options:       -fwarn-incomplete-patterns -threaded
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
 
 test-suite           identity-test
   type:              exitcode-stdio-1.0
@@ -208,12 +248,21 @@ test-suite           identity-test
 
   main-is:           Identity.hs
   hs-source-dirs:    tests
-  ghc-options:       -fwarn-incomplete-patterns -threaded
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
 
 benchmark writer-bench
   hs-source-dirs:    bench, tests
   main-is:           Writer.hs
   type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
   build-depends:     base >=3 && <5,
                      bytestring,
                      zeromq4-haskell,
@@ -221,20 +270,34 @@ benchmark writer-bench
                      rados-haskell,
                      criterion,
                      vaultaire
-  ghc-options:       -fwarn-incomplete-patterns -threaded -O2
-  default-language:  Haskell2010
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
 
 benchmark reader-algorithms
   hs-source-dirs:    bench
   main-is:           ReaderAlgorithms.hs
   type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
   build-depends:     base >=3 && <5,
                      bytestring,
                      criterion,
                      vector,
                      spool,
                      vaultaire
-  ghc-options:       -fwarn-incomplete-patterns -threaded -O2
-  default-language:  Haskell2010
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+                     -fno-warn-missing-signatures
+
 
 -- vim: set tabstop=21 expandtab:
