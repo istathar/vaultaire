@@ -116,7 +116,7 @@ executable vault
 
 test-suite           daemon-test
   hs-source-dirs:    tests
-  main-is:           Daemon.hs
+  main-is:           DaemonTest.hs
   type:              exitcode-stdio-1.0
   default-language:  Haskell2010
 
@@ -133,7 +133,7 @@ test-suite           daemon-test
 
 test-suite           daymap-test
   hs-source-dirs:    tests
-  main-is:           DayMap.hs
+  main-is:           DayMapTest.hs
   type:              exitcode-stdio-1.0
   default-language:  Haskell2010
 
@@ -152,8 +152,9 @@ test-suite           daymap-test
 
 
 test-suite           writer-test
+  hs-source-dirs:    tests
+  main-is:           WriterTest.hs
   type:              exitcode-stdio-1.0
-
   default-language:  Haskell2010
 
   build-depends:     base >=3 && <5,
@@ -170,8 +171,6 @@ test-suite           writer-test
                      rados-haskell >= 3.0.1,
                      vaultaire
 
-  main-is:           Writer.hs
-  hs-source-dirs:    tests
 
   ghc-options:       -O2
                      -threaded
@@ -183,7 +182,7 @@ test-suite           writer-test
 
 test-suite           reader-test
   hs-source-dirs:    tests
-  main-is:           Reader.hs
+  main-is:           ReaderTest.hs
   type:              exitcode-stdio-1.0
   default-language:  Haskell2010
 
@@ -235,7 +234,7 @@ test-suite           reader-algorithms-test
 
 test-suite           identity-test
   hs-source-dirs:    tests
-  main-is:           Identity.hs
+  main-is:           IdentityTest.hs
   type:              exitcode-stdio-1.0
   default-language:  Haskell2010
 
