@@ -30,7 +30,7 @@ startBroker :: IO ()
 startBroker = do
     linkThread $ runZMQ $
         startProxy (Router,"tcp://*:5580") (Dealer,"tcp://*:5581") "tcp://*:5008"
-    linkThread $ startContents "tcp://localhost:5561" Nothing "test"
+    linkThread $ startContents "tcp://localhost:5581" Nothing "test"
 
 main :: IO ()
 main = do
@@ -38,4 +38,10 @@ main = do
     hspec suite
 
 suite :: Spec
-suite = undefined
+suite = do
+    describe "Contents Operations" $ do
+       it "opcodes encode correctly" $ do
+            opcodeToWord64 ContentsListRequest `shouldBe`   0x0
+            opcodeToWord64 RegisterNewAddress `shouldBe`    0x1
+            opcodeToWord64 UpdateSourceTag `shouldBe`       0x2
+            opcodeToWord64 RemoveSourceTag `shouldBe`       0x3

@@ -13,7 +13,10 @@
 
 module Vaultaire.ContentsServer
 (
-    startContents
+    startContents,
+    Operation(..),
+    -- testing
+    opcodeToWord64
 ) where
 
 import Data.ByteString (ByteString)
@@ -29,6 +32,14 @@ import Vaultaire.ContentsEncoding
 -- Daemon implementation
 --
 
+data Operation =
+    ContentsListRequest |
+    RegisterNewAddress |
+    UpdateSourceTag |
+    RemoveSourceTag
+  deriving
+    (Show, Eq, Enum)
+
 
 
 -- | Start a writer daemon, never returns.
@@ -41,4 +52,9 @@ startContents broker user pool =
     runDaemon broker user pool $ forever $ nextMessage >>= handleRequest
 
 handleRequest :: Message -> Daemon ()
-handleRequest = undefined
+handleRequest (Message reply payload origin) =
+    undefined
+
+
+opcodeToWord64 :: Operation -> Word64
+opcodeToWord64 op = fromIntegral $ fromEnum op
