@@ -15,8 +15,6 @@
 module Vaultaire.ContentsEncoding
 (
     SourceTag(..),
-    DataRequest(..),
-    DataRequestMulti(..),
     ContentsResponse(..),
     ContentsResponseBurst(..)
 ) where
@@ -24,8 +22,7 @@ module Vaultaire.ContentsEncoding
 import Data.ProtocolBuffers hiding (field)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.TypeLevel (D1, D2, D3)
-import Data.Word (Word64)
+import Data.TypeLevel (D1, D2)
 import GHC.Generics (Generic)
 
 
@@ -65,26 +62,6 @@ data DataFrame = DataFrame {
 instance Encode DataFrame
 instance Decode DataFrame
 -}
-
---
--- Query request
---
-
-data DataRequest = Request {
-    requestSourceField :: Repeated D1 (Message SourceTag),
-    requestAlphaField  :: Required D2 (Value (Fixed Word64)),
-    requestOmegaField  :: Required D3 (Value (Fixed Word64))
-} deriving (Generic, Eq, Show)
-
-instance Encode DataRequest
-instance Decode DataRequest
-
-data DataRequestMulti = DataRequestMulti {
-    multiRequestsField :: Repeated D1 (Message DataRequest)
-} deriving (Generic, Eq, Show)
-
-instance Encode DataRequestMulti
-instance Decode DataRequestMulti
 
 --
 -- Contents response to chevalier
