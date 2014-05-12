@@ -181,7 +181,20 @@ performUpdateRequest
     -> Address
     -> SourceDict
     -> Daemon ()
-performUpdateRequest = undefined
+performUpdateRequest reply o a s = do
+    s0 <- liftPool $ retreiveSourceTagsForAddress o a
+
+    -- elements in first map win
+    let s1 = HashMap.union s s0
+
+    liftPool $ writeSourceTagsForAddress o a s1
+    reply Success
+
+retreiveSourceTagsForAddress :: Origin -> Address -> Pool SourceDict
+retreiveSourceTagsForAddress = undefined
+
+writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Pool ()
+writeSourceTagsForAddress = undefined
 
 
 performRemoveRequest
@@ -190,4 +203,12 @@ performRemoveRequest
     -> Address
     -> SourceDict
     -> Daemon ()
-performRemoveRequest = undefined
+performRemoveRequest reply o a s = do
+    s0 <- liftPool $ retreiveSourceTagsForAddress o a
+
+    -- elements of first not existing in second
+    let s1 = HashMap.difference s0 s
+
+    liftPool $ writeSourceTagsForAddress o a s1
+    reply Success
+
