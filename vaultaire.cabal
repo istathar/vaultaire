@@ -267,6 +267,7 @@ test-suite           contents-test
   build-depends:     base >=3 && <5,
                      hspec,
                      containers,
+                     unordered-containers,
                      QuickCheck,
                      vector,
                      rados-haskell,

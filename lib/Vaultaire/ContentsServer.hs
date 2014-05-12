@@ -20,19 +20,19 @@ module Vaultaire.ContentsServer
 ) where
 
 import Control.Exception
+import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import Data.Text (Text)
-import qualified Data.Text as T
-import Control.Monad.State.Strict
-import Data.Packer
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
-import System.Rados.Monadic
+import Data.Packer
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Word (Word64)
+import System.Rados.Monadic
 
-import Vaultaire.Daemon
 import Vaultaire.ContentsEncoding
+import Vaultaire.Daemon
 import Vaultaire.OriginMap
 
 --
@@ -40,12 +40,13 @@ import Vaultaire.OriginMap
 --
 
 data Operation =
-    ContentsListRequest |
+    ContentsListRequest Address |
     RegisterNewAddress |
-    UpdateSourceTag |
-    RemoveSourceTag
+    UpdateSourceTag SourceDict |
+    RemoveSourceTag SourceDict
   deriving
-    (Show, Eq, Enum)
+    (Show, Eq)
+
 
 type SourceDict = HashMap Text Text
 
@@ -63,29 +64,29 @@ handleRequest :: Message -> Daemon ()
 handleRequest (Message reply o' p') =
     case tryUnpacking parseOperationMessage p' of
         Left err         -> failWithString reply "Unable to parse request message" err
-        Right (c, s) -> case c of
-            ContentsListRequest -> performListRequest reply o' a
-            RegisterNewAddress  -> performRegisterRequest reply o'
-            UpdateSourceTag     -> performUpdateRequest reply s
-            RemoveSourceTag     -> performRemoveRequest reply s
-  where
-    a = undefined
+        Right op -> case op of
+            ContentsListRequest a -> performListRequest reply o' a
+            RegisterNewAddress    -> performRegisterRequest reply o'
+            UpdateSourceTag s     -> performUpdateRequest reply s
+            RemoveSourceTag s     -> performRemoveRequest reply s
 
-parseOperationMessage :: Unpacking (Operation,SourceDict)
+
+parseOperationMessage :: Unpacking Operation
 parseOperationMessage = do
     word <- getWord64LE
-    let c = toEnum $ fromIntegral word
-    case c of
-            ContentsListRequest -> do
-                address <- getWord64LE
-                return (c, HashMap.empty) -- FIXME
-            RegisterNewAddress  -> return (c, HashMap.empty)
-            UpdateSourceTag     -> do
-                s <- parseSourceDict
-                return (c, s)
-            RemoveSourceTag     -> do
-                s <- parseSourceDict
-                return (c, s)
+    case word of
+        0x0 -> do
+            address <- getWord64LE
+            return (ContentsListRequest address)
+        0x1 -> do
+            return RegisterNewAddress
+        0x2 -> do
+            s <- parseSourceDict
+            return (UpdateSourceTag s)
+        0x3 -> do
+            s <- parseSourceDict
+            return (RemoveSourceTag s)
+        _   -> fail "Illegal op code"
 
 
 parseSourceDict :: Unpacking SourceDict
@@ -98,7 +99,13 @@ failWithString reply msg e = do
 
 
 opcodeToWord64 :: Operation -> Word64
-opcodeToWord64 op = fromIntegral $ fromEnum op
+opcodeToWord64 op =
+    case op of
+        ContentsListRequest _ -> 0x0
+        RegisterNewAddress    -> 0x1
+        UpdateSourceTag _     -> 0x2
+        RemoveSourceTag _     -> 0x3
+
 
 
 performListRequest :: (Response -> Daemon ()) -> Origin -> Address -> Daemon ()
