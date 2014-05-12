@@ -14,7 +14,6 @@
 
 module Main where
 
-import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
 
@@ -42,5 +41,5 @@ suite = do
         it "opcodes encode correctly" $ do
             opcodeToWord64 (ContentsListRequest 0) `shouldBe`           0x0
             opcodeToWord64 RegisterNewAddress `shouldBe`                0x1
-            opcodeToWord64 (UpdateSourceTag HashMap.empty) `shouldBe`   0x2
-            opcodeToWord64 (RemoveSourceTag HashMap.empty) `shouldBe`   0x3
+            opcodeToWord64 (UpdateSourceTag 0 HashMap.empty) `shouldBe`   0x2
+            opcodeToWord64 (RemoveSourceTag 0 HashMap.empty) `shouldBe`   0x3

@@ -42,8 +42,8 @@ import Vaultaire.OriginMap
 data Operation =
     ContentsListRequest Address |
     RegisterNewAddress |
-    UpdateSourceTag SourceDict |
-    RemoveSourceTag SourceDict
+    UpdateSourceTag Address SourceDict |
+    RemoveSourceTag Address SourceDict
   deriving
     (Show, Eq)
 
@@ -61,14 +61,14 @@ startContents broker user pool =
 
 
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply o' p') =
+handleRequest (Message reply o p') =
     case tryUnpacking parseOperationMessage p' of
         Left err         -> failWithString reply "Unable to parse request message" err
         Right op -> case op of
-            ContentsListRequest a -> performListRequest reply o' a
-            RegisterNewAddress    -> performRegisterRequest reply o'
-            UpdateSourceTag s     -> performUpdateRequest reply s
-            RemoveSourceTag s     -> performRemoveRequest reply s
+            ContentsListRequest a -> performListRequest reply o a
+            RegisterNewAddress    -> performRegisterRequest reply o
+            UpdateSourceTag a s   -> performUpdateRequest reply o a s
+            RemoveSourceTag a s   -> performRemoveRequest reply o a s
 
 
 parseOperationMessage :: Unpacking Operation
@@ -76,16 +76,18 @@ parseOperationMessage = do
     word <- getWord64LE
     case word of
         0x0 -> do
-            address <- getWord64LE
-            return (ContentsListRequest address)
+            a <- getWord64LE
+            return (ContentsListRequest a)
         0x1 -> do
             return RegisterNewAddress
         0x2 -> do
+            a <- getWord64LE
             s <- parseSourceDict
-            return (UpdateSourceTag s)
+            return (UpdateSourceTag a s)
         0x3 -> do
+            a <- getWord64LE
             s <- parseSourceDict
-            return (RemoveSourceTag s)
+            return (RemoveSourceTag a s)
         _   -> fail "Illegal op code"
 
 
@@ -113,7 +115,6 @@ handleSourceArgument b' =
     toTag _ = error "invalid source argument"
 
 
-
 failWithString :: (Response -> Daemon ()) -> String -> SomeException -> Daemon ()
 failWithString reply msg e = do
     liftIO $ putStrLn $ msg ++ "; " ++ show e
@@ -125,8 +126,8 @@ opcodeToWord64 op =
     case op of
         ContentsListRequest _ -> 0x0
         RegisterNewAddress    -> 0x1
-        UpdateSourceTag _     -> 0x2
-        RemoveSourceTag _     -> 0x3
+        UpdateSourceTag _ _   -> 0x2
+        RemoveSourceTag _ _   -> 0x3
 
 
 
@@ -174,7 +175,19 @@ encodeAddressToBytes a = runPacking 8 $ do
     putWord64LE a
 
 
+performUpdateRequest
+    :: (Response -> Daemon ())
+    -> Origin
+    -> Address
+    -> SourceDict
+    -> Daemon ()
 performUpdateRequest = undefined
 
 
+performRemoveRequest
+    :: (Response -> Daemon ())
+    -> Origin
+    -> Address
+    -> SourceDict
+    -> Daemon ()
 performRemoveRequest = undefined
