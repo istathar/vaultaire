@@ -15,14 +15,12 @@
 module Main where
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
 import Vaultaire.Broker
-import Vaultaire.ContentsEncoding
 import Vaultaire.ContentsServer
 import Vaultaire.Util
 
@@ -41,8 +39,8 @@ main = do
 suite :: Spec
 suite = do
     describe "Contents Operations" $ do
-       it "opcodes encode correctly" $ do
-            opcodeToWord64 (ContentsListRequest 0) `shouldBe`   0x0
-            opcodeToWord64 RegisterNewAddress `shouldBe`    0x1
-            opcodeToWord64 (UpdateSourceTag HashMap.empty) `shouldBe`       0x2
-            opcodeToWord64 (RemoveSourceTag HashMap.empty) `shouldBe`       0x3
+        it "opcodes encode correctly" $ do
+            opcodeToWord64 (ContentsListRequest 0) `shouldBe`           0x0
+            opcodeToWord64 RegisterNewAddress `shouldBe`                0x1
+            opcodeToWord64 (UpdateSourceTag HashMap.empty) `shouldBe`   0x2
+            opcodeToWord64 (RemoveSourceTag HashMap.empty) `shouldBe`   0x3

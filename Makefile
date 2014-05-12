@@ -75,7 +75,9 @@ format: $(SOURCES)
 	stylish-haskell -i $^
 
 clean:
-	-cabal clean
-	-rm tags
-	-rm *.prof
+	@/bin/echo -e "CABAL\tclean"
+	-cabal clean >/dev/null
+	@/bin/echo -e "RM\ttemporary files"
+	-rm -f tags
+	-rm -f *.prof
 

@@ -16,7 +16,8 @@ module Vaultaire.ContentsServer
     startContents,
     Operation(..),
     -- testing
-    opcodeToWord64
+    opcodeToWord64,
+    encodeAddressToBytes
 ) where
 
 import Control.Exception
@@ -27,11 +28,10 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Packer
 import Data.Text (Text)
-import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
 import System.Rados.Monadic
 
-import Vaultaire.ContentsEncoding
 import Vaultaire.Daemon
 import Vaultaire.OriginMap
 
@@ -90,7 +90,29 @@ parseOperationMessage = do
 
 
 parseSourceDict :: Unpacking SourceDict
-parseSourceDict = undefined
+parseSourceDict = do
+    n  <- getWord64LE
+    b' <- getBytes (fromIntegral n)
+    return $ handleSourceArgument b'
+
+{-
+    We could replace this with a proper parser in order to get better
+    error reporting if this ever starts being a problem.
+-}
+handleSourceArgument :: ByteString -> SourceDict
+handleSourceArgument b' =
+  let
+    items' = S.split ',' b'
+    pairs' = map (S.split ':') items'
+    pairs  = map toTag pairs'
+  in
+    HashMap.fromList pairs
+  where
+    toTag :: [ByteString] -> (Text, Text)
+    toTag [k',v'] = (T.decodeUtf8 k', T.decodeUtf8 v')
+    toTag _ = error "invalid source argument"
+
+
 
 failWithString :: (Response -> Daemon ()) -> String -> SomeException -> Daemon ()
 failWithString reply msg e = do
@@ -119,7 +141,7 @@ performListRequest reply o a = do
 
 
 readContentsFromVault :: Origin -> Address -> Pool ByteString
-readContentsFromVault o = undefined
+readContentsFromVault o a = undefined
 {-
     For the given address, read all the contents entries matching it. The
     latest entry is deemed most correct. Return that blob.
@@ -148,7 +170,8 @@ allocateNewAddressInVault o = undefined
 -}
 
 encodeAddressToBytes :: Address -> ByteString
-encodeAddressToBytes = undefined
+encodeAddressToBytes a = runPacking 8 $ do
+    putWord64LE a
 
 
 performUpdateRequest = undefined
