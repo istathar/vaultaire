@@ -24,13 +24,16 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Text (Text)
 import qualified Data.Text as T
-import Control.Monad.IO.Class
+import Control.Monad.State.Strict
 import Data.Packer
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
+import System.Rados.Monadic
 import Data.Word (Word64)
-import Control.Monad (forever)
 
 import Vaultaire.Daemon
 import Vaultaire.ContentsEncoding
+import Vaultaire.OriginMap
 
 --
 -- Daemon implementation
@@ -44,7 +47,7 @@ data Operation =
   deriving
     (Show, Eq, Enum)
 
-
+type SourceDict = HashMap Text Text
 
 -- | Start a writer daemon, never returns.
 startContents
@@ -57,21 +60,36 @@ startContents broker user pool =
 
 
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply p _) =
-    case tryUnpacking parseOperationMessage p of
-        Left err    -> failWithString reply "Unable to parse request message" err
-        Right op    -> case op of
-            ContentsListRequest -> performListRequest
-            RegisterNewAddress  -> performRegisterRequest
-            UpdateSourceTag     -> performUpdateRequest
-            RemoveSourceTag     -> performRemoveRequest
+handleRequest (Message reply o' p') =
+    case tryUnpacking parseOperationMessage p' of
+        Left err         -> failWithString reply "Unable to parse request message" err
+        Right (c, s) -> case c of
+            ContentsListRequest -> performListRequest reply o' a
+            RegisterNewAddress  -> performRegisterRequest reply o'
+            UpdateSourceTag     -> performUpdateRequest reply s
+            RemoveSourceTag     -> performRemoveRequest reply s
+  where
+    a = undefined
 
-
-parseOperationMessage :: Unpacking Operation
+parseOperationMessage :: Unpacking (Operation,SourceDict)
 parseOperationMessage = do
-    opcode <- getWord64LE
-    return $ toEnum $ fromIntegral opcode
+    word <- getWord64LE
+    let c = toEnum $ fromIntegral word
+    case c of
+            ContentsListRequest -> do
+                address <- getWord64LE
+                return (c, HashMap.empty) -- FIXME
+            RegisterNewAddress  -> return (c, HashMap.empty)
+            UpdateSourceTag     -> do
+                s <- parseSourceDict
+                return (c, s)
+            RemoveSourceTag     -> do
+                s <- parseSourceDict
+                return (c, s)
 
+
+parseSourceDict :: Unpacking SourceDict
+parseSourceDict = undefined
 
 failWithString :: (Response -> Daemon ()) -> String -> SomeException -> Daemon ()
 failWithString reply msg e = do
@@ -83,11 +101,47 @@ opcodeToWord64 :: Operation -> Word64
 opcodeToWord64 op = fromIntegral $ fromEnum op
 
 
-performListRequest :: Daemon ()
-performListRequest = undefined
+performListRequest :: (Response -> Daemon ()) -> Origin -> Address -> Daemon ()
+performListRequest reply o' a = do
+    odm <- get
+
+    r' <- liftPool $ readContentsFromVault o' a
+    let r' = encodeContentsToBytes
+
+    reply (Response r')
 
 
-performRegisterRequest = undefined
+readContentsFromVault :: Origin -> Address -> Pool ByteString
+readContentsFromVault o' = undefined
+{-
+    For the given address, read all the contents entries matching it. The
+    latest entry is deemed most correct. Return that blob.
+-}
+
+encodeContentsToBytes = undefined
+
+
+performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
+performRegisterRequest reply o' = do
+    a <- liftPool $ allocateNewAddressInVault o'
+    let r' = encodeAddressToBytes a
+    reply (Response r')
+
+allocateNewAddressInVault :: Origin -> Pool Address
+allocateNewAddressInVault o' = undefined
+{-
+    Procedure:
+
+    1. Generate a random number.
+    2. See if it's already present in Vault. If so, return 1.
+    3. Write new number to Vault.
+    4. Return number.
+
+    This needs to be locked :/
+-}
+
+encodeAddressToBytes :: Address -> ByteString
+encodeAddressToBytes = undefined
 
 
 performUpdateRequest = undefined

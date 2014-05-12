@@ -76,4 +76,5 @@ format: $(SOURCES)
 clean:
 	-cabal clean
 	-rm tags
+	-rm *.prof
 
