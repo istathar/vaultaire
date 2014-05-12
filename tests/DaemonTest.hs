@@ -14,6 +14,7 @@ import TestHelpers
 import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
+import Vaultaire.OriginMap (Origin (..))
 import Vaultaire.RollOver
 import Vaultaire.Util
 
@@ -139,7 +140,7 @@ replyOne shutdown =
 
 reply :: Daemon (ByteString, ByteString)
 reply = do
-        Message rep_f origin' msg <- nextMessage
+        Message rep_f (Origin origin') msg <- nextMessage
         rep_f Success
         return (origin', msg)
 

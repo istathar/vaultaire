@@ -88,11 +88,11 @@ data Response = Success             -- ^ Signifies to the client to not
 --
 -- All mesages follow the same asyncronous response, reply pattern.
 data Message = Message
-    { replyF  :: ReplyF -- ^ Queue a reply to this message. This
+    { messageReplyF  :: ReplyF -- ^ Queue a reply to this message. This
                         --   will be transmitted automatically
                         --   at a later point.
-    , origin  :: Origin
-    , payload :: ByteString
+    , messageOrigin  :: Origin
+    , messagePayload :: ByteString
     }
 
 type ReplyF  = Response -> Daemon ()
@@ -264,10 +264,10 @@ dayMapsFromCeph origin' = do
             return $ Right (fromIntegral (BS.length contents), day_map)
 
 simpleDayOID :: Origin -> ByteString
-simpleDayOID origin'' = "02_" `BS.append` origin'' `BS.append` "_simple_days"
+simpleDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_simple_days"
 
 extendedDayOID :: Origin -> ByteString
-extendedDayOID origin'' = "02_" `BS.append` origin'' `BS.append` "_extended_days"
+extendedDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_extended_days"
 
 writeQueue :: MonadIO m => TBQueue a -> a -> m ()
 writeQueue q = liftIO . atomically . writeTBQueue q
@@ -297,7 +297,7 @@ listen router msg_chan ack_chan = forever $ do
             case msg of
                 [env_a, env_b, message_id, origin', payload'] -> do
                     let respond_f = respond (env_a, env_b, message_id)
-                    writeQueue msg_chan $ Message respond_f origin' payload'
+                    writeQueue msg_chan $ Message respond_f (Origin origin') payload'
                 n -> liftIO $ putStrLn $
                     "bad message recieved, " ++ show (length n)
                     ++ " parts; ignoring"
@@ -340,7 +340,7 @@ sendAcks router ack_chan = do
 
 
 bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
-bucketOID origin' epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
+bucketOID (Origin origin') epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
                                                       (BS.unpack origin')
                                                       bucket
                                                       epoch

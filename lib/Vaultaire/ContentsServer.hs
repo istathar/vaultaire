@@ -109,17 +109,17 @@ opcodeToWord64 op =
 
 
 performListRequest :: (Response -> Daemon ()) -> Origin -> Address -> Daemon ()
-performListRequest reply o' a = do
+performListRequest reply o a = do
     odm <- get
 
-    r' <- liftPool $ readContentsFromVault o' a
-    let r' = encodeContentsToBytes
+    r <- liftPool $ readContentsFromVault o a
+    let r' = encodeContentsToBytes r
 
     reply (Response r')
 
 
 readContentsFromVault :: Origin -> Address -> Pool ByteString
-readContentsFromVault o' = undefined
+readContentsFromVault o = undefined
 {-
     For the given address, read all the contents entries matching it. The
     latest entry is deemed most correct. Return that blob.
@@ -129,13 +129,13 @@ encodeContentsToBytes = undefined
 
 
 performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
-performRegisterRequest reply o' = do
-    a <- liftPool $ allocateNewAddressInVault o'
+performRegisterRequest reply o = do
+    a <- liftPool $ allocateNewAddressInVault o
     let r' = encodeAddressToBytes a
     reply (Response r')
 
 allocateNewAddressInVault :: Origin -> Pool Address
-allocateNewAddressInVault o' = undefined
+allocateNewAddressInVault o = undefined
 {-
     Procedure:
 

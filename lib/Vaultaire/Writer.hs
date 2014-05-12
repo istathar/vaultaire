@@ -393,4 +393,5 @@ writeSimple o e b payload =
         (,) <$> stat <*> writeFull payload
 
 writeLockOID :: Origin -> ByteString
-writeLockOID o = "02_" `BS.append` o `BS.append` "_write_lock"
+writeLockOID (Origin o') =
+    "02_" `BS.append` o' `BS.append` "_write_lock"

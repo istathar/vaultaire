@@ -68,15 +68,15 @@ updateLatest oid time = withExLock oid . liftPool $ do
     parse = either (const 0) id . tryUnpacking getWord64LE
 
 rollOver :: Origin -> ByteString -> ByteString -> NumBuckets -> Daemon ()
-rollOver origin' day_file latest_file buckets =
-    withExLock (simpleLatestOID origin') $ do
+rollOver origin day_file latest_file buckets =
+    withExLock (simpleLatestOID origin) $ do
         om <- get
-        expired <- cacheExpired om origin'
+        expired <- cacheExpired om origin
         unless expired $ do
             latest <- liftPool $ runObject latest_file readFull >>= mustLatest
 
             when (BS.length latest /= 8) $
-                error $ "corrupt latest file in origin': " ++ show origin'
+                error $ "corrupt latest file in origin': " ++ show origin
 
             app <- liftPool . runObject day_file $
                 append (latest `BS.append` build buckets)
@@ -93,10 +93,10 @@ originLockOID :: Origin -> ByteString
 originLockOID = simpleLatestOID
 
 simpleLatestOID :: Origin -> ByteString
-simpleLatestOID origin' = "02_" `BS.append` origin' `BS.append`
-                         "_simple_latest"
+simpleLatestOID (Origin origin') =
+    "02_" `BS.append` origin' `BS.append` "_simple_latest"
 
 extendedLatestOID :: Origin -> ByteString
-extendedLatestOID origin' = "02_" `BS.append` origin' `BS.append`
-                           "_extended_latest"
+extendedLatestOID (Origin origin') =
+    "02_" `BS.append` origin' `BS.append` "_extended_latest"
 

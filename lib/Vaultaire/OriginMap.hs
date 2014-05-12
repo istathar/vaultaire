@@ -1,6 +1,8 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Vaultaire.OriginMap
 (
-    Origin,
+    Origin(..),
     OriginMap,
     originLookup,
     originInsert,
@@ -9,10 +11,25 @@ module Vaultaire.OriginMap
 ) where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S
+import Data.Hashable
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import Data.String
+import GHC.Generics (Generic)
 
-type Origin = ByteString
+newtype Origin = Origin ByteString
+    deriving (Eq, Ord, Generic)
+
+instance Show Origin where
+    show (Origin o') = S.unpack o'
+
+instance Hashable Origin
+
+instance IsString Origin where
+--  fromString :: String -> Origin
+    fromString x = Origin (S.pack x)
+
 type OriginMap = HashMap Origin
 
 originLookup :: Origin -> OriginMap a -> Maybe a
