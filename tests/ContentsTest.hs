@@ -45,7 +45,10 @@ suite = do
             opcodeToWord64 (RemoveSourceTag 0 HashMap.empty) `shouldBe`   0x3
 
     describe "Source dictionaries" $ do
+        let s = HashMap.fromList [("metric","cpu"), ("server","www.example.com")]
+
         it "parses string to map" $ do
-            handleSourceArgument "foo:bar,server:www.example.com"
-            `shouldBe`
-            (HashMap.fromList [("foo","bar"), ("server","www.example.com")])
+            handleSourceArgument "server:www.example.com,metric:cpu" `shouldBe` s
+
+        it "encodes map to string" $ do
+            encodeSourceDict s `shouldBe` "metric:cpu,server:www.example.com"

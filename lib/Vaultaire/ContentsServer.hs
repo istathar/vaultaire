@@ -18,6 +18,7 @@ module Vaultaire.ContentsServer
     -- testing
     opcodeToWord64,
     handleSourceArgument,
+    encodeSourceDict,
     encodeAddressToBytes
 ) where
 
@@ -114,6 +115,17 @@ handleSourceArgument b' =
     toTag :: [ByteString] -> (Text, Text)
     toTag [k',v'] = (T.decodeUtf8 k', T.decodeUtf8 v')
     toTag _ = error "invalid source argument"
+
+
+encodeSourceDict :: SourceDict -> ByteString
+encodeSourceDict s =
+  let
+    pairs = HashMap.toList s
+
+    toBytes :: (Text, Text) -> ByteString
+    toBytes (k,v) = S.concat [T.encodeUtf8 k, ":", T.encodeUtf8 v]
+  in
+    S.intercalate "," $ map toBytes pairs
 
 
 failWithString :: (Response -> Daemon ()) -> String -> SomeException -> Daemon ()
