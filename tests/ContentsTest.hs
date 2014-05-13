@@ -43,3 +43,9 @@ suite = do
             opcodeToWord64 RegisterNewAddress `shouldBe`                0x1
             opcodeToWord64 (UpdateSourceTag 0 HashMap.empty) `shouldBe`   0x2
             opcodeToWord64 (RemoveSourceTag 0 HashMap.empty) `shouldBe`   0x3
+
+    describe "Source dictionaries" $ do
+        it "parses string to map" $ do
+            handleSourceArgument "foo:bar,server:www.example.com"
+            `shouldBe`
+            (HashMap.fromList [("foo","bar"), ("server","www.example.com")])

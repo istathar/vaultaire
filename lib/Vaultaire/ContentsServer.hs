@@ -17,6 +17,7 @@ module Vaultaire.ContentsServer
     Operation(..),
     -- testing
     opcodeToWord64,
+    handleSourceArgument,
     encodeAddressToBytes
 ) where
 
