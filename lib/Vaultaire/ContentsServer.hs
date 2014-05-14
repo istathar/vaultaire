@@ -45,7 +45,7 @@ import Vaultaire.OriginMap
 --
 
 data Operation =
-    ContentsListRequest Address |
+    ContentsListRequest |
     RegisterNewAddress |
     UpdateSourceTag Address SourceDict |
     RemoveSourceTag Address SourceDict
@@ -70,7 +70,7 @@ handleRequest (Message reply o p') =
     case tryUnpacking parseOperationMessage p' of
         Left err         -> failWithString reply "Unable to parse request message" err
         Right op -> case op of
-            ContentsListRequest a -> performListRequest reply o a
+            ContentsListRequest   -> performListRequest reply o
             RegisterNewAddress    -> performRegisterRequest reply o
             UpdateSourceTag a s   -> performUpdateRequest reply o a s
             RemoveSourceTag a s   -> performRemoveRequest reply o a s
@@ -81,8 +81,7 @@ parseOperationMessage = do
     word <- getWord64LE
     case word of
         0x0 -> do
-            a <- getWord64LE
-            return (ContentsListRequest a)
+            return ContentsListRequest
         0x1 -> do
             return RegisterNewAddress
         0x2 -> do
@@ -140,23 +139,23 @@ failWithString reply msg e = do
 opcodeToWord64 :: Operation -> Word64
 opcodeToWord64 op =
     case op of
-        ContentsListRequest _ -> 0x0
+        ContentsListRequest   -> 0x0
         RegisterNewAddress    -> 0x1
         UpdateSourceTag _ _   -> 0x2
         RemoveSourceTag _ _   -> 0x3
 
 
 
-performListRequest :: (Response -> Daemon ()) -> Origin -> Address -> Daemon ()
-performListRequest reply o a = do
+performListRequest :: (Response -> Daemon ()) -> Origin ->  Daemon ()
+performListRequest reply o = do
     -- TODO use origin day map to... er?
     _ <- get
 
-    liftPool $ readContentsFromVault o a
+    liftPool $ readContentsFromVault o
     >>= reply . Response
 
 
-readContentsFromVault :: Origin -> Address -> Pool ByteString
+readContentsFromVault :: Origin -> Pool ByteString
 readContentsFromVault = undefined
 {-
     For the given address, read all the contents entries matching it. The

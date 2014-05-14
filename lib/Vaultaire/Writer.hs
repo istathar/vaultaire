@@ -82,17 +82,17 @@ startWriter broker user pool batch_period = runDaemon broker user pool $ do
 dispatch :: NominalDiffTime
          -> Consumer Message (StateT DispatchMap Daemon) ()
 dispatch batch_period = do
-    m@(Message _ origin' _) <- await
+    m@(Message _ origin _) <- await
     let event = Msg m
     dispatch_map <- get
-    case originLookup origin' dispatch_map of
+    case originLookup origin dispatch_map of
         Just output -> do
             sent <- send' output event
             -- If it wasn't sent, the thread has shut itself down.
             if sent
                 then dispatch batch_period
-                else startThread origin' dispatch_map event
-        Nothing   -> startThread origin' dispatch_map event
+                else startThread origin dispatch_map event
+        Nothing   -> startThread origin dispatch_map event
   where
     send' o = liftIO . atomically . send o
 
@@ -136,8 +136,8 @@ processBatch period origin' input seal = do
             -- Process for a batch period
             start_state <- liftIO $ batchStateNow dms
             runEffect $ fromInput input
-                    >-> evalStateP start_state (processEvents period)
-                    >-> write origin'
+                      >-> evalStateP start_state (processEvents period)
+                      >-> write origin'
             liftIO $ atomically seal
 
 badOrigin :: Consumer Event Daemon ()

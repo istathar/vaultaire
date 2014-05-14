@@ -41,7 +41,7 @@ suite :: Spec
 suite = do
     describe "Contents Operations" $ do
         it "opcodes encode correctly" $ do
-            opcodeToWord64 (ContentsListRequest 0) `shouldBe`           0x0
+            opcodeToWord64 ContentsListRequest `shouldBe`           0x0
             opcodeToWord64 RegisterNewAddress `shouldBe`                0x1
             opcodeToWord64 (UpdateSourceTag 0 HashMap.empty) `shouldBe`   0x2
             opcodeToWord64 (RemoveSourceTag 0 HashMap.empty) `shouldBe`   0x3
