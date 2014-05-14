@@ -52,3 +52,7 @@ suite = do
 
         it "encodes map to string" $ do
             encodeSourceDict s `shouldBe` "metric:cpu,server:www.example.com"
+
+    describe "Addresses" $ do
+        it "encodes an address in base62" $ do
+            encodeAddressToString 0 `shouldBe` "00000000000"

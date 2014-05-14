@@ -30,7 +30,6 @@ library
                      Vaultaire.Writer,
                      Vaultaire.Reader,
                      Vaultaire.ReaderAlgorithms,
-                     Vaultaire.ContentsEncoding,
                      Vaultaire.ContentsServer
 
   other-modules:
@@ -59,7 +58,7 @@ library
                      stm,
                      async,
                      type-level,
-                     protobuf,
+                     locators >= 0.2.4,
                      rados-haskell >= 3
 
   ghc-options:       -O2

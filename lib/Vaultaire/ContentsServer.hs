@@ -19,7 +19,8 @@ module Vaultaire.ContentsServer
     opcodeToWord64,
     handleSourceArgument,
     encodeSourceDict,
-    encodeAddressToBytes
+    encodeAddressToBytes,
+    encodeAddressToString
 ) where
 
 import Control.Exception
@@ -28,6 +29,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import Data.Locator
 import Data.Packer
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
@@ -184,8 +186,10 @@ allocateNewAddressInVault o = undefined
 -}
 
 encodeAddressToBytes :: Address -> ByteString
-encodeAddressToBytes a = runPacking 8 $ do
-    putWord64LE a
+encodeAddressToBytes a = runPacking 8 (putWord64LE a)
+
+encodeAddressToString :: Address -> String
+encodeAddressToString = padWithZeros 11 . toBase62 . toInteger
 
 
 performUpdateRequest
