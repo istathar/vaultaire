@@ -11,11 +11,13 @@
 
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS -fno-warn-type-defaults #-}
 
 module Main where
 
 import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
+import Data.Word (Word64)
 
 import Test.Hspec hiding (pending)
 
@@ -56,3 +58,12 @@ suite = do
     describe "Addresses" $ do
         it "encodes an address in base62" $ do
             encodeAddressToString 0 `shouldBe` "00000000000"
+            encodeAddressToString (2^64-1) `shouldBe` "LygHa16AHYF"
+            encodeAddressToString (minBound :: Word64) `shouldBe` "00000000000"
+            encodeAddressToString (maxBound :: Word64) `shouldBe` "LygHa16AHYF"
+
+        it "decodes an address from base62" $ do
+            decodeStringAsAddress "00000000000" `shouldBe` 0
+            decodeStringAsAddress "00000000001" `shouldBe` 1
+            decodeStringAsAddress "LygHa16AHYF" `shouldBe` (2^64-1)
+            decodeStringAsAddress "LygHa16AHYG" `shouldBe` 0

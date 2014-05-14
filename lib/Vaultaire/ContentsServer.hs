@@ -20,7 +20,8 @@ module Vaultaire.ContentsServer
     handleSourceArgument,
     encodeSourceDict,
     encodeAddressToBytes,
-    encodeAddressToString
+    encodeAddressToString,
+    decodeStringAsAddress
 ) where
 
 import Control.Exception
@@ -189,6 +190,8 @@ encodeAddressToBytes a = runPacking 8 (putWord64LE a)
 encodeAddressToString :: Address -> String
 encodeAddressToString = padWithZeros 11 . toBase62 . toInteger
 
+decodeStringAsAddress :: String -> Address
+decodeStringAsAddress = fromIntegral . fromBase62
 
 performUpdateRequest
     :: (Response -> Daemon ())
