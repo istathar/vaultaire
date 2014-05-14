@@ -148,22 +148,21 @@ opcodeToWord64 op =
 
 performListRequest :: (Response -> Daemon ()) -> Origin -> Address -> Daemon ()
 performListRequest reply o a = do
-    odm <- get
+    -- TODO use origin day map to... er?
+    _ <- get
 
-    r <- liftPool $ readContentsFromVault o a
-    let r' = encodeContentsToBytes r
-
-    reply (Response r')
+    liftPool $ readContentsFromVault o a
+    >>= reply . Response
 
 
 readContentsFromVault :: Origin -> Address -> Pool ByteString
-readContentsFromVault o a = undefined
+readContentsFromVault = undefined
 {-
     For the given address, read all the contents entries matching it. The
-    latest entry is deemed most correct. Return that blob.
+    latest entry is deemed most correct. Return that blob. No attempt is made
+    to decode it; after all, the only way it could get in there is via the
+    update or remove opcodes.
 -}
-
-encodeContentsToBytes = undefined
 
 
 performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
@@ -172,7 +171,7 @@ performRegisterRequest reply o =
     >>= reply . Response . encodeAddressToBytes
 
 allocateNewAddressInVault :: Origin -> Pool Address
-allocateNewAddressInVault o = undefined
+allocateNewAddressInVault = undefined
 {-
     Procedure:
 
