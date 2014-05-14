@@ -167,10 +167,9 @@ encodeContentsToBytes = undefined
 
 
 performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
-performRegisterRequest reply o = do
-    a <- liftPool $ allocateNewAddressInVault o
-    let r' = encodeAddressToBytes a
-    reply (Response r')
+performRegisterRequest reply o =
+    liftPool (allocateNewAddressInVault o)
+    >>= reply . Response . encodeAddressToBytes
 
 allocateNewAddressInVault :: Origin -> Pool Address
 allocateNewAddressInVault o = undefined
