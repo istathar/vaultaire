@@ -30,6 +30,7 @@ library
                      Vaultaire.Writer,
                      Vaultaire.Reader,
                      Vaultaire.ReaderAlgorithms,
+                     Vaultaire.InternalStore,
                      Vaultaire.ContentsServer
 
   other-modules:
