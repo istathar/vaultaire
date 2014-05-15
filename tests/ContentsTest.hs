@@ -17,10 +17,10 @@ module Main where
 
 import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
-import Data.Word (Word64)
 
 import Test.Hspec hiding (pending)
 
+import Vaultaire.CoreTypes
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
 import Vaultaire.Util
@@ -59,8 +59,8 @@ suite = do
         it "encodes an address in base62" $ do
             encodeAddressToString 0 `shouldBe` "00000000000"
             encodeAddressToString (2^64-1) `shouldBe` "LygHa16AHYF"
-            encodeAddressToString (minBound :: Word64) `shouldBe` "00000000000"
-            encodeAddressToString (maxBound :: Word64) `shouldBe` "LygHa16AHYF"
+            encodeAddressToString (minBound :: Address) `shouldBe` "00000000000"
+            encodeAddressToString (maxBound :: Address) `shouldBe` "LygHa16AHYF"
 
         it "decodes an address from base62" $ do
             decodeStringAsAddress "00000000000" `shouldBe` 0

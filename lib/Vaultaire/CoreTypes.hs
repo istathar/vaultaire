@@ -12,7 +12,7 @@ import Data.Bits
 import Data.Word (Word64)
 
 newtype Address = Address Word64
-    deriving (Eq, Num)
+    deriving (Show, Eq, Num, Bounded)
 
 --
 -- | Which bucket does this address belong to?

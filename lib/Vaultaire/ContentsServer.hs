@@ -88,11 +88,11 @@ parseOperationMessage = do
         0x2 -> do
             a <- getWord64LE
             s <- parseSourceDict
-            return (UpdateSourceTag a s)
+            return (UpdateSourceTag (Address a) s)
         0x3 -> do
             a <- getWord64LE
             s <- parseSourceDict
-            return (RemoveSourceTag a s)
+            return (RemoveSourceTag (Address a) s)
         _   -> fail "Illegal op code"
 
 
@@ -185,10 +185,10 @@ allocateNewAddressInVault = undefined
 -}
 
 encodeAddressToBytes :: Address -> ByteString
-encodeAddressToBytes a = runPacking 8 (putWord64LE a)
+encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
 
 encodeAddressToString :: Address -> String
-encodeAddressToString = padWithZeros 11 . toBase62 . toInteger
+encodeAddressToString (Address a) = (padWithZeros 11 . toBase62 . toInteger) a
 
 decodeStringAsAddress :: String -> Address
 decodeStringAsAddress = fromIntegral . fromBase62

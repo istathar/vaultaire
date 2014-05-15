@@ -16,7 +16,6 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.ST
-import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Packer
 import Pipes
