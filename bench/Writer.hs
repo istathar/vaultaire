@@ -21,9 +21,9 @@ import TestHelpers (runTestDaemon, runTestPool)
 
 createDays :: Word64 -> Word64 -> IO ()
 createDays simple_buckets ext_buckets = runTestPool $ do
-    runObject "02_PONY_simple_days" $
+    _ <- runObject "02_PONY_simple_days" $
         writeFull (makeDayFile simple_buckets)
-    runObject "02_PONY_extended_days" $
+    _ <- runObject "02_PONY_extended_days" $
         writeFull (makeDayFile ext_buckets)
     return ()
 

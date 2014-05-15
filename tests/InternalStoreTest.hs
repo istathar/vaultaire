@@ -21,6 +21,7 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Test.QuickCheck.Test
 import TestHelpers
+import Vaultaire.CoreTypes
 import Vaultaire.InternalStore(writeTo, readFrom, enumerateOrigin)
 import Vaultaire.Daemon
 import Vaultaire.OriginMap
@@ -45,6 +46,6 @@ writeThenRead origins =
     forM origins $ \(origin,kvs) ->
         (origin,) <$> forM kvs (\(k, v) -> do
             let o = Origin origin
-            writeTo o k v >>= either error return
-            r <- readFrom o k
+            writeTo o (Address k) v >>= either error return
+            r <- readFrom o (Address k)
             either error (return . (k,)) r)

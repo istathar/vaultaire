@@ -15,6 +15,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Packer
 import System.Rados.Monadic
+import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
