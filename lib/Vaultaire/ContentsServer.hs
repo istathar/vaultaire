@@ -35,11 +35,11 @@ import Data.Packer
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
+import Pipes
 import System.Rados.Monadic
 
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon
-import Vaultaire.OriginMap
 import qualified Vaultaire.InternalStore as InternalStore
 
 --
@@ -147,24 +147,20 @@ opcodeToWord64 op =
         RemoveSourceTag _ _   -> 0x3
 
 
-
-performListRequest :: (Response -> Daemon ()) -> Origin ->  Daemon ()
-performListRequest reply o = do
-    -- TODO use origin day map to... er?
-    _ <- get
-
-    liftPool $ readContentsFromVault o
-    >>= reply . Response
-
-
-readContentsFromVault :: Origin -> Pool ByteString
-readContentsFromVault = undefined
 {-
     For the given address, read all the contents entries matching it. The
     latest entry is deemed most correct. Return that blob. No attempt is made
     to decode it; after all, the only way it could get in there is via the
     update or remove opcodes.
+
+    The use of a Pipe here allows us to stream the responses back to the
+    requesting client. Note that reply with Response can be used multiple
+    times, so each reply here represents one Address,SourceDict pair.
 -}
+performListRequest :: (Response -> Daemon ()) -> Origin ->  Daemon ()
+performListRequest reply o = do
+    runEffect $
+        for (InternalStore.enumerateOrigin o) (lift . reply . Response . encodeReply)
 
 
 performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
@@ -189,10 +185,13 @@ encodeAddressToBytes :: Address -> ByteString
 encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
 
 encodeAddressToString :: Address -> String
-encodeAddressToString (Address a) = (padWithZeros 11 . toBase62 . toInteger) a
+encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress
 
 decodeStringAsAddress :: String -> Address
 decodeStringAsAddress = fromIntegral . fromBase62
+
+encodeReply :: (Address,ByteString) -> ByteString
+encodeReply (a,x') = undefined
 
 performUpdateRequest
     :: (Response -> Daemon ())
