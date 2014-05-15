@@ -33,7 +33,6 @@ import qualified Pipes.Prelude as Pipes
 import System.Log.Logger
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon (Daemon)
-import Vaultaire.OriginMap (Origin (..))
 import Vaultaire.Reader (ReadDetails (..), Request (..), readExtended)
 import Vaultaire.Writer (BatchState (..), appendExtended, write)
 

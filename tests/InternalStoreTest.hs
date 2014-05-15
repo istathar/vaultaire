@@ -20,7 +20,12 @@ import System.ZMQ4.Monadic
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Test.QuickCheck.Test
+<<<<<<< HEAD
 import TestHelpers(runTestDaemon)
+=======
+import TestHelpers
+import Vaultaire.CoreTypes
+>>>>>>> 816f8827a8f01cd120f088e720c853846b6401ef
 import Vaultaire.InternalStore(writeTo, readFrom, enumerateOrigin)
 import Vaultaire.Daemon
 import Vaultaire.OriginMap
@@ -49,9 +54,15 @@ writeThenRead :: OriginAddressKeyValues -> Daemon OriginAddressKeyValues
 writeThenRead origins =
     forM origins $ \(origin,(k,v)) -> do
             let o = Origin origin
+<<<<<<< HEAD
             let a = Address k
             writeTo o a v
             r <- readFrom o a
             case r of
                 Just v' -> return (origin, (k, v'))
                 Nothing -> error "no value"
+=======
+            writeTo o (Address k) v >>= either error return
+            r <- readFrom o (Address k)
+            either error (return . (k,)) r)
+>>>>>>> 816f8827a8f01cd120f088e720c853846b6401ef

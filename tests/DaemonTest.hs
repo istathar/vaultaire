@@ -14,7 +14,7 @@ import TestHelpers
 import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
-import Vaultaire.OriginMap (Origin (..))
+import Vaultaire.CoreTypes (Origin (..))
 import Vaultaire.RollOver
 import Vaultaire.Util
 
