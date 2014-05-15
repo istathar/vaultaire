@@ -7,6 +7,7 @@
 -- made available to you by its authors as open source software:
 -- you can redistribute it and/or modify it under the terms of
 -- the BSD licence.
+--
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -19,19 +20,24 @@ module Vaultaire.InternalStore
     enumerateOrigin
 ) where
 
-import Vaultaire.Daemon (Daemon, Address)
+import Data.ByteString (ByteString)
 import Pipes
-import Vaultaire.OriginMap(Origin(..))
-import Data.ByteString(ByteString)
+import Vaultaire.Daemon (Address, Daemon)
+import Vaultaire.OriginMap (Origin (..))
 
 -- | Given an origin and an address, write the given bytes.
-writeTo :: Origin -> Address -> ByteString -> Daemon ()
-writeTo = undefined
+writeTo :: Origin -> Address -> ByteString -> Daemon (Either String ())
+writeTo (Origin o') a payload = liftPool $ do
+    return (Right ())
 
 -- | Given an origin and an address, read the avaliable bytes.
-readFrom :: Origin -> Address -> Daemon ByteString
+readFrom :: Origin -> Address -> Daemon (Either String ByteString)
 readFrom = undefined
 
 -- | Provide a Producer of address and payload tuples.
 enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()
 enumerateOrigin = undefined
+
+
+internalStoreLockOID :: Origin -> ByteString
+internalStoreLockOID (Origin o') = S.append ["02_", o', "_internal"]
