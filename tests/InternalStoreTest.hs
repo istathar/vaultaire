@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE TupleSections     #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
@@ -11,7 +11,9 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
+import Data.Function (on)
 import Data.List (foldl', groupBy, nubBy, sort)
+import Data.List
 import Data.List.NonEmpty (fromList)
 import Data.Monoid
 import Data.Word
@@ -20,13 +22,11 @@ import System.ZMQ4.Monadic
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Test.QuickCheck.Test
-import TestHelpers(runTestDaemon)
-import Vaultaire.InternalStore(writeTo, readFrom, enumerateOrigin)
-import Vaultaire.Daemon
-import Vaultaire.OriginMap
+import TestHelpers (runTestDaemon)
 import Vaultaire.CoreTypes
-import Data.List
-import Data.Function(on)
+import Vaultaire.Daemon
+import Vaultaire.InternalStore (enumerateOrigin, readFrom, writeTo)
+import Vaultaire.OriginMap
 
 instance Arbitrary ByteString where
     arbitrary = BS.pack <$> arbitrary
@@ -36,7 +36,7 @@ main = do
     result <- quickCheckResult propWriteThenRead
     unless (isSuccess result) exitFailure
 
-type OriginAddressKeyValues = [(ByteString, (Word64, ByteString))] 
+type OriginAddressKeyValues = [(ByteString, (Word64, ByteString))]
 
 propWriteThenRead :: OriginAddressKeyValues -> Property
 propWriteThenRead origins = monadicIO $ do

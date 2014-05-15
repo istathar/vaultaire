@@ -20,9 +20,9 @@ import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
-import Vaultaire.CoreTypes
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
+import Vaultaire.CoreTypes
 import Vaultaire.Util
 
 
