@@ -37,6 +37,7 @@ import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
 import System.Rados.Monadic
 
+import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.OriginMap
 

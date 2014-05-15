@@ -28,6 +28,8 @@ import Foreign.Ptr
 import Foreign.Storable
 import Prelude hiding (filter)
 
+import Vaultaire.CoreTypes (Address (..))
+
 data Point = Point { address :: !Word64
                    , time    :: !Word64
                    , payload :: !Word64
@@ -110,8 +112,8 @@ deDuplicate input
 -- | Filter and de-duplicate a bucket in-place. The original bytestring will be
 -- garbage after completion.
 processBucket :: (PrimMonad m, Functor m)
-              => ByteString -> Word64 -> Word64 -> Word64 -> m ByteString
-processBucket bucket addr start end =
+              => ByteString -> Address -> Word64 -> Word64 -> m ByteString
+processBucket bucket (Address addr) start end =
     vectorToByteString <$> (V.thaw (byteStringToVector bucket)
                             >>= filter addr start end
                             >>= deDuplicate
@@ -121,7 +123,7 @@ processBucket bucket addr start end =
 -- transfer.
 mergeSimpleExtended :: (PrimMonad m, Functor m)
                     => ByteString -> ByteString
-                    -> Word64 -> Word64 -> Word64
+                    -> Address -> Word64 -> Word64
                     -> m ByteString
 mergeSimpleExtended simple extended addr start end = do
     de_duped <- byteStringToVector <$> processBucket simple addr start end

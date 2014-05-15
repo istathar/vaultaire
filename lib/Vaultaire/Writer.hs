@@ -23,7 +23,6 @@ import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.State.Strict
-import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Lazy (toStrict)
@@ -40,6 +39,7 @@ import Pipes.Concurrent
 import Pipes.Lift
 import System.Log.Logger
 import System.Rados.Monadic hiding (async)
+import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
@@ -194,25 +194,23 @@ processPoints offset message day_maps origin latest_simple latest_ext
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (simple_epoch, simple_buckets) = lookupFirst time (fst day_maps)
 
-        let masked_address = address `clearBit` 0
-        let simple_bucket = masked_address `mod` simple_buckets
-
         -- The LSB of the address lets us know if it is an extended message or
         -- not. Set means extended.
-        if address `testBit` 0
+        if isAddressExtended address
             then do
                 let len = fromIntegral payload
                 let str | len == 0 = "" -- will fail bounds check without this
                         | otherwise =
                             runUnpacking (getBytesAt (offset + 24) len) message
                 let (ext_epoch, ext_buckets) = lookupFirst time (snd day_maps)
-                let ext_bucket = masked_address `mod` ext_buckets
+                let ext_bucket = calculateBucketNumber ext_buckets address
                 appendExtended ext_epoch ext_bucket address time len str
                 let !t | time > latest_ext = time
                        | otherwise         = latest_ext
                 processPoints (offset + 24 + len) message day_maps origin latest_simple t
             else do
                 let message_bytes = runUnpacking (getBytesAt offset 24) message
+                let simple_bucket = calculateBucketNumber simple_buckets address
                 appendSimple simple_epoch simple_bucket message_bytes
                 let !t | time > latest_simple = time
                        | otherwise            = latest_simple
@@ -221,7 +219,8 @@ processPoints offset message day_maps origin latest_simple latest_ext
 parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
 parseMessageAt offset = do
     unpackSetPosition (fromIntegral offset)
-    (,,) <$> getWord64LE <*> getWord64LE <*> getWord64LE
+    (,,) <$> (Address <$> getWord64LE) <*> getWord64LE <*> getWord64LE
+
 
 getBytesAt :: Word64 -> Word64 -> Unpacking ByteString
 getBytesAt offset len = do
@@ -243,7 +242,7 @@ appendSimple epoch bucket bytes = do
 
 appendExtended :: MonadState BatchState m
                => Epoch -> Bucket -> Address -> Time -> Word64 -> ByteString -> m ()
-appendExtended epoch bucket address time len string = do
+appendExtended epoch bucket (Address address) time len string = do
     s <- get
 
     -- First we write to the simple bucket, inserting a closure that will
