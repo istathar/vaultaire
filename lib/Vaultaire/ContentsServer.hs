@@ -40,6 +40,7 @@ import System.Rados.Monadic
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.OriginMap
+import qualified Vaultaire.InternalStore as InternalStore
 
 --
 -- Daemon implementation
@@ -200,19 +201,28 @@ performUpdateRequest
     -> SourceDict
     -> Daemon ()
 performUpdateRequest reply o a s = do
-    s0 <- liftPool $ retreiveSourceTagsForAddress o a
+    s0 <- retreiveSourceTagsForAddress o a
 
     -- elements in first map win
     let s1 = HashMap.union s s0
 
-    liftPool $ writeSourceTagsForAddress o a s1
+    writeSourceTagsForAddress o a s1
     reply Success
 
-retreiveSourceTagsForAddress :: Origin -> Address -> Pool SourceDict
-retreiveSourceTagsForAddress = undefined
+retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
+retreiveSourceTagsForAddress o a = do
+    result <- InternalStore.readFrom o a
+    return $ case result of
+        Left err    -> error err    -- FIXME better error handling via reply function
+        Right b'    -> handleSourceArgument b'
 
-writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Pool ()
-writeSourceTagsForAddress = undefined
+
+writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
+writeSourceTagsForAddress o a s = do
+    result <- InternalStore.writeTo o a (encodeSourceDict s)
+    case result of
+        Left err    -> error err    -- FIXME better error handling via reply function
+        Right ()    -> return ()
 
 
 performRemoveRequest
@@ -222,11 +232,11 @@ performRemoveRequest
     -> SourceDict
     -> Daemon ()
 performRemoveRequest reply o a s = do
-    s0 <- liftPool $ retreiveSourceTagsForAddress o a
+    s0 <- retreiveSourceTagsForAddress o a
 
     -- elements of first not existing in second
     let s1 = HashMap.difference s0 s
 
-    liftPool $ writeSourceTagsForAddress o a s1
+    writeSourceTagsForAddress o a s1
     reply Success
 
