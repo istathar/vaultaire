@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
@@ -11,15 +11,16 @@ module Vaultaire.CoreTypes
 ) where
 
 import Data.Bits
-import Data.String
-import Data.Hashable
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.Hashable
+import Data.String
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
-newtype Address = Address Word64
-    deriving (Show, Eq, Num, Bounded)
+newtype Address = Address {
+    unAddress :: Word64
+} deriving (Show, Eq, Num, Bounded)
 
 --
 -- | Which bucket does this address belong to?
