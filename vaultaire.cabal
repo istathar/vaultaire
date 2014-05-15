@@ -46,6 +46,7 @@ library
                      containers,
                      primitive,
                      spool,
+                     pipes-parse,
                      hslogger,
                      lens,
                      pipes,
@@ -223,6 +224,29 @@ test-suite           reader-algorithms-test
                      -Wwarn
                      -fwarn-tabs
 
+test-suite           identity-test
+  hs-source-dirs:    tests
+  main-is:           IdentityTest.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     containers,
+                     QuickCheck,
+                     vector,
+                     rados-haskell,
+                     semigroups,
+                     mtl,
+                     bytestring,
+                     zeromq4-haskell,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
 
 test-suite           internal-store-test
   hs-source-dirs:    tests

@@ -20,31 +20,38 @@ import System.ZMQ4.Monadic
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Test.QuickCheck.Test
-import TestHelpers
+import TestHelpers(runTestDaemon)
 import Vaultaire.InternalStore(writeTo, readFrom, enumerateOrigin)
 import Vaultaire.Daemon
 import Vaultaire.OriginMap
+import Vaultaire.CoreTypes
+import Data.List
+import Data.Function(on)
 
 instance Arbitrary ByteString where
     arbitrary = BS.pack <$> arbitrary
 
 main :: IO ()
 main = do
-    result <- verboseCheckResult propWriteThenRead
+    result <- quickCheckResult propWriteThenRead
     unless (isSuccess result) exitFailure
 
-type OriginAddressKeyValues = [(ByteString, [(Word64, ByteString)])] 
+type OriginAddressKeyValues = [(ByteString, (Word64, ByteString))] 
 
 propWriteThenRead :: OriginAddressKeyValues -> Property
 propWriteThenRead origins = monadicIO $ do
-    origins' <- run $ runTestDaemon "tcp://localhost:1234" $ writeThenRead origins
+    let nubbed = nubBy ((==) `on` fst) origins
+    origins' <- run $ runTestDaemon "tcp://localhost:1234" $ writeThenRead nubbed
+    unless (origins == origins') $ run $ print (origins, origins')
     assert $ origins == origins'
 
 writeThenRead :: OriginAddressKeyValues -> Daemon OriginAddressKeyValues
 writeThenRead origins =
-    forM origins $ \(origin,kvs) ->
-        (origin,) <$> forM kvs (\(k, v) -> do
+    forM origins $ \(origin,(k,v)) -> do
             let o = Origin origin
-            writeTo o k v >>= either error return
-            r <- readFrom o k
-            either error (return . (k,)) r)
+            let a = Address k
+            writeTo o a v
+            r <- readFrom o a
+            case r of
+                Just v' -> return (origin, (k, v'))
+                Nothing -> error "no value"

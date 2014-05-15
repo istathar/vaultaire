@@ -12,6 +12,7 @@ module Vaultaire.Writer
     processPoints,
     appendExtended,
     appendSimple,
+    write,
     batchStateNow,
     BatchState(..),
     Event(..),

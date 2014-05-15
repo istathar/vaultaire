@@ -14,7 +14,6 @@ import Data.Monoid
 import Data.Time
 import Pipes
 import Pipes.Lift
-import Pipes.Parse
 import System.Rados.Monadic
 import System.ZMQ4.Monadic hiding (Event)
 import Test.Hspec hiding (pending)
