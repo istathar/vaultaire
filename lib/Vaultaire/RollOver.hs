@@ -18,7 +18,6 @@ import System.Rados.Monadic
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.DayMap
-import Vaultaire.OriginMap
 
 -- | Roll the cluster onto a new "vault day", this will block until all other
 -- daemons are synchronized at acquiring any shared locks.
