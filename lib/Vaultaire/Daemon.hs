@@ -17,7 +17,7 @@ module Vaultaire.Daemon
     Response(..),
     Message(..),
     ReplyF,
-    Address,
+    Address(..),
     Payload,
     Bucket,
     -- * Functions
@@ -54,6 +54,7 @@ import System.Rados.Monadic (Pool, runConnect, parseConfig, runPool, withSharedL
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 import Text.Printf
+import Vaultaire.CoreTypes
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.Util
@@ -96,7 +97,6 @@ data Message = Message
     }
 
 type ReplyF  = Response -> Daemon ()
-type Address = Word64
 type Payload = Word64
 type Bucket  = Word64
 

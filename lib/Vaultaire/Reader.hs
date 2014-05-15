@@ -16,11 +16,11 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.ST
-import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Packer
 import Pipes
 import System.Rados.Monadic
+import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
@@ -73,7 +73,7 @@ readSimple :: Origin -> Request Simple -> (ByteString -> Daemon ())
            -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readSimple origin' (Simple (ReadDetails addr start end)) fail_f = forever $ do
     (epoch, num_buckets) <- await
-    let bucket = (addr `clearBit` 0) `mod` num_buckets
+    let bucket = calculateBucketNumber num_buckets addr
     let bucket_oid = bucketOID origin' epoch bucket "simple"
     contents <- lift $ liftPool $ runObject bucket_oid readFull
     case contents of
@@ -97,11 +97,11 @@ processExtended e@(Extended (ReadDetails _ start end)) origin' reply_f = do
 
 readExtended :: Origin -> Request Extended -> (ByteString -> Daemon ())
              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtended origin' (Extended (ReadDetails addr start end)) fail_f = forever $ do
+readExtended origin (Extended (ReadDetails addr start end)) fail_f = forever $ do
     (epoch, num_buckets) <- await
-    let bucket = (addr `clearBit` 0) `mod` num_buckets
-    let simple_oid = bucketOID origin' epoch bucket "simple"
-    let extended_oid = bucketOID origin' epoch bucket "extended"
+    let bucket = calculateBucketNumber num_buckets addr
+    let simple_oid = bucketOID origin epoch bucket "simple"
+    let extended_oid = bucketOID origin epoch bucket "extended"
 
     (a_simple, a_extended) <- lift $ liftPool $ runAsync $
         (,) <$> runObject simple_oid readFull
@@ -142,7 +142,7 @@ classifyPayload payload' =
     case tryUnpacking unpackReadDetails payload' of
         Left e -> SomeRequest $ Invalid $ show e
         Right d@(ReadDetails address _ _) ->
-            if address `testBit` 0
+            if isAddressExtended address
                 then SomeRequest $ Extended d
                 else SomeRequest $ Simple d
 
@@ -150,5 +150,5 @@ unpackReadDetails :: Unpacking ReadDetails
 unpackReadDetails = do
     request_type <- getWord64LE
     if request_type == 0
-        then ReadDetails <$> getWord64LE <*> getWord64LE <*> getWord64LE
+        then ReadDetails <$> (Address <$> getWord64LE) <*> getWord64LE <*> getWord64LE
         else fail "Zero header is reserved for future use"
