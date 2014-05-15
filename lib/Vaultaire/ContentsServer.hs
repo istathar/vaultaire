@@ -212,16 +212,13 @@ retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
 retreiveSourceTagsForAddress o a = do
     result <- InternalStore.readFrom o a
     return $ case result of
-        Left err    -> error err    -- FIXME better error handling via reply function
-        Right b'    -> handleSourceArgument b'
+        Just b'     -> handleSourceArgument b'
+        Nothing     -> HashMap.empty
 
 
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
 writeSourceTagsForAddress o a s = do
-    result <- InternalStore.writeTo o a (encodeSourceDict s)
-    case result of
-        Left err    -> error err    -- FIXME better error handling via reply function
-        Right ()    -> return ()
+    InternalStore.writeTo o a (encodeSourceDict s)
 
 
 performRemoveRequest
