@@ -50,7 +50,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Word (Word64)
 import System.Log.Logger
-import System.Rados.Monadic hiding (Async, async)
+import System.Rados.Monadic (Pool, runConnect, parseConfig, runPool, withSharedLock, withExclusiveLock, runObject, stat, fileSize, runObject, readFull)
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 import Text.Printf

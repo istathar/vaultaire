@@ -58,7 +58,6 @@ library
                      packer,
                      stm,
                      async,
-                     type-level,
                      locators >= 0.2.4,
                      rados-haskell >= 3
 
@@ -67,7 +66,6 @@ library
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 executable marquised
@@ -75,7 +73,7 @@ executable marquised
   main-is:           Marquise.hs
   default-language:  Haskell2010
   include-dirs:      .
-  build-depends:     base >=4.6 && <4.7,
+  build-depends:     base >=3 && <5,
                      lz4,
                      zeromq4-haskell,
                      containers,
@@ -85,8 +83,7 @@ executable marquised
                      text,
                      mtl,
                      bytestring,
-                     async,
-                     saltine
+                     async
                      
 
 executable vault
@@ -108,7 +105,6 @@ executable vault
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
   ghc-prof-options:  -fprof-auto
 
@@ -147,7 +143,6 @@ test-suite           daymap-test
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 test-suite           writer-test
@@ -176,7 +171,6 @@ test-suite           writer-test
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 test-suite           reader-test
@@ -204,7 +198,6 @@ test-suite           reader-test
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 test-suite           reader-algorithms-test
@@ -228,12 +221,11 @@ test-suite           reader-algorithms-test
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
-test-suite           identity-test
+test-suite           internal-store-test
   hs-source-dirs:    tests
-  main-is:           IdentityTest.hs
+  main-is:           InternalStoreTest.hs
   type:              exitcode-stdio-1.0
   default-language:  Haskell2010
 
@@ -254,7 +246,6 @@ test-suite           identity-test
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 test-suite           contents-test
@@ -283,7 +274,6 @@ test-suite           contents-test
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 benchmark writer-bench
@@ -305,7 +295,6 @@ benchmark writer-bench
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 benchmark reader-algorithms
@@ -326,7 +315,6 @@ benchmark reader-algorithms
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-                     -fno-warn-missing-signatures
 
 
 -- vim: set tabstop=21 expandtab:

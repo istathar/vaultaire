@@ -27,8 +27,7 @@ import Vaultaire.OriginMap (Origin (..))
 
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon (Either String ())
-writeTo (Origin o') a payload = liftPool $ do
-    return (Right ())
+writeTo = undefined
 
 -- | Given an origin and an address, read the avaliable bytes.
 readFrom :: Origin -> Address -> Daemon (Either String ByteString)
@@ -39,5 +38,5 @@ enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()
 enumerateOrigin = undefined
 
 
-internalStoreLockOID :: Origin -> ByteString
-internalStoreLockOID (Origin o') = S.append ["02_", o', "_internal"]
+--internalStoreLockOID :: Origin -> ByteString
+--internalStoreLockOID (Origin o') = S.append ["02_", o', "_internal"]
