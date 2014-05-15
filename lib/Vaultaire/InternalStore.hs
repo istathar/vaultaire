@@ -21,8 +21,9 @@ module Vaultaire.InternalStore
 ) where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S
 import Pipes
-import Vaultaire.Daemon (Address, Daemon)
+import Vaultaire.Daemon
 import Vaultaire.OriginMap (Origin (..))
 
 -- | Given an origin and an address, write the given bytes.
@@ -40,4 +41,4 @@ enumerateOrigin = undefined
 
 
 internalStoreLockOID :: Origin -> ByteString
-internalStoreLockOID (Origin o') = S.append ["02_", o', "_internal"]
+internalStoreLockOID (Origin o') = S.concat ["02_", o', "_internal"]
