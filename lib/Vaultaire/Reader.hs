@@ -5,11 +5,12 @@
 module Vaultaire.Reader
 (
     startReader,
+    readExtended,
+    ReadDetails(..),
     -- Testing
     classifyPayload,
     SomeRequest(..),
     Request(..),
-
 ) where
 
 import Control.Applicative
@@ -25,7 +26,6 @@ import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
-
 
 data Simple
 data Extended
