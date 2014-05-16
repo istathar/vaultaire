@@ -21,7 +21,7 @@ module Vaultaire.ContentsServer
     encodeSourceDict,
     encodeAddressToBytes,
     encodeAddressToString,
-    encodeReply,
+    encodeContentsListEntry,
     decodeStringAsAddress
 ) where
 
@@ -162,7 +162,7 @@ opcodeToWord64 op =
 performListRequest :: (Response -> Daemon ()) -> Origin ->  Daemon ()
 performListRequest reply o = do
     runEffect $
-        for (InternalStore.enumerateOrigin o) (lift . reply . Response . encodeReply)
+        for (InternalStore.enumerateOrigin o) (lift . reply . Response . encodeContentsListEntry)
 
 
 performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
@@ -192,8 +192,8 @@ encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress
 decodeStringAsAddress :: String -> Address
 decodeStringAsAddress = fromIntegral . fromBase62
 
-encodeReply :: (Address, ByteString) -> ByteString
-encodeReply ((Address a), x') =
+encodeContentsListEntry :: (Address, ByteString) -> ByteString
+encodeContentsListEntry ((Address a), x') =
   let
     len  = B.length x'
     size = 8 + 8 + len

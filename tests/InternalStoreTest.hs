@@ -19,13 +19,13 @@ import Data.Monoid
 import Data.Word
 import System.Exit
 import System.ZMQ4.Monadic
+import Test.Hspec
+import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Test.QuickCheck.Test
 import TestHelpers (runTestDaemon)
 import Vaultaire.CoreTypes
-import Test.Hspec
-import Test.Hspec.QuickCheck
 import Vaultaire.Daemon
 import Vaultaire.InternalStore (enumerateOrigin, readFrom, writeTo)
 import Vaultaire.OriginMap

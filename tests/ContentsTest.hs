@@ -79,13 +79,13 @@ suite = do
         s2' = encodeSourceDict s2
       in do
         it "single source response correctly encoded" $ do
-            encodeReply (a1,s1') `shouldBe`
+            encodeContentsListEntry (a1,s1') `shouldBe`
                 "\x01\x00\x00\x00\x00\x00\x00\x00\
                 \\x21\x00\x00\x00\x00\x00\x00\x00\
                 \metric:cpu,server:www.example.com"
 
         it "multiple sources response correctly encoded" $ do
-            B.concat [encodeReply (a1,s1'), encodeReply (a2,s2')] `shouldBe`
+            B.concat [encodeContentsListEntry (a1,s1'), encodeContentsListEntry (a2,s2')] `shouldBe`
                 "\x01\x00\x00\x00\x00\x00\x00\x00\
                 \\x21\x00\x00\x00\x00\x00\x00\x00\
                 \metric:cpu,server:www.example.com\
