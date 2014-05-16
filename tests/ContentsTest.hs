@@ -15,6 +15,7 @@
 
 module Main where
 
+import qualified Data.ByteString as B
 import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
 
@@ -39,8 +40,8 @@ main = do
 
 suite :: Spec
 suite = do
-    describe "Contents Operations" $ do
-        it "opcodes encode correctly" $ do
+    describe "Requests" $ do
+        it "Operations encode correctly" $ do
             opcodeToWord64 ContentsListRequest `shouldBe`           0x0
             opcodeToWord64 RegisterNewAddress `shouldBe`                0x1
             opcodeToWord64 (UpdateSourceTag 0 HashMap.empty) `shouldBe`   0x2
@@ -67,3 +68,28 @@ suite = do
             decodeStringAsAddress "00000000001" `shouldBe` 1
             decodeStringAsAddress "LygHa16AHYF" `shouldBe` (2^64-1)
             decodeStringAsAddress "LygHa16AHYG" `shouldBe` 0
+
+    describe "Contents list reply" $
+      let
+        a1  = 1
+        s1  = HashMap.fromList [("metric","cpu"), ("server","www.example.com")]
+        s1' = encodeSourceDict s1
+        a2  = 2
+        s2  = HashMap.fromList [("metric","eth0"), ("server","db3.example.com")]
+        s2' = encodeSourceDict s2
+      in do
+        it "single source response correctly encoded" $ do
+            encodeReply (a1,s1') `shouldBe`
+                "\x01\x00\x00\x00\x00\x00\x00\x00\
+                \\x21\x00\x00\x00\x00\x00\x00\x00\
+                \metric:cpu,server:www.example.com"
+
+        it "multiple sources response correctly encoded" $ do
+            B.concat [encodeReply (a1,s1'), encodeReply (a2,s2')] `shouldBe`
+                "\x01\x00\x00\x00\x00\x00\x00\x00\
+                \\x21\x00\x00\x00\x00\x00\x00\x00\
+                \metric:cpu,server:www.example.com\
+                \\x02\x00\x00\x00\x00\x00\x00\x00\
+                \\x22\x00\x00\x00\x00\x00\x00\x00\
+                \metric:eth0,server:db3.example.com"
+
