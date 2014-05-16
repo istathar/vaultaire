@@ -24,6 +24,8 @@ import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import Test.QuickCheck.Test
 import TestHelpers (runTestDaemon)
 import Vaultaire.CoreTypes
+import Test.Hspec
+import Test.Hspec.QuickCheck
 import Vaultaire.Daemon
 import Vaultaire.InternalStore (enumerateOrigin, readFrom, writeTo)
 import Vaultaire.OriginMap
@@ -32,10 +34,17 @@ instance Arbitrary ByteString where
     arbitrary = BS.pack <$> arbitrary
 
 main :: IO ()
-main = do
-    result <- quickCheckResult propWriteThenRead
-    unless (isSuccess result) exitFailure
+main = hspec suite
 
+suite :: Spec
+suite = do
+    describe "identity QuickCheck" $
+        it "writes then reads" $ property propWriteThenRead
+
+    describe "writing" $
+        it "writes simple bucket correctly" $ pending
+            -- readObject "02_PONY_INTERNAL_00000000000000000004_00000000000000000000_simple"
+            --
 type OriginAddressKeyValues = [(ByteString, (Word64, ByteString))]
 
 propWriteThenRead :: OriginAddressKeyValues -> Property

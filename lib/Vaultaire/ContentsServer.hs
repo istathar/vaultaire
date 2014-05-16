@@ -228,7 +228,7 @@ retreiveSourceTagsForAddress o a = do
 
 
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
-writeSourceTagsForAddress o a s = do
+writeSourceTagsForAddress o a s =
     InternalStore.writeTo o a (encodeSourceDict s)
 
 

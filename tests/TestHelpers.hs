@@ -19,6 +19,7 @@ module TestHelpers
     extendedMessage,
     sendTestMsg,
     startTestDaemons,
+    retrieveObject,
 )
 where
 
@@ -122,3 +123,5 @@ startTestDaemons = do
     linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
     linkThread $ startReader "tcp://localhost:5571" Nothing "test"
 
+retrieveObject :: ByteString -> IO (Either RadosError ByteString)
+retrieveObject = runTestPool . flip runObject readFull
