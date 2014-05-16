@@ -25,7 +25,6 @@ import System.Rados.Monadic
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.DayMap
-import Vaultaire.OriginMap
 import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
 
 data Simple

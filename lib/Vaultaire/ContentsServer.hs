@@ -21,12 +21,14 @@ module Vaultaire.ContentsServer
     encodeSourceDict,
     encodeAddressToBytes,
     encodeAddressToString,
+    encodeReply,
     decodeStringAsAddress
 ) where
 
 import Control.Exception
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -190,8 +192,17 @@ encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress
 decodeStringAsAddress :: String -> Address
 decodeStringAsAddress = fromIntegral . fromBase62
 
-encodeReply :: (Address,ByteString) -> ByteString
-encodeReply (a,x') = undefined
+encodeReply :: (Address, ByteString) -> ByteString
+encodeReply ((Address a), x') =
+  let
+    len  = B.length x'
+    size = 8 + 8 + len
+  in
+    runPacking size $ do
+        putWord64LE a
+        putWord64LE (fromIntegral $ len)
+        putBytes x'
+
 
 performUpdateRequest
     :: (Response -> Daemon ())
@@ -212,13 +223,14 @@ retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
 retreiveSourceTagsForAddress o a = do
     result <- InternalStore.readFrom o a
     return $ case result of
-        Nothing  -> error $ "no data for address: " ++ show a -- FIXME better error handling via reply function
-        Just b'  -> handleSourceArgument b'
+        Just b'     -> handleSourceArgument b'
+        Nothing     -> HashMap.empty
 
 
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
 writeSourceTagsForAddress o a s =
     InternalStore.writeTo o a (encodeSourceDict s)
+
 
 performRemoveRequest
     :: (Response -> Daemon ())
