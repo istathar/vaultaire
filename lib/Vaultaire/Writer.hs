@@ -390,7 +390,7 @@ writeExtended o e b payload =
 writeSimple :: Origin -> Epoch -> Bucket -> ByteString -> Pool (AsyncRead StatResult, AsyncWrite)
 writeSimple o e b payload =
     runAsync $ runObject (bucketOID o e b "simple") $
-        (,) <$> stat <*> writeFull payload
+        (,) <$> stat <*> (append payload)
 
 writeLockOID :: Origin -> ByteString
 writeLockOID (Origin o') =

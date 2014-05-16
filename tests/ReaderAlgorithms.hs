@@ -53,6 +53,12 @@ suite = do
            >>= V.freeze
            >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 2])
 
+        it "last must preserve last write" $ 
+           V.thaw (V.fromList [Point 1 2 2, Point 1 2 3, Point 0 0 0])
+           >>= A.deDuplicateLast
+           >>= V.freeze
+           >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 3])
+
         it "should retain no duplicates" $ property propNoDuplicates
         it "should sort" $ property propSorted
 

@@ -32,7 +32,7 @@ isAddressExtended :: Address -> Bool
 isAddressExtended (Address addr) = addr `testBit` 0
 
 
-newtype Origin = Origin ByteString
+newtype Origin = Origin { unOrigin :: ByteString }
     deriving (Eq, Ord, Generic)
 
 instance Show Origin where

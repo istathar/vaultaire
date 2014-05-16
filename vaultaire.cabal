@@ -261,6 +261,8 @@ test-suite           internal-store-test
                      vector,
                      rados-haskell,
                      semigroups,
+                     locators >= 0.2.4,
+                     pipes-parse,
                      mtl,
                      bytestring,
                      zeromq4-haskell,
