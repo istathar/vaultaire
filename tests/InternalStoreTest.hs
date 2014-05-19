@@ -76,7 +76,6 @@ suite = do
                 writeTo (Origin "PONY") (Address 128) "Hai1"
                 writeTo (Origin "PONY") (Address 0) "Hai2"
                 writeTo (Origin "PONY") (Address 128) "Hai3" -- overwrite
-                liftPool objects >>= liftIO . print
 
                 evalStateT drawAll (enumerateOrigin "PONY")
             addrs `shouldBe` [((Address 0), "Hai2"), ((Address 128), "Hai3")]
@@ -86,10 +85,13 @@ suite = do
 
 propWriteThenRead :: (Origin, Address, ByteString) -> Property
 propWriteThenRead arb@(_,_,payload) = monadicIO $ do
-    payload' <- run $ runTestDaemon "tcp://localhost:1234" $ writeThenRead arb
-    assert $ payload == payload'
+    (enumeration, read') <- run $ runTestDaemon "tcp://localhost:1234" $ writeThenRead arb
+    assert $ (enumeration == read') && (read' == payload)
 
-writeThenRead :: (Origin, Address, ByteString) -> Daemon ByteString
+writeThenRead :: (Origin, Address, ByteString) -> Daemon (ByteString, ByteString)
 writeThenRead (o,a,p) = do
         writeTo o a p
-        readFrom o a >>= maybe (error "no value") return
+        [(a', e)] <- evalStateT drawAll (enumerateOrigin o)
+        unless (a' == a) $ error "invalid address from enumeration"
+        r <- readFrom o a >>= maybe (error "no value") return
+        return (e,r)
