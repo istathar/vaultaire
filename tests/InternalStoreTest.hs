@@ -9,31 +9,16 @@ import Control.Applicative
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import Data.ByteString.Lazy (toStrict)
-import Data.ByteString.Lazy.Builder
-import Data.Function (on)
-import Data.List (foldl', groupBy, nubBy, sort)
-import Data.List
 import Control.Monad.State.Strict
 import Pipes.Parse
-import Data.List.NonEmpty (fromList)
-import Data.Monoid
-import Data.Word
-import System.Exit
-import System.ZMQ4.Monadic
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
-import Test.QuickCheck.Test
-import TestHelpers (runTestDaemon)
 import Vaultaire.CoreTypes
 import Test.Hspec
-import Test.Hspec.QuickCheck
 import Vaultaire.Daemon
 import Data.Locator
 import Vaultaire.InternalStore (enumerateOrigin, readFrom, writeTo)
 import TestHelpers
-import Vaultaire.OriginMap
-import System.Rados.Monadic(objects)
 
 instance Arbitrary ByteString where
     arbitrary = BS.pack <$> arbitrary
