@@ -94,7 +94,6 @@ deDuplicate :: (PrimMonad m, MVector v e, Ord e)
 deDuplicate cmp input
     | M.null input = return input
     | otherwise = do
-        M.sort input
         first <- M.unsafeRead input 0
         go input first 1 1 (M.length input)
   where
@@ -123,8 +122,6 @@ deDuplicateLast :: (PrimMonad m, MVector v e, Ord e, Eq e)
 deDuplicateLast cmp input
     | M.null input = return input
     | otherwise = do
-        M.sort input
-
         first <- M.unsafeRead input 0
         go input first 1 0 (M.length input)
   where
@@ -153,7 +150,8 @@ processBucket :: (PrimMonad m)
               => ByteString -> Address -> Word64 -> Word64 -> m ByteString
 processBucket bucket (Address addr) start end =
     vectorToByteString `liftM` (V.thaw (byteStringToVector bucket)
-                                >>= filter addr start end
+                                >>= (\v -> M.sort v
+                                >>  filter addr start end v)
                                 >>= deDuplicate similar
                                 >>= V.freeze)
 
@@ -184,7 +182,8 @@ mergeNoFilter simple extended = do
         in  yield (Address addr, bytes)
   where
     preProcess bs = V.thaw (byteStringToVector bs :: V.Vector Point)
-                    >>= deDuplicateLast similar
+                    >>= (\v -> M.sort v
+                    >>  deDuplicateLast similar v)
                     >>= V.freeze
 
 -- First word is the length, then the string. We return the length and the
