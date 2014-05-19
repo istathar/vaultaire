@@ -52,22 +52,26 @@ suite = do
     describe "first write deduplication" $ do
         it "must preserve first write" $
            V.thaw (V.fromList [Point 1 2 2, Point 1 2 3, Point 0 0 0])
-           >>= A.deDuplicate
+           >>= A.deDuplicate A.similar
            >>= V.freeze
            >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 2])
 
-        it "should retain no duplicates" $ property (propNoDuplicates A.deDuplicate)
-        it "should sort" $ property (propSorted A.deDuplicate)
+        it "should retain no duplicates" $
+            property $ propNoDuplicates (A.deDuplicate (==))
+        it "should sort" $
+            property $ propSorted (A.deDuplicate (==))
 
     describe "last write deduplication" $ do
         it "last must preserve last write" $ 
            V.thaw (V.fromList [Point 1 2 2, Point 1 2 3, Point 0 0 0])
-           >>= A.deDuplicateLast
+           >>= A.deDuplicateLast A.similar
            >>= V.freeze
            >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 3])
 
-        it "should retain no duplicates" $ property (propNoDuplicates A.deDuplicateLast)
-        it "should sort" $ property (propSorted A.deDuplicateLast)
+        it "should retain no duplicates" $
+            property $ propNoDuplicates (A.deDuplicateLast (==))
+        it "should sort" $
+            property $ propSorted (A.deDuplicateLast (==))
 
     describe "merging" $
         it "correctly merges a pointer record and extended bucket" $

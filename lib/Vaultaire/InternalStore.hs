@@ -40,7 +40,7 @@ import Vaultaire.ReaderAlgorithms(mergeNoFilter)
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon ()
 writeTo origin addr payload =
-    runEffect (yield makeState >-> write (namespace origin))
+    runEffect (yield makeState >-> write (namespace origin) False)
   where
     makeState :: BatchState
     makeState =

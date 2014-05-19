@@ -9,15 +9,16 @@ module Vaultaire.ReaderAlgorithms
     processBucket,
     mergeSimpleExtended,
     mergeNoFilter,
+    similar,
     deDuplicateLast,
 ) where
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Primitive
+import Control.Monad.ST (runST)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
-import Control.Monad.ST(runST)
 import Data.ByteString.Lazy.Builder
 import Data.Monoid
 import Data.Packer
@@ -37,7 +38,7 @@ import Vaultaire.CoreTypes (Address (..))
 data Point = Point { address :: !Word64
                    , time    :: !Word64
                    , payload :: !Word64
-                   } deriving Show
+                   } deriving (Show, Eq)
 
 instance Storable Point where
     sizeOf _    = 24
@@ -51,12 +52,6 @@ instance Storable Point where
         poke (ptr `plusPtr` 8 ) t
         poke (ptr `plusPtr` 16 ) p
 
-instance Eq Point where
-    -- Two Points are effectively equal if their payloads are the same as they
-    -- are to be de-duplicated.
-    a == b = time a == time b &&
-             address a == address b
-
 instance Ord Point where
     -- Compare time first, then address. This way we can de-deplicate by
     -- comparing adjacent values.
@@ -64,6 +59,10 @@ instance Ord Point where
         case compare (time a) (time b) of
             EQ -> compare (address a) (address b)
             c  -> c
+
+-- | Is the address and time the same? We don't care about the payload
+similar :: Point -> Point -> Bool
+similar a b = (address a == address b) && (time a == time b)
 
 -- | Filter a vector of Points based on:
 filter :: (PrimMonad m, MVector v Point)
@@ -88,8 +87,11 @@ filter addr start end input =
 
 
 -- | Sort and de-duplicate elements. First element wins.
-deDuplicate :: (PrimMonad m, MVector v e, Ord e, Eq e) => v (PrimState m) e -> m (v (PrimState m) e)
-deDuplicate input
+deDuplicate :: (PrimMonad m, MVector v e, Ord e)
+            => (e -> e -> Bool)
+            -> v (PrimState m) e
+            -> m (v (PrimState m) e)
+deDuplicate cmp input
     | M.null input = return input
     | otherwise = do
         M.sort input
@@ -101,7 +103,7 @@ deDuplicate input
         | otherwise = do
             elt <- M.unsafeRead buf read_ptr
 
-            if elt == prev_elt
+            if elt `cmp` prev_elt
                 then
                     go buf prev_elt (succ read_ptr) write_ptr len
                 else do
@@ -114,8 +116,11 @@ deDuplicate input
 
 --
 -- | Sort and de-duplicate elements. Last element wins.
-deDuplicateLast :: (PrimMonad m, MVector v e, Ord e, Eq e) => v (PrimState m) e -> m (v (PrimState m) e)
-deDuplicateLast input
+deDuplicateLast :: (PrimMonad m, MVector v e, Ord e, Eq e)
+                => (e -> e -> Bool)
+                -> v (PrimState m) e
+                -> m (v (PrimState m) e)
+deDuplicateLast cmp input
     | M.null input = return input
     | otherwise = do
         M.sort input
@@ -134,7 +139,7 @@ deDuplicateLast input
 
             -- Skip duplicates, reading ahead by one. Skip by not incrementing
             -- write pointer.
-            if prev_elt == elt
+            if prev_elt `cmp` elt
                 then
                     go buf elt (succ read_ptr) write_ptr len
                 else do
@@ -149,7 +154,7 @@ processBucket :: (PrimMonad m)
 processBucket bucket (Address addr) start end =
     vectorToByteString `liftM` (V.thaw (byteStringToVector bucket)
                                 >>= filter addr start end
-                                >>= deDuplicate
+                                >>= deDuplicate similar
                                 >>= V.freeze)
 
 -- | Merge a simple and extended bucket into one bytestring, suitable for wire
@@ -179,12 +184,12 @@ mergeNoFilter simple extended = do
         in  yield (Address addr, bytes)
   where
     preProcess bs = V.thaw (byteStringToVector bs :: V.Vector Point)
-                    >>= deDuplicateLast
+                    >>= deDuplicateLast similar
                     >>= V.freeze
 
 -- First word is the length, then the string. We return the length and the
 -- string as a string.
-getExtendedBytes :: Word64 -> Unpacking ByteString 
+getExtendedBytes :: Word64 -> Unpacking ByteString
 getExtendedBytes offset = do
     unpackSetPosition (fromIntegral offset)
     len <- getWord64LE
@@ -192,7 +197,7 @@ getExtendedBytes offset = do
     getBytes (fromIntegral len + 8)
 
 -- First word is the length, then the string. We return just the string.
-getExtendedPayloadOnly :: Word64 -> Unpacking ByteString 
+getExtendedPayloadOnly :: Word64 -> Unpacking ByteString
 getExtendedPayloadOnly offset = do
     unpackSetPosition (fromIntegral offset)
     len <- getWord64LE
