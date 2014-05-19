@@ -12,8 +12,6 @@ module Vaultaire.ReaderAlgorithms
     deDuplicateLast,
 ) where
 
-import Debug.Trace
-
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Primitive
@@ -146,22 +144,22 @@ deDuplicateLast input
 
 -- | Filter and de-duplicate a bucket in-place. The original bytestring will be
 -- garbage after completion.
-processBucket :: (PrimMonad m, Functor m)
+processBucket :: (PrimMonad m)
               => ByteString -> Address -> Word64 -> Word64 -> m ByteString
 processBucket bucket (Address addr) start end =
-    vectorToByteString <$> (V.thaw (byteStringToVector bucket)
-                            >>= filter addr start end
-                            >>= deDuplicate
-                            >>= V.freeze)
+    vectorToByteString `liftM` (V.thaw (byteStringToVector bucket)
+                                >>= filter addr start end
+                                >>= deDuplicate
+                                >>= V.freeze)
 
 -- | Merge a simple and extended bucket into one bytestring, suitable for wire
 -- transfer.
-mergeSimpleExtended :: (PrimMonad m, Functor m)
+mergeSimpleExtended :: (PrimMonad m)
                     => ByteString -> ByteString
                     -> Address -> Word64 -> Word64
                     -> m ByteString
 mergeSimpleExtended simple extended addr start end = do
-    de_duped <- byteStringToVector <$> processBucket simple addr start end
+    de_duped <- byteStringToVector `liftM` processBucket simple addr start end
     return $ toStrict $ toLazyByteString $ V.foldl' merge mempty de_duped
   where
     merge acc (Point addr' time' os) =
@@ -171,7 +169,7 @@ mergeSimpleExtended simple extended addr start end = do
 
 -- | Producer for the the whole bucket, no filtering, returns only addresses
 -- and payloads. This is used for the internal store, where last writes win.
-mergeNoFilter :: (Monad m, Functor m)
+mergeNoFilter :: (Monad m)
               => ByteString -> ByteString
               -> Producer (Address, ByteString) m ()
 mergeNoFilter simple extended = do
