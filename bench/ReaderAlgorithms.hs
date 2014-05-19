@@ -30,11 +30,8 @@ main :: IO ()
 main = do
     let !points = simplePoints [0..174763] -- 4MB
     let !double_points = simplePoints [0..349526]
-    runTest double_points `seq` putStrLn "done"
 
-    {--
     defaultMain
             [ bench "simple points" $ nf runTest points
             , bench "simple points (double)" $ nf runTest double_points
             ]
-    --}
