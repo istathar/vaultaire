@@ -1,32 +1,35 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
 
 import Control.Applicative
+import Control.Monad.Primitive
 import Control.Monad.ST
 import Data.ByteString (ByteString)
-import Data.Vector.Storable (Vector)
-import Control.Monad.Primitive
+import qualified Data.Vector.Algorithms.Merge as M
 import Data.Vector.Generic.Mutable (MVector)
+import Vaultaire.CoreTypes(Address(..))
+import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
+import Data.Vector.Storable.ByteString
 import Data.Word
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
 import Vaultaire.ReaderAlgorithms (Point (..))
-import qualified Data.Vector.Algorithms.Merge as M
 import qualified Vaultaire.ReaderAlgorithms as A
 
-data AddrStartEnd = AddrStartEnd Word64 Word64 Word64
+data AddrStartEnd = AddrStartEnd Address Word64 Word64
   deriving Show
 
 instance Arbitrary AddrStartEnd where
     arbitrary = do
-        addr  <- elements [0..9]
+        addr  <- Address <$> elements [0..9]
         start <- div 2 <$> arbitrary `suchThat` (> 0)
         end   <- arbitrary `suchThat` (> start)
         return $ AddrStartEnd addr start end
@@ -44,10 +47,9 @@ main = hspec suite
 
 suite :: Spec
 suite = do
-    describe "filtering" $ do
+    describe "processBucket" $ do
         it "has no elements later than end" $ property propFilterNoLater
         it "has no elements earlier than start" $ property propFilterNoEarlier
-        it "has all elements it should" $ property propFilterEqual
 
     describe "first write deduplication" $ do
         it "must preserve first write" $
@@ -60,7 +62,7 @@ suite = do
             property $ propNoDuplicates (A.deDuplicate (==))
 
     describe "last write deduplication" $ do
-        it "last must preserve last write" $ 
+        it "last must preserve last write" $
            V.thaw (V.fromList [Point 0 0 0, Point 1 2 2, Point 1 2 3])
            >>= A.deDuplicateLast A.similar
            >>= V.freeze
@@ -109,19 +111,10 @@ propNoDuplicates f v =
 
 propFilterNoLater :: AddrStartEnd -> Vector Point -> Bool
 propFilterNoLater (AddrStartEnd addr start end) v =
-    let v' = runST $ V.thaw v >>= A.filter addr start end >>= V.freeze
+    let v' = byteStringToVector $ runST $ A.processBucket (vectorToByteString v)addr start end
     in V.null $ V.filter ((> end) . A.time) v'
 
 propFilterNoEarlier :: AddrStartEnd -> Vector Point -> Bool
 propFilterNoEarlier (AddrStartEnd addr start end) v =
-    let v' = runST $ V.thaw v >>= A.filter addr start end >>= V.freeze
+    let v' = byteStringToVector $ runST $ A.processBucket (vectorToByteString v) addr start end
     in V.null $ V.filter ((< start) . A.time) v'
-
-propFilterEqual :: AddrStartEnd -> Vector Point -> Bool
-propFilterEqual (AddrStartEnd addr start end) v =
-    let v'  = runST $ V.thaw v >>= A.filter addr start end >>= V.freeze
-        v'' = V.filter filt v
-
-    in v' == v''
-  where
-    filt p = let t = A.time p in t <= end && t >= start && A.address p == addr

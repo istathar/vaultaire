@@ -3,7 +3,6 @@
 
 module Vaultaire.ReaderAlgorithms
 (
-    filter,
     deDuplicate,
     Point(..),
     processBucket,
@@ -63,28 +62,6 @@ instance Ord Point where
 -- | Is the address and time the same? We don't care about the payload
 similar :: Point -> Point -> Bool
 similar a b = (address a == address b) && (time a == time b)
-
--- | Filter a vector of Points based on:
-filter :: (PrimMonad m, MVector v Point)
-       => Word64 -- ^ Address
-       -> Word64 -- ^ Start
-       -> Word64 -- ^ End
-       -> v (PrimState m) Point
-       -> m (v (PrimState m) Point)
-filter addr start end input =
-    go input 0 0 $ M.length input
- where
-    go buf read_ptr write_ptr len
-        | read_ptr == len = return $ M.take write_ptr buf
-        | otherwise = do
-            p@(Point a t _) <- M.unsafeRead buf read_ptr
-            if a == addr && t >= start && t <= end
-                then do
-                    M.unsafeWrite buf write_ptr p
-                    go buf (succ read_ptr) (succ write_ptr) len
-                else
-                    go buf (succ read_ptr) write_ptr len
-
 
 -- | Sort and de-duplicate elements. First element wins.
 deDuplicate :: (PrimMonad m, MVector v e, Ord e)
@@ -148,12 +125,13 @@ deDuplicateLast cmp input
 -- garbage after completion.
 processBucket :: (PrimMonad m)
               => ByteString -> Address -> Word64 -> Word64 -> m ByteString
-processBucket bucket (Address addr) start end =
-    vectorToByteString `liftM` (V.thaw (byteStringToVector bucket)
-                                >>= (\v -> M.sort v
-                                >>  filter addr start end v)
-                                >>= deDuplicate similar
-                                >>= V.freeze)
+processBucket bucket (Address addr) start end = do
+    let v  = byteStringToVector bucket
+    let v' = V.filter (\p -> address p == addr && time p >= start && time p <= end) v
+    mv <- V.thaw v'
+    M.sort mv
+    v'' <- deDuplicate similar mv >>= V.freeze
+    return $ vectorToByteString v''
 
 -- | Merge a simple and extended bucket into one bytestring, suitable for wire
 -- transfer.

@@ -69,6 +69,8 @@ library
                      -Wwarn
                      -fwarn-tabs
 
+  ghc-prof-options:  -fprof-auto
+
 
 executable marquised
   hs-source-dirs:    lib
@@ -213,6 +215,7 @@ test-suite           reader-algorithms-test
                      containers,
                      QuickCheck,
                      primitive,
+                     spool,
                      vector,
                      mtl,
                      vector-algorithms,
@@ -345,5 +348,6 @@ benchmark reader-algorithms
                      -Wwarn
                      -fwarn-tabs
 
+  ghc-prof-options:  -fprof-auto
 
 -- vim: set tabstop=21 expandtab:
