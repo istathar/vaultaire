@@ -23,7 +23,6 @@ module Vaultaire.InternalStore
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import Control.Monad.ST
 import Data.Monoid
 import Data.Packer
 import Data.Time
@@ -37,8 +36,6 @@ import Vaultaire.Daemon (Daemon)
 import Vaultaire.Reader (ReadDetails (..), Request (..), readExtended, getBuckets)
 import Vaultaire.Writer (BatchState (..), appendExtended, write)
 import Vaultaire.ReaderAlgorithms(mergeNoFilter)
-import Data.Vector.Storable.ByteString
-import qualified Data.Vector.Storable as V
 
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon ()
@@ -78,7 +75,6 @@ enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()
 enumerateOrigin origin =
     forM_ [0,2..internalStoreBuckets] $ \bucket -> do
         buckets <- lift $ getBuckets logError (namespace origin) 0 bucket
-        liftIO $ print buckets
         case buckets of
             Nothing -> return ()
             Just (s,e) -> mergeNoFilter s e

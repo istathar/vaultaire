@@ -115,7 +115,6 @@ getBuckets fail_f origin epoch bucket = do
     let simple_oid = bucketOID origin epoch bucket "simple"
     let extended_oid = bucketOID origin epoch bucket "extended"
 
-    liftIO $ print (simple_oid, extended_oid)
     -- Request both async
     (a_simple, a_extended) <- liftPool $ runAsync $
         (,) <$> runObject simple_oid readFull
