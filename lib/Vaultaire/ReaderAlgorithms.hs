@@ -116,28 +116,33 @@ deDuplicate input
 
 --
 -- | Sort and de-duplicate elements. Last element wins.
-deDuplicateLast :: (PrimMonad m, MVector v e, Ord e, Eq e, Show e) => v (PrimState m) e -> m (v (PrimState m) e)
+deDuplicateLast :: (PrimMonad m, MVector v e, Ord e, Eq e) => v (PrimState m) e -> m (v (PrimState m) e)
 deDuplicateLast input
     | M.null input = return input
     | otherwise = do
         M.sort input
+
         first <- M.unsafeRead input 0
-        go input first 1 1 (M.length input)
+        go input first 1 0 (M.length input)
   where
     go buf prev_elt read_ptr write_ptr len
-        | read_ptr == len = return $ M.take write_ptr buf
+        | read_ptr == len = do
+            -- Copy last element, it's always not-duplicate or the last in a
+            -- duplicate block.
+            M.unsafeRead buf (pred len) >>= M.unsafeWrite buf write_ptr
+            return $ M.take (succ write_ptr) buf
         | otherwise = do
             elt <- M.unsafeRead buf read_ptr
 
-            -- Only advance the write pointer on non-duplicate data
-            let next_write = if elt == prev_elt
-                                then trace "equal, not advancing" $ write_ptr
-                                else trace "not equal, advancing" $ succ write_ptr
+            -- Skip duplicates, reading ahead by one. Skip by not incrementing
+            -- write pointer.
+            if prev_elt == elt
+                then
+                    go buf elt (succ read_ptr) write_ptr len
+                else do
+                    M.unsafeWrite buf write_ptr prev_elt
+                    go buf elt (succ read_ptr) (succ write_ptr) len
 
-            when (write_ptr /= read_ptr) $
-                M.unsafeWrite buf write_ptr (traceShow ("writing", write_ptr, elt) elt)
-
-            go buf elt (succ read_ptr) next_write len
 
 -- | Filter and de-duplicate a bucket in-place. The original bytestring will be
 -- garbage after completion.

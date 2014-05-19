@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -9,6 +10,8 @@ import Control.Monad.ST
 import Data.ByteString (ByteString)
 import Data.List (sort)
 import Data.Vector.Storable (Vector)
+import Control.Monad.Primitive
+import Data.Vector.Generic.Mutable (MVector)
 import qualified Data.Vector.Storable as V
 import Data.Word
 import Test.Hspec
@@ -46,21 +49,25 @@ suite = do
         it "has no elements earlier than start" $ property propFilterNoEarlier
         it "has all elements it should" $ property propFilterEqual
 
-    describe "deduplication" $ do
+    describe "first write deduplication" $ do
         it "must preserve first write" $
            V.thaw (V.fromList [Point 1 2 2, Point 1 2 3, Point 0 0 0])
            >>= A.deDuplicate
            >>= V.freeze
            >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 2])
 
+        it "should retain no duplicates" $ property (propNoDuplicates A.deDuplicate)
+        it "should sort" $ property (propSorted A.deDuplicate)
+
+    describe "last write deduplication" $ do
         it "last must preserve last write" $ 
            V.thaw (V.fromList [Point 1 2 2, Point 1 2 3, Point 0 0 0])
            >>= A.deDuplicateLast
            >>= V.freeze
            >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 3])
 
-        it "should retain no duplicates" $ property propNoDuplicates
-        it "should sort" $ property propSorted
+        it "should retain no duplicates" $ property (propNoDuplicates A.deDuplicateLast)
+        it "should sort" $ property (propSorted A.deDuplicateLast)
 
     describe "merging" $
         it "correctly merges a pointer record and extended bucket" $
@@ -90,18 +97,20 @@ mergedRecord =
     \\x03\x00\x00\x00\x00\x00\x00\x00\
     \\&ABC"
 
-propNoDuplicates :: Vector Point -> Bool
-propNoDuplicates v =
-    noDups $ runST $ V.thaw v >>= A.deDuplicate >>= V.freeze
+type VectorF = (PrimMonad m, MVector v e, Ord e, Eq e) => v (PrimState m) e -> m (v (PrimState m) e)
+
+propNoDuplicates :: VectorF -> Vector Point -> Bool
+propNoDuplicates f v =
+    noDups $ runST $ V.thaw v >>= f >>= V.freeze
   where
     noDups v' = V.foldr (\x acc -> acc && V.length (V.filter (== x) v') == 1)
                         True
                         v'
 
-propSorted :: Vector Point -> Bool
-propSorted v =
+propSorted :: VectorF -> Vector Point -> Bool
+propSorted f v =
     let s  = V.fromList . sort . V.toList
-        v' = runST $ V.thaw v >>= A.deDuplicate >>= V.freeze
+        v' = runST $ V.thaw v >>= f >>= V.freeze
     in s v' == v'
 
 propFilterNoLater :: AddrStartEnd -> Vector Point -> Bool
