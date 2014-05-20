@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 import Criterion.Main
@@ -9,11 +8,7 @@ import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import Data.Monoid
 import Control.Monad.ST
-import Data.Vector.Storable (Vector)
-import qualified Data.Vector.Storable as V
 import Data.Word
-import Vaultaire.ReaderAlgorithms (Point)
-import Data.Vector.Storable.ByteString(byteStringToVector)
 import qualified Vaultaire.ReaderAlgorithms as A
 
 simplePoints :: [Word64] -> ByteString
@@ -27,14 +22,14 @@ makeSimplePoint n =
   where
     uniqueAddresses = 8 * 2
 
-runTest :: Vector Point -> Vector Point
-runTest v = runST $ V.thaw v >>= A.filter 4 minBound maxBound >>= A.deDuplicate >>= V.freeze
+runTest :: ByteString -> ByteString
+runTest bs = runST $ A.processBucket bs 4 minBound maxBound
     
 
 main :: IO ()
 main = do
-    let !points = byteStringToVector $ simplePoints [0..174763] -- 4MB
-    let !double_points = byteStringToVector $ simplePoints [0..349526]
+    let !points = simplePoints [0..174763] -- 4MB
+    let !double_points = simplePoints [0..349526]
 
     defaultMain
             [ bench "simple points" $ nf runTest points

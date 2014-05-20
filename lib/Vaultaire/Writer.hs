@@ -138,7 +138,7 @@ processBatch period origin' input seal = do
             start_state <- liftIO $ batchStateNow dms
             runEffect $ fromInput input
                       >-> evalStateP start_state (processEvents period)
-                      >-> write origin'
+                      >-> write origin' True
             liftIO $ atomically seal
 
 badOrigin :: Consumer Event Daemon ()
@@ -276,8 +276,8 @@ appendExtended epoch bucket (Address address) time len string = do
 --   2. Simple buckets are written to disk with the pending writes applied.
 --   3. Acks are sent
 --   4. Any rollovers are done
-write :: Origin -> Consumer BatchState Daemon ()
-write origin' = do
+write :: Origin -> Bool -> Consumer BatchState Daemon ()
+write origin do_rollovers = do
     s <- await
     (offsets, extended_rollover) <- writeExtendedBuckets s
 
@@ -287,24 +287,25 @@ write origin' = do
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
     lift $ do
-        updateSimpleLatest origin' (latestSimple s)
-        updateExtendedLatest origin' (latestExtended s)
+        updateSimpleLatest origin (latestSimple s)
+        updateExtendedLatest origin (latestExtended s)
         mapM_ ($ Success) (replyFs s)
 
         -- 4. Do any rollovers
-        when simple_rollover (rollOverSimpleDay origin')
-        when extended_rollover (rollOverExtendedDay origin')
+        when do_rollovers $ do
+            when simple_rollover (rollOverSimpleDay origin)
+            when extended_rollover (rollOverExtendedDay origin)
   where
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.
     writeExtendedBuckets s =
-        lift . withExLock (writeLockOID origin') $ liftPool $ do
+        lift . withExLock (writeLockOID origin) $ liftPool $ do
             -- First pass to get current offsets
             offsets <- forWithKey (extended s) $ \epoch buckets -> do
 
                 -- Make requests for the entire epoch
                 stats <- forWithKey buckets $ \bucket _ ->
-                    extendedOffset origin' epoch bucket
+                    extendedOffset origin epoch bucket
 
                 -- Then extract the fileSize from those requests
                 for stats $ \async_stat -> do
@@ -322,7 +323,7 @@ write origin' = do
             _ <- forWithKey (extended s) $ \epoch buckets -> do
                 writes <- forWithKey buckets $ \bucket builder -> do
                     let payload = toStrict $ toLazyByteString builder
-                    writeExtended origin' epoch bucket payload
+                    writeExtended origin epoch bucket payload
 
                 for writes $ \async_write -> do
                     result <- waitSafe async_write
@@ -358,7 +359,7 @@ write origin' = do
         offsets <- forWithKey simple_buckets $ \epoch buckets -> do
             writes <- forWithKey buckets $ \bucket builder -> do
                 let payload = toStrict $ toLazyByteString builder
-                writeSimple origin' epoch bucket payload
+                writeSimple origin epoch bucket payload
             for writes $ \(async_stat, async_write) -> do
                 w <- waitSafe async_write
                 case w of
@@ -390,7 +391,7 @@ writeExtended o e b payload =
 writeSimple :: Origin -> Epoch -> Bucket -> ByteString -> Pool (AsyncRead StatResult, AsyncWrite)
 writeSimple o e b payload =
     runAsync $ runObject (bucketOID o e b "simple") $
-        (,) <$> stat <*> writeFull payload
+        (,) <$> stat <*> append payload
 
 writeLockOID :: Origin -> ByteString
 writeLockOID (Origin o') =

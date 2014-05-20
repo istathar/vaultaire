@@ -7,6 +7,7 @@ module Vaultaire.Reader
     startReader,
     readExtended,
     ReadDetails(..),
+    getBuckets,
     -- Testing
     classifyPayload,
     SomeRequest(..),
@@ -99,37 +100,44 @@ readExtended :: Origin -> Request Extended -> (ByteString -> Daemon ())
 readExtended origin (Extended (ReadDetails addr start end)) fail_f = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
-    let simple_oid = bucketOID origin epoch bucket "simple"
-    let extended_oid = bucketOID origin epoch bucket "extended"
-
-    (a_simple, a_extended) <- lift $ liftPool $ runAsync $
-        (,) <$> runObject simple_oid readFull
-            <*> runObject extended_oid readFull
-
-    buckets <- lift $ getBuckets a_simple a_extended
-
+    buckets <- lift $ getBuckets fail_f origin epoch bucket
     case buckets of
         Nothing -> return ()
         Just (s,e) -> yield $ runST $ mergeSimpleExtended s e addr start end
-  where
-    getBuckets a_simple a_extended = do
-        maybe_simple <- look a_simple >>= (\c -> case c of
-            Left (NoEntity{}) -> return Nothing
-            Left e -> do
-                liftIO $ putStrLn $ "Ceph error getting simple bucket: " ++ show e
-                fail_f "Failed to retrieve bucket"
-                return Nothing
-            Right unprocessed -> return $ Just unprocessed)
 
-        maybe_extended <- look a_extended >>= (\c -> case c of
-            Left (NoEntity{}) -> return Nothing
-            Left e -> do
-                liftIO $ putStrLn $ "Ceph error getting extended bucket: " ++ show e
-                fail_f "Failed to retrieve bucket"
-                return Nothing
-            Right unprocessed -> return $ Just unprocessed)
+-- | Retrieve simple and extended buckets in parallel
+getBuckets :: (ByteString -> Daemon ())
+           -> Origin
+           -> Epoch
+           -> Bucket
+           -> Daemon (Maybe (ByteString, ByteString))
+getBuckets fail_f origin epoch bucket = do
+    let simple_oid = bucketOID origin epoch bucket "simple"
+    let extended_oid = bucketOID origin epoch bucket "extended"
 
-        return $ (,) <$> maybe_simple <*> maybe_extended
+    -- Request both async
+    (a_simple, a_extended) <- liftPool $ runAsync $
+        (,) <$> runObject simple_oid readFull
+            <*> runObject extended_oid readFull
+
+    -- Check both errors
+    maybe_simple <- look a_simple >>= (\c -> case c of
+        Left (NoEntity{}) -> return Nothing
+        Left e -> do
+            liftIO $ putStrLn $ "Ceph error getting simple bucket: " ++ show e
+            fail_f "Failed to retrieve bucket"
+            return Nothing
+        Right unprocessed -> return $ Just unprocessed)
+
+    maybe_extended <- look a_extended >>= (\c -> case c of
+        Left (NoEntity{}) -> return Nothing
+        Left e -> do
+            liftIO $ putStrLn $ "Ceph error getting extended bucket: " ++ show e
+            fail_f "Failed to retrieve bucket"
+            return Nothing
+        Right unprocessed -> return $ Just unprocessed)
+
+    return $ (,) <$> maybe_simple <*> maybe_extended
 
 processInvalid :: Request Invalid -> ReplyF -> Daemon ()
 processInvalid (Invalid err) reply_f = do

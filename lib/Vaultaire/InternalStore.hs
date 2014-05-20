@@ -33,14 +33,14 @@ import qualified Pipes.Prelude as Pipes
 import System.Log.Logger
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon (Daemon)
-import Vaultaire.Reader (ReadDetails (..), Request (..), readExtended)
+import Vaultaire.Reader (ReadDetails (..), Request (..), readExtended, getBuckets)
 import Vaultaire.Writer (BatchState (..), appendExtended, write)
+import Vaultaire.ReaderAlgorithms(mergeNoFilter)
 
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon ()
-writeTo origin addr payload = do
-    liftIO $ errorM "hai" $ "writing : " ++ show (origin, addr, payload)
-    runEffect (yield makeState >-> write origin)
+writeTo origin addr payload =
+    runEffect (yield makeState >-> write (namespace origin) False)
   where
     makeState :: BatchState
     makeState =
@@ -59,7 +59,7 @@ internalStoreBuckets = 128
 readFrom :: Origin -> Address -> Daemon (Maybe ByteString)
 readFrom origin addr =
     evalStateT draw $ yield (0, internalStoreBuckets)
-                      >-> readExtended origin makeRequest fail_f
+                      >-> readExtended (namespace origin) makeRequest fail_f
                       >-> Pipes.map extractPayload
   where
     extractPayload p = flip runUnpacking p $ do
@@ -72,7 +72,14 @@ readFrom origin addr =
 
 -- | Provide a Producer of address and payload tuples.
 enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()
-enumerateOrigin = undefined
+enumerateOrigin origin =
+    forM_ [0,2..internalStoreBuckets] $ \bucket -> do
+        buckets <- lift $ getBuckets logError (namespace origin) 0 bucket
+        case buckets of
+            Nothing -> return ()
+            Just (s,e) -> mergeNoFilter s e
+  where
+    logError = liftIO . errorM "InternalStore.enumerateOrigin" . BS.unpack
 
---internalStoreLockOID :: Origin -> ByteString
---internalStoreLockOID (Origin o') = S.append ["02_", o', "_internal"]
+namespace :: Origin -> Origin
+namespace = Origin . (`BS.append` "_INTERNAL") . unOrigin
