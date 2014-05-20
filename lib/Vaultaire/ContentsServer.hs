@@ -25,20 +25,23 @@ module Vaultaire.ContentsServer
     decodeStringAsAddress
 ) where
 
+import Control.Applicative
 import Control.Exception
 import Control.Monad.State.Strict
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Locator
+import Data.Maybe (isJust)
 import Data.Packer
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
 import Pipes
-import System.Rados.Monadic
+import System.Random
 
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon
@@ -167,21 +170,22 @@ performListRequest reply o = do
 
 performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
 performRegisterRequest reply o =
-    liftPool (allocateNewAddressInVault o)
+    allocateNewAddressInVault o
     >>= reply . Response . encodeAddressToBytes
 
-allocateNewAddressInVault :: Origin -> Pool Address
-allocateNewAddressInVault = undefined
-{-
-    Procedure:
+allocateNewAddressInVault :: Origin -> Daemon Address
+allocateNewAddressInVault o = do
+    num <- liftIO rollDice
+    let a = Address (num `clearBit` 0)
 
-    1. Generate a random number.
-    2. See if it's already present in Vault. If so, return 1.
-    3. Write new number to Vault.
-    4. Return number.
+    withExLock "02_addresses_lock" $ do
+        exists <- isAddressInVault o a
+        if exists
+            then allocateNewAddressInVault o
+            else return a
+  where
+        rollDice = getStdRandom (randomR (0, maxBound :: Word64))
 
-    This needs to be locked :/
--}
 
 encodeAddressToBytes :: Address -> ByteString
 encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
@@ -218,6 +222,12 @@ performUpdateRequest reply o a s = do
 
     writeSourceTagsForAddress o a s1
     reply Success
+
+
+isAddressInVault :: Origin -> Address -> Daemon Bool
+isAddressInVault o a =
+    isJust <$> InternalStore.readFrom o a
+
 
 retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
 retreiveSourceTagsForAddress o a = do

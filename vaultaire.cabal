@@ -60,6 +60,7 @@ library
                      packer,
                      stm,
                      async,
+                     random,
                      locators >= 0.2.4,
                      rados-haskell >= 3
 
