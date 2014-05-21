@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 --
 -- Data vault for metrics
 --
@@ -38,13 +39,14 @@ module Marquise.Client
 ) where
 
 import Data.ByteString(ByteString)
+import qualified Data.ByteString as BS
 import Data.String(IsString)
 import Vaultaire.CoreTypes(Address(..))
 import Data.Word(Word64)
 
 -- | A NameSpace implies a certain amount of Marquise server-side state. This
 -- state being the Marquise server's authentication and origin configuration.
-newtype NameSpace = NameSpace ByteString
+newtype NameSpace = NameSpace String
   deriving (Eq, Show, IsString)
 
 -- | Time since epoch in nanoseconds. Internally a 'Word64'.
@@ -59,6 +61,16 @@ class Monad m => MarquiseMonad m where
     append :: NameSpace -> ByteString -> m ()
     -- | Close any open handles and flush all previously appended datum to disk
     close :: NameSpace -> m ()
+
+ -- | "Dumb" IO implementation.
+ --
+ -- This could be more efficient if the handle were kept in a "global
+ -- variable", using the noinline IORef hack.
+instance MarquiseMonad IO where
+    append (NameSpace ns) = BS.appendFile ns
+    close _ = c_sync
+    
+foreign import ccall "unistd.h sync" c_sync :: IO ()
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
