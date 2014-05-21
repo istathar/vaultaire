@@ -12,7 +12,6 @@ module Vaultaire.CoreTypes
 
 import Data.Bits
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S
 import Data.Hashable
 import Data.String
 import Data.Word (Word64)
@@ -33,13 +32,4 @@ isAddressExtended (Address addr) = addr `testBit` 0
 
 
 newtype Origin = Origin { unOrigin :: ByteString }
-    deriving (Eq, Ord, Generic)
-
-instance Show Origin where
-    show (Origin o') = S.unpack o'
-
-instance Hashable Origin
-
-instance IsString Origin where
---  fromString :: String -> Origin
-    fromString x = Origin (S.pack x)
+    deriving (Eq, Ord, Generic, IsString, Hashable, Show)
