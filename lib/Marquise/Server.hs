@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 --
 -- Data vault for metrics
 --
@@ -16,14 +17,15 @@ module Marquise.Server
     marquiseServer
 ) where
 
-import Vaultaire.CoreTypes(Origin(..))
-import Marquise.Types(NameSpace(..)) 
-import Control.Monad(forever)
-import Control.Concurrent(threadDelay)
-import Marquise.Client(mkNameSpace)
-import Marquise.IO(MarquiseServerMonad(..))
+import Control.Concurrent (threadDelay)
+import Control.Exception (throwIO)
+import Control.Monad (forever, unless)
 import qualified Data.ByteString.Char8 as BS
-import Control.Exception(throwIO)
+import Marquise.Client (mkNameSpace)
+import Marquise.IO (MarquiseServerMonad (..), spoolDir)
+import Marquise.Types (NameSpace (..))
+import System.Directory (doesDirectoryExist)
+import Vaultaire.CoreTypes (Origin (..))
 
 -- | Send the next burst, returns when the burst is acknowledged and thus in
 -- the vault.
@@ -39,7 +41,10 @@ sendNextBurst broker origin ns = do
             flagSent bp
 
 marquiseServer :: String -> String -> String -> IO ()
-marquiseServer broker origin user_ns =
+marquiseServer broker origin user_ns = do
+    spool_exists <- doesDirectoryExist spoolDir
+    unless spool_exists $ throwIO $ userError $
+        "spool directory does not exist: " ++ spoolDir
     case mkNameSpace user_ns of
         Left e -> throwIO $ userError e
         Right ns -> forever $ do

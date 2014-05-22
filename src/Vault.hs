@@ -103,10 +103,12 @@ marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
     parseOrigin = strOption $
         long "origin"
         <> short 'o'
+        <> metavar "ORIGIN"
         <> help "Origin to write to"
     parseNameSpace = strOption $
         long "namespace"
         <> short 'n'
+        <> metavar "NAMESPACE"
         <> help "NameSpace to look for data in"
 
 -- | Config file parsing

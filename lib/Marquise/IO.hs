@@ -19,7 +19,8 @@ module Marquise.IO
 (
     MarquiseClientMonad(..),
     MarquiseServerMonad(..),
-    BurstPath(..)
+    BurstPath(..),
+    spoolDir
 ) where
 
 import Control.Applicative ((<$>), (<*>))
