@@ -9,21 +9,9 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS
-import Data.ByteString.Lazy (toStrict)
-import Data.ByteString.Lazy.Builder
-import Data.Function (on)
-import Data.List (foldl', groupBy, nubBy, sort)
-import Data.List
-import Data.List.NonEmpty (fromList)
 import Data.Locator
-import Data.Monoid
-import Data.Word
 import Pipes.Parse
-import System.Exit
-import System.ZMQ4.Monadic
-import Test.Hspec
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
@@ -61,14 +49,14 @@ suite = do
             readObject "02_PONY_INTERNAL_00000000000000000004_00000000000000000000_extended"
             >>= (`shouldBe` Right "\x03\x00\x00\x00\x00\x00\x00\x00\&Hai")
 
-    describe "reading" $  do
-        it "reads a write" $ do -- Use the same write, as we have already shown it correct
-            runTestDaemon "tcp://localhost:1234" $ do
-                writeTo (Origin "PONY") (Address 4) "Hai"
-                readFrom (Origin "PONY") (Address 4)
+    describe "reading" $
+        it "reads a write" $ -- Use the same write, as we have already shown it correct
+            runTestDaemon "tcp://localhost:1234"
+                (do writeTo (Origin "PONY") (Address 4) "Hai"
+                    readFrom (Origin "PONY") (Address 4))
             >>= (`shouldBe` Just "Hai")
 
-    describe "enumeration" $ do
+    describe "enumeration" $
         it "enumerates two writes" $ do
             addrs <- runTestDaemon "tcp://localhost:1234" $ do
                 writeTo (Origin "PONY") (Address 128) "Hai1"
@@ -76,7 +64,7 @@ suite = do
                 writeTo (Origin "PONY") (Address 128) "Hai3" -- overwrite
 
                 evalStateT drawAll (enumerateOrigin "PONY")
-            addrs `shouldBe` [((Address 0), "Hai2"), ((Address 128), "Hai3")]
+            addrs `shouldBe` [(Address 0, "Hai2"), (Address 128, "Hai3")]
 
     describe "identity QuickCheck" $
         it "writes then reads" $ property propWriteThenRead

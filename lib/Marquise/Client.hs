@@ -1,6 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 --
 -- Data vault for metrics
 --
@@ -29,7 +26,9 @@
 --
 module Marquise.Client
 (
-    -- * Functions
+    -- | * Functions
+    -- Note: You may read MarquiseMonad m bp as IO.
+    mkNameSpace,
     sendSimple,
     sendExtended,
     flush,
@@ -40,62 +39,57 @@ module Marquise.Client
 
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
-import Data.String(IsString)
+import qualified Data.ByteString.Lazy as LB
 import Vaultaire.CoreTypes(Address(..))
 import Data.Word(Word64)
+import Marquise.Types(NameSpace(..), TimeStamp(..))
+import Marquise.IO(MarquiseMonad(..))
+import Data.Packer(runPacking, putWord64LE, putBytes)
+import Data.Char(isAlphaNum)
 
--- | A NameSpace implies a certain amount of Marquise server-side state. This
--- state being the Marquise server's authentication and origin configuration.
-newtype NameSpace = NameSpace String
-  deriving (Eq, Show, IsString)
-
--- | Time since epoch in nanoseconds. Internally a 'Word64'.
-newtype TimeStamp = TimeStamp Word64
-  deriving (Show, Eq, Num, Bounded)
-
--- | This class is for convenience of testing. It encapsulates all IO
--- interaction that this module does.
-class Monad m => MarquiseMonad m where
-    -- | This append does not imply that the given data is synced to disk, just
-    -- that it is queued to do so.
-    append :: NameSpace -> ByteString -> m ()
-    -- | Close any open handles and flush all previously appended datum to disk
-    close :: NameSpace -> m ()
-
- -- | "Dumb" IO implementation.
- --
- -- This could be more efficient if the handle were kept in a "global
- -- variable", using the noinline IORef hack.
-instance MarquiseMonad IO where
-    append (NameSpace ns) = BS.appendFile ns
-    close _ = c_sync
-    
-foreign import ccall "unistd.h sync" c_sync :: IO ()
+-- | Create a namespace, only alphanumeric characters are allowed, max length
+-- is 32 characters.
+mkNameSpace :: String -> Either String NameSpace
+mkNameSpace s
+    | any (not . isAlphaNum) s = Left "non-alphanumeric namespace"
+    | otherwise = Right $ NameSpace s
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
 sendSimple
-    :: MarquiseMonad m
+    :: MarquiseMonad m bp
     => NameSpace
     -> Address
     -> TimeStamp
     -> Word64
     -> m ()
-sendSimple = undefined
+sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
+  where 
+    bytes = LB.fromStrict $ runPacking 24 $ do
+        putWord64LE ad
+        putWord64LE ts
+        putWord64LE w
 
 -- | Send an "extended" data point. Again, representation is up to you.
 sendExtended
-    :: MarquiseMonad m
+    :: MarquiseMonad m bp
     => NameSpace
     -> Address
     -> TimeStamp
     -> ByteString
     -> m ()
-sendExtended = undefined
+sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
+  where
+    len = BS.length bs
+    bytes = LB.fromStrict $ runPacking (24 + len) $ do
+        putWord64LE ad
+        putWord64LE ts
+        putWord64LE $ fromIntegral len
+        putBytes bs
 
 -- | Ensure that all sent points have hit the local disk.
 flush
-    :: MarquiseMonad m
+    :: MarquiseMonad m bp
     => NameSpace
     -> m ()
-flush = undefined
+flush = close

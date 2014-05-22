@@ -34,7 +34,7 @@ library
                      Vaultaire.InternalStore,
                      Vaultaire.ContentsServer
                      Marquise.Client
-
+                     Marquise.IO
   other-modules:
 
   build-depends:     base >=3 && <5,
@@ -46,12 +46,15 @@ library
                      semigroups,
                      containers,
                      primitive,
+                     attoparsec,
                      spool,
                      pipes-parse,
                      hslogger,
+                     directory,
                      lens,
                      pipes,
                      pipes-concurrency,
+                     unix,
                      hashable,
                      unordered-containers,
                      vector,
@@ -246,6 +249,31 @@ test-suite           internal-store-test
   build-depends:     base >=3 && <5,
                      hspec,
                      containers,
+                     QuickCheck,
+                     vector,
+                     rados-haskell,
+                     semigroups,
+                     locators >= 0.2.4,
+                     pipes-parse,
+                     mtl,
+                     bytestring,
+                     zeromq4-haskell,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
+test-suite           client-server-test
+  hs-source-dirs:    tests
+  main-is:           ClientServer.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
                      QuickCheck,
                      vector,
                      rados-haskell,
