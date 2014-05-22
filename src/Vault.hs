@@ -100,11 +100,11 @@ writerOptionsParser = Writer <$> O.option (
 marquiseOptionsParser :: O.Parser Component
 marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
   where
-    parseOrigin = O.option $
+    parseOrigin = strOption $
         long "origin"
         <> short 'o'
         <> help "Origin to write to"
-    parseNameSpace = O.option $
+    parseNameSpace = strOption $
         long "namespace"
         <> short 'n'
         <> help "NameSpace to look for data in"
