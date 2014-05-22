@@ -70,9 +70,9 @@ class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
     flagSent :: bp -> m ()
 
     -- | Send bytes upstream, returns when ack recieved.
-    transmitBytes :: String      -- |^ Broker address
-                  -> Origin      -- |^ Origin
-                  -> ByteString  -- |^ Bytes to send
+    transmitBytes :: String      -- ^ Broker address
+                  -> Origin      -- ^ Origin
+                  -> ByteString  -- ^ Bytes to send
                   -> m ()
 
 -- | "Dumb" IO implementation.
