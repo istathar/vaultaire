@@ -102,7 +102,7 @@ sendViaZMQ :: String -> Origin -> ByteString -> IO ()
 sendViaZMQ broker (Origin origin) bytes =
     withContext $ \ctx ->
     withSocket ctx Dealer $ \s -> do
-        connect s broker
+        connect s ("tcp://" ++ broker ++ ":5560")
         transmitLoop ["\x01"] s
   where
     -- We keep around all identifiers we've sent so that if we end up getting an

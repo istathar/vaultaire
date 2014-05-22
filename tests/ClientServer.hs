@@ -54,7 +54,7 @@ suite =
             shutdown <- newEmptyMVar
             msg <- async (reply shutdown)
 
-            transmitBytes "tcp://localhost:5560" "PONY" "bytes"
+            transmitBytes "localhost" "PONY" "bytes"
             putMVar shutdown ()
             wait msg >>= (`shouldBe` ("PONY", "bytes"))
 

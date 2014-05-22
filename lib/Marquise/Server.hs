@@ -20,7 +20,10 @@ import Vaultaire.CoreTypes(Origin(..))
 import Marquise.Types(NameSpace(..)) 
 import Control.Monad(forever)
 import Control.Concurrent(threadDelay)
+import Marquise.Client(mkNameSpace)
 import Marquise.IO(MarquiseServerMonad(..))
+import qualified Data.ByteString.Char8 as BS
+import Control.Exception(throwIO)
 
 -- | Send the next burst, returns when the burst is acknowledged and thus in
 -- the vault.
@@ -35,10 +38,13 @@ sendNextBurst broker origin ns = do
             transmitBytes broker origin bytes
             flagSent bp
 
-marquiseServer :: String -> Origin -> NameSpace -> IO ()
-marquiseServer broker origin ns = forever $ do
-    sendNextBurst broker origin ns
-    threadDelay idleTime
+marquiseServer :: String -> String -> String -> IO ()
+marquiseServer broker origin user_ns =
+    case mkNameSpace user_ns of
+        Left e -> throwIO $ userError e
+        Right ns -> forever $ do
+            sendNextBurst broker (Origin $ BS.pack origin) ns
+            threadDelay idleTime
 
 idleTime :: Int
 idleTime = 1000000 -- 1 second

@@ -16,6 +16,7 @@ import Vaultaire.Broker
 import Vaultaire.Reader (startReader)
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
+import Marquise.Server(marquiseServer)
 
 data Options = Options
   { pool      :: String
@@ -27,6 +28,7 @@ data Options = Options
 data Component = Broker
                | Reader
                | Writer { batchPeriod :: Word32 }
+               | Marquise { origin :: String, namespace :: String }
 
 -- | Command line option parsing
 
@@ -72,7 +74,8 @@ optionsParser Options{..} = Options <$> parsePool
     parseComponents = subparser
        (   parseBrokerComponent
        <> parseReaderComponent
-       <> parseWriterComponent )
+       <> parseWriterComponent
+       <> parseMarquiseComponent )
 
     parseBrokerComponent = command "broker" $
         info (pure Broker) (progDesc "Start a broker deamon")
@@ -83,6 +86,9 @@ optionsParser Options{..} = Options <$> parsePool
     parseWriterComponent = command "writer" $
         info writerOptionsParser (progDesc "Start a writer daemon")
 
+    parseMarquiseComponent = command "marquise" $
+        info marquiseOptionsParser (progDesc "Start a marquise daemon")
+
 writerOptionsParser :: O.Parser Component
 writerOptionsParser = Writer <$> O.option (
        long "batch_period"
@@ -90,6 +96,18 @@ writerOptionsParser = Writer <$> O.option (
     <> value 4
     <> showDefault
     <> help "Number of seconds to wait before flushing writes" )
+
+marquiseOptionsParser :: O.Parser Component
+marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
+  where
+    parseOrigin = O.option $
+        long "origin"
+        <> short 'o'
+        <> help "Origin to write to"
+    parseNameSpace = O.option $
+        long "namespace"
+        <> short 'n'
+        <> help "NameSpace to look for data in"
 
 -- | Config file parsing
 
@@ -140,6 +158,7 @@ main = do
         Broker -> runBroker
         Reader -> runReader pool user broker
         Writer batch_period -> runWriter pool user broker batch_period
+        Marquise origin namespace -> marquiseServer broker origin namespace
 
 runBroker :: IO ()
 runBroker = runZMQ $ do
