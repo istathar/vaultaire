@@ -21,9 +21,8 @@ module Marquise.IO
 ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Control.Exception (SomeException, try, catch, throwIO, ErrorCall)
-import GHC.IO.Exception(IOException(..))
-import Control.Monad (when)
+import Control.Exception (try, ErrorCall)
+import Control.Monad (when, unless)
 import Data.Maybe(fromMaybe)
 import Control.Monad.State (evalStateT, get, lift, put)
 import Data.Attoparsec (Parser)
@@ -84,7 +83,7 @@ instance MarquiseMonad IO BurstPath where
 doSwap :: NameSpace -> IO (Maybe (BurstPath, ByteString))
 doSwap ns =  do
     -- Create a temp file to atomically move our data into.
-    (tmp_path, tmp_handle) <- mkstemp (tmpTemplate ns) `catch` tmpFail
+    (tmp_path, tmp_handle) <- mkstemp (tmpTemplate ns)
     hClose tmp_handle
     rename (dataFilePath ns) tmp_path
 
@@ -95,14 +94,10 @@ doSwap ns =  do
             -- If the file is huge, we want to put the remainder back, this
             -- happens lazily. Larger than memory files should not be an
             -- issue.
-            append ns remainder
+            unless (LB.null remainder) $ append ns remainder
             return $ Just (BurstPath tmp_path, burst_data)
         Left (_ :: ErrorCall) ->
             error $ "nextBurst: panic: corrupt data:" ++ tmp_path
-
--- We have to hax the directory into the Exception, oh well.
-tmpFail :: IOException -> IO a
-tmpFail e = throwIO e { ioe_filename = Just spoolDir}
 
 -- | Verify that the data is valid, we have to do this verification to split at
 -- a valid boundary anyway.
