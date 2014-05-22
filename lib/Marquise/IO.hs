@@ -1,6 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE FunctionalDependencies   #-}
 {-# LANGUAGE MultiParamTypeClasses    #-}
+{-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
 --
 -- Data vault for metrics
@@ -16,49 +17,63 @@
 -- | IO interactions for Marquise
 module Marquise.IO
 (
-    MarquiseMonad(..),
+    MarquiseClientMonad(..),
+    MarquiseServerMonad(..),
     BurstPath(..)
 ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Control.Exception (try, ErrorCall)
-import Control.Monad (when, unless)
-import Data.Maybe(fromMaybe)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (race)
+import Control.Exception (ErrorCall, try)
+import Control.Monad (unless, when)
 import Control.Monad.State (evalStateT, get, lift, put)
 import Data.Attoparsec (Parser)
 import qualified Data.Attoparsec as Parser
 import Data.Attoparsec.ByteString.Lazy (maybeResult, parse)
 import Data.Attoparsec.Combinator (eitherP, many')
 import Data.ByteString (ByteString)
-import System.Directory(doesFileExist)
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LB
+import Data.List.NonEmpty (fromList)
+import Data.Maybe (fromMaybe)
 import Data.Packer (getWord64LE, runUnpacking, unpackSkip)
 import Data.Word (Word64)
 import Marquise.Types (NameSpace (..))
+import System.Directory (doesFileExist)
 import System.IO (hClose)
 import System.Posix.Files (removeLink, rename)
 import System.Posix.Temp (mkstemp)
-import Vaultaire.CoreTypes (Address (..), isAddressExtended)
+import System.ZMQ4 (Dealer (..), connect, receiveMulti, sendMulti,
+                    withContext, withSocket)
+import Vaultaire.CoreTypes (Address (..), Origin (..), isAddressExtended)
 
 newtype BurstPath = BurstPath { unBurstPath :: FilePath }
     deriving (Show, Eq)
 
 -- | This class is for convenience of testing. It encapsulates all IO
 -- interaction that the client and server will do.
-class Monad m => MarquiseMonad m bp | m -> bp where
+class Monad m => MarquiseClientMonad m where
     -- | This append does not imply that the given data is synced to disk, just
     -- that it is queued to do so. This assumes no state, so any file handles
     -- must be stashed globally or re-opened and closed.
     append :: NameSpace -> LB.ByteString -> m ()
     -- | Close any open handles and flush all previously appended datum to disk
     close :: NameSpace -> m ()
+
+class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
     -- | Atomically empty the underlying store and retrieve the next "burst" of
     -- appended datums. Appended datums are *not* separated. They're all
     -- concatenated together into the same ByteString.
     nextBurst :: NameSpace -> m (Maybe (bp, ByteString))
     -- | Clean up a sent burst. This should be called on a successfull ack.
     flagSent :: bp -> m ()
+
+    -- | Send bytes upstream, returns when ack recieved.
+    transmitBytes :: String      -- |^ Broker address
+                  -> Origin      -- |^ Origin
+                  -> ByteString  -- |^ Bytes to send
+                  -> m ()
 
 -- | "Dumb" IO implementation.
 --
@@ -67,11 +82,12 @@ class Monad m => MarquiseMonad m bp | m -> bp where
 --
 -- This could be more efficient if the handle were kept in a "global
 -- variable", using the noinline IORef hack.
-instance MarquiseMonad IO BurstPath where
+instance MarquiseClientMonad IO where
     append ns = LB.appendFile (dataFilePath ns)
 
     close _ = c_sync
 
+instance MarquiseServerMonad IO BurstPath where
     nextBurst ns = do
         exists <- doesFileExist (dataFilePath ns)
         if exists
@@ -79,6 +95,45 @@ instance MarquiseMonad IO BurstPath where
             else return Nothing
 
     flagSent = removeLink . unBurstPath
+
+    transmitBytes = sendViaZMQ
+
+sendViaZMQ :: String -> Origin -> ByteString -> IO ()
+sendViaZMQ broker (Origin origin) bytes =
+    withContext $ \ctx ->
+    withSocket ctx Dealer $ \s -> do
+        connect s broker
+        transmitLoop ["\x01"] s
+  where
+    -- We keep around all identifiers we've sent so that if we end up getting an
+    -- ack for an earlier message we can be done earlier.
+    transmitLoop identifiers s = do
+        print "transmit loop"
+        let identifier = head identifiers
+        sendMulti s $ fromList [identifier, origin, bytes]
+
+        -- We race, as I don't trust a foreign call to be interruptable.
+        result <- race waitTimeout (receiveMulti s)
+        case result of
+            Left () ->
+                let new_identifier = BS.append identifier identifier
+                in transmitLoop (new_identifier:identifiers) s
+            Right ack -> do
+                print "got ack"
+                case ack of
+                    [identifier', empty] -> do
+                        unless (identifier' `elem` identifiers) $
+                            error "sendViaZMQ: panic: unknown identifier"
+                        unless (BS.null empty) $
+                            error $ "sendViaZMQ: panic: upstream: "
+                                  ++ BS.unpack empty
+                        return ()
+                    _ ->
+                        error "sendViaZMQ: panic: Invalid ack"
+
+
+waitTimeout :: IO ()
+waitTimeout = threadDelay 60000000
 
 doSwap :: NameSpace -> IO (Maybe (BurstPath, ByteString))
 doSwap ns =  do

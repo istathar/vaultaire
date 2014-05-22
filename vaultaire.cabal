@@ -281,6 +281,7 @@ test-suite           client-server-test
                      locators >= 0.2.4,
                      pipes-parse,
                      mtl,
+                     async,
                      bytestring,
                      zeromq4-haskell,
                      vaultaire

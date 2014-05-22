@@ -340,7 +340,6 @@ sendAcks router ack_chan = do
             ZMQ.sendMulti router reply
             sendAcks router ack_chan
 
-
 bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
 bucketOID (Origin origin') epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
                                                       (BS.unpack origin')

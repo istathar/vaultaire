@@ -27,7 +27,7 @@
 module Marquise.Client
 (
     -- | * Functions
-    -- Note: You may read MarquiseMonad m bp as IO.
+    -- Note: You may read MarquiseClientMonad m as IO.
     mkNameSpace,
     sendSimple,
     sendExtended,
@@ -43,7 +43,7 @@ import qualified Data.ByteString.Lazy as LB
 import Vaultaire.CoreTypes(Address(..))
 import Data.Word(Word64)
 import Marquise.Types(NameSpace(..), TimeStamp(..))
-import Marquise.IO(MarquiseMonad(..))
+import Marquise.IO(MarquiseClientMonad(..))
 import Data.Packer(runPacking, putWord64LE, putBytes)
 import Data.Char(isAlphaNum)
 
@@ -57,7 +57,7 @@ mkNameSpace s
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
 sendSimple
-    :: MarquiseMonad m bp
+    :: MarquiseClientMonad m
     => NameSpace
     -> Address
     -> TimeStamp
@@ -72,7 +72,7 @@ sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
 
 -- | Send an "extended" data point. Again, representation is up to you.
 sendExtended
-    :: MarquiseMonad m bp
+    :: MarquiseClientMonad m
     => NameSpace
     -> Address
     -> TimeStamp
@@ -89,7 +89,7 @@ sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
 
 -- | Ensure that all sent points have hit the local disk.
 flush
-    :: MarquiseMonad m bp
+    :: MarquiseClientMonad m
     => NameSpace
     -> m ()
 flush = close

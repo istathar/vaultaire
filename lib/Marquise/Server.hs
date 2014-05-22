@@ -12,19 +12,33 @@
 -- | Marquise server library, for transmission of queued data to the vault.
 module Marquise.Server
 (
-    sendNextBurst
+    sendNextBurst,
+    marquiseServer
 ) where
 
-import Data.ByteString(ByteString)
-import qualified Data.ByteString as BS
-import Vaultaire.CoreTypes(Address(..))
-import Data.Word(Word64)
-import Marquise.Types(NameSpace(..), TimeStamp(..))
-import Marquise.IO(MarquiseMonad(..))
-import Data.Packer(runPacking, putWord64LE, putBytes)
-import Data.Char(isAlphaNum)
+import Vaultaire.CoreTypes(Origin(..))
+import Marquise.Types(NameSpace(..)) 
+import Control.Monad(forever)
+import Control.Concurrent(threadDelay)
+import Marquise.IO(MarquiseServerMonad(..))
 
--- | Send the next burst, burst will be split and the remainder pushed back to
--- the underlying store after the burst size specified
-sendNextBurst :: Word64 -> NameSpace -> m ()
-sendNextBurst = undefined
+-- | Send the next burst, returns when the burst is acknowledged and thus in
+-- the vault.
+sendNextBurst :: MarquiseServerMonad m bp
+              => String -> Origin -> NameSpace -> m ()
+sendNextBurst broker origin ns = do
+    maybe_burst <- nextBurst ns
+    case maybe_burst of
+        Nothing ->
+            return ()
+        Just (bp, bytes) -> do
+            transmitBytes broker origin bytes
+            flagSent bp
+
+marquiseServer :: String -> Origin -> NameSpace -> IO ()
+marquiseServer broker origin ns = forever $ do
+    sendNextBurst broker origin ns
+    threadDelay idleTime
+
+idleTime :: Int
+idleTime = 1000000 -- 1 second
