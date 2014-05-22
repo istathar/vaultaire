@@ -3,17 +3,17 @@
 
 module Main where
 
+import Control.Concurrent
 import Control.Concurrent.Async
+import Data.ByteString (ByteString)
 import Marquise.Client
 import Marquise.IO
+import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
-import Vaultaire.Daemon hiding (async)
 import Vaultaire.Broker
 import Vaultaire.CoreTypes
-import Data.ByteString(ByteString)
-import Control.Concurrent
+import Vaultaire.Daemon hiding (async)
 import Vaultaire.Util
-import System.ZMQ4.Monadic hiding (async)
 
 ns1, ns2, ns3 :: NameSpace
 ns1 = either error id $ mkNameSpace "ns1"
@@ -25,7 +25,7 @@ main = do
     linkThread $ runZMQ $ startProxy
         (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
     hspec suite
-    
+
 suite :: Spec
 suite =
     describe "IO MarquiseClientMonad and MarquiseServerMonad" $ do
@@ -53,13 +53,13 @@ suite =
         it "talks to a vaultaire daemon" $ do
             shutdown <- newEmptyMVar
             msg <- async (reply shutdown)
-                
+
             transmitBytes "tcp://localhost:5560" "PONY" "bytes"
             putMVar shutdown ()
             wait msg >>= (`shouldBe` ("PONY", "bytes"))
 
 reply :: MVar () -> IO (ByteString, ByteString)
-reply shutdown = 
+reply shutdown =
     runDaemon "tcp://localhost:5561" Nothing "test" $ do
         Message rep_f (Origin origin') msg <- nextMessage
         rep_f Success

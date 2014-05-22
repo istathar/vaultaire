@@ -108,7 +108,6 @@ sendViaZMQ broker (Origin origin) bytes =
     -- We keep around all identifiers we've sent so that if we end up getting an
     -- ack for an earlier message we can be done earlier.
     transmitLoop identifiers s = do
-        print "transmit loop"
         let identifier = head identifiers
         sendMulti s $ fromList [identifier, origin, bytes]
 
@@ -118,8 +117,7 @@ sendViaZMQ broker (Origin origin) bytes =
             Left () ->
                 let new_identifier = BS.append identifier identifier
                 in transmitLoop (new_identifier:identifiers) s
-            Right ack -> do
-                print "got ack"
+            Right ack ->
                 case ack of
                     [identifier', empty] -> do
                         unless (identifier' `elem` identifiers) $
