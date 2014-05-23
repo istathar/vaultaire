@@ -51,7 +51,7 @@ import qualified Vaultaire.InternalStore as InternalStore
 
 data Operation =
     ContentsListRequest |
-    RegisterNewAddress |
+    GenerateNewAddress |
     UpdateSourceTag Address SourceDict |
     RemoveSourceTag Address SourceDict
   deriving
@@ -76,7 +76,7 @@ handleRequest (Message reply o p') =
         Left err         -> failWithString reply "Unable to parse request message" err
         Right op -> case op of
             ContentsListRequest   -> performListRequest reply o
-            RegisterNewAddress    -> performRegisterRequest reply o
+            GenerateNewAddress    -> performRegisterRequest reply o
             UpdateSourceTag a s   -> performUpdateRequest reply o a s
             RemoveSourceTag a s   -> performRemoveRequest reply o a s
 
@@ -88,7 +88,7 @@ parseOperationMessage = do
         0x0 -> do
             return ContentsListRequest
         0x1 -> do
-            return RegisterNewAddress
+            return GenerateNewAddress
         0x2 -> do
             a <- getWord64LE
             s <- parseSourceDict
@@ -145,7 +145,7 @@ opcodeToWord64 :: Operation -> Word64
 opcodeToWord64 op =
     case op of
         ContentsListRequest   -> 0x0
-        RegisterNewAddress    -> 0x1
+        GenerateNewAddress    -> 0x1
         UpdateSourceTag _ _   -> 0x2
         RemoveSourceTag _ _   -> 0x3
 
