@@ -13,6 +13,7 @@ daymap-test: dist/build/daymap-test/daymap-test
 writer-test: dist/build/writer-test/writer-test
 contents-test: dist/build/contents-test/contents-test
 identity-test: dist/build/identity-test/identity-test
+client-server-test: dist/build/client-server-test/client-server-test
 writer-bench: dist/build/writer-bench/writer-bench
 reader-bench: dist/build/reader-bench/reader-bench
 

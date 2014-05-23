@@ -28,7 +28,7 @@ module Marquise.Client
 (
     -- | * Functions
     -- Note: You may read MarquiseClientMonad m as IO.
-    mkNameSpace,
+    makeNameSpace,
     sendSimple,
     sendExtended,
     flush,
@@ -49,8 +49,8 @@ import Vaultaire.CoreTypes (Address (..))
 
 -- | Create a namespace, only alphanumeric characters are allowed, max length
 -- is 32 characters.
-mkNameSpace :: String -> Either String NameSpace
-mkNameSpace s
+makeNameSpace :: String -> Either String NameSpace
+makeNameSpace s
     | any (not . isAlphaNum) s = Left "non-alphanumeric namespace"
     | otherwise = Right $ NameSpace s
 

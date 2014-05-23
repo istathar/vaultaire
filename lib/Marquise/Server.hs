@@ -21,7 +21,7 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
 import Control.Monad (forever, unless)
 import qualified Data.ByteString.Char8 as BS
-import Marquise.Client (mkNameSpace)
+import Marquise.Client (makeNameSpace)
 import Marquise.IO (MarquiseServerMonad (..), spoolDir)
 import Marquise.Types (NameSpace (..))
 import System.Directory (doesDirectoryExist)
@@ -45,7 +45,7 @@ marquiseServer broker origin user_ns = do
     spool_exists <- doesDirectoryExist spoolDir
     unless spool_exists $ throwIO $ userError $
         "spool directory does not exist: " ++ spoolDir
-    case mkNameSpace user_ns of
+    case makeNameSpace user_ns of
         Left e -> throwIO $ userError e
         Right ns -> forever $ do
             sendNextBurst broker (Origin $ BS.pack origin) ns
