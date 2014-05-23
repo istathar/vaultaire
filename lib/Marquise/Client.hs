@@ -29,6 +29,7 @@ module Marquise.Client
     -- | * Functions
     -- Note: You may read MarquiseClientMonad m as IO.
     makeNameSpace,
+    withBroker,
 
     -- | * Request or assign Addresses
     requestUnique,
@@ -45,6 +46,8 @@ module Marquise.Client
     Address,
 ) where
 
+import Crypto.MAC.SipHash
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
@@ -56,6 +59,8 @@ import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
 import Marquise.Types (NameSpace (..), TimeStamp (..))
 import Vaultaire.CoreTypes (Address (..))
 
+import Control.Monad.Reader
+
 -- | Create a namespace, only alphanumeric characters are allowed, max length
 -- is 32 characters.
 makeNameSpace :: String -> Either String NameSpace
@@ -63,6 +68,9 @@ makeNameSpace s
     | any (not . isAlphaNum) s = Left "non-alphanumeric namespace"
     | otherwise = Right $ NameSpace s
 
+
+withBroker :: Monad m => String -> ReaderT String m a -> m a
+withBroker broker action = runReaderT action broker
 
 -- | For the case where you can track Addresses yourself, we provide a facility
 -- to generate unique ones for you, guaranteed free of collision.
@@ -72,12 +80,20 @@ requestUnique = requestUniqueAddress
 -- | If you have deterministic or fixed known identifiers for your sources, you can
 -- use this function to translate it as an Address.
 hashIdentifier :: ByteString -> Address
-hashIdentifier = undefined
+hashIdentifier x =
+  let
+    s = SipKey 0 0
+    h = hash s x
+    (SipHash a) = h
+    a' = a `clearBit` 0
+  in
+    Address a'
 
+-- | Set the key,value tags as metadata on the given Address.
 updateSourceDict :: ContentsClientMonad m => Address -> [(Text,Text)] -> m ()
 updateSourceDict = undefined
 
-
+-- | Remove the supplied key,value tags from metadata on the Address, if present.
 removeSourceDict :: ContentsClientMonad m => Address -> [(Text,Text)] -> m ()
 removeSourceDict = undefined
 

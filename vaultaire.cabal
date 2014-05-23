@@ -67,6 +67,7 @@ library
                      async,
                      random,
                      locators >= 0.2.4,
+                     siphash,
                      rados-haskell >= 3
 
   ghc-options:       -O2

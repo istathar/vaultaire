@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts         #-}
+{-# LANGUAGE FlexibleInstances        #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE FunctionalDependencies   #-}
 {-# LANGUAGE MultiParamTypeClasses    #-}
@@ -29,6 +31,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
 import Control.Exception (ErrorCall, try)
 import Control.Monad (unless, when)
+import Control.Monad.Reader (MonadReader, ReaderT)
 import Control.Monad.State (evalStateT, get, lift, put)
 import Data.Attoparsec (Parser)
 import qualified Data.Attoparsec as Parser
@@ -78,10 +81,10 @@ class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
                   -> m ()
 
 
-class Monad m => ContentsClientMonad m where
+class MonadReader String m => ContentsClientMonad m where
     requestUniqueAddress :: m Address
 
-instance ContentsClientMonad IO where
+instance ContentsClientMonad (ReaderT String IO) where
     requestUniqueAddress = undefined
 
 
