@@ -5,6 +5,8 @@
 module Vaultaire.CoreTypes
 (
     Address(..),
+    encodeAddressToString,
+    decodeStringAsAddress,
     calculateBucketNumber,
     isAddressExtended,
     Origin(..)
@@ -13,13 +15,23 @@ module Vaultaire.CoreTypes
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Hashable
+import Data.Locator
 import Data.String
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
 newtype Address = Address {
     unAddress :: Word64
-} deriving (Show, Eq, Num, Bounded)
+} deriving (Eq, Num, Bounded)
+
+instance Show Address where
+    show a = encodeAddressToString a
+
+encodeAddressToString :: Address -> String
+encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress
+
+decodeStringAsAddress :: String -> Address
+decodeStringAsAddress = fromIntegral . fromBase62
 
 --
 -- | Which bucket does this address belong to?

@@ -20,9 +20,7 @@ module Vaultaire.ContentsServer
     handleSourceArgument,
     encodeSourceDict,
     encodeAddressToBytes,
-    encodeAddressToString,
-    encodeContentsListEntry,
-    decodeStringAsAddress
+    encodeContentsListEntry
 ) where
 
 import Control.Applicative
@@ -34,7 +32,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
-import Data.Locator
 import Data.Maybe (isJust)
 import Data.Packer
 import Data.Text (Text)
@@ -190,11 +187,6 @@ allocateNewAddressInVault o = do
 encodeAddressToBytes :: Address -> ByteString
 encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
 
-encodeAddressToString :: Address -> String
-encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress
-
-decodeStringAsAddress :: String -> Address
-decodeStringAsAddress = fromIntegral . fromBase62
 
 encodeContentsListEntry :: (Address, ByteString) -> ByteString
 encodeContentsListEntry ((Address a), x') =
