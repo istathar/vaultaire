@@ -27,6 +27,9 @@ newtype Address = Address {
 instance Show Address where
     show a = encodeAddressToString a
 
+instance IsString Address where
+    fromString = decodeStringAsAddress
+
 encodeAddressToString :: Address -> String
 encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress
 
