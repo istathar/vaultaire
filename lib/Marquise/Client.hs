@@ -29,6 +29,9 @@ module Marquise.Client
     -- | * Functions
     -- Note: You may read MarquiseClientMonad m as IO.
     makeNameSpace,
+    -- | * Request or assign Addresses
+    requestUnique,
+    hashIdentifier,
     sendSimple,
     sendExtended,
     flush,
@@ -53,6 +56,13 @@ makeNameSpace :: String -> Either String NameSpace
 makeNameSpace s
     | any (not . isAlphaNum) s = Left "non-alphanumeric namespace"
     | otherwise = Right $ NameSpace s
+
+requestUnique :: IO Address -- FIXME
+requestUnique = undefined
+
+hashIdentifier :: ByteString -> Address
+hashIdentifier = undefined
+
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
