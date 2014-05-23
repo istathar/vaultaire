@@ -15,7 +15,7 @@
 -- by a Marquise server to the vault.
 --
 -- If you call close, you can be assured that your data is safe and will at
--- some point end up in the data vault (excluiding local disk failure). This
+-- some point end up in the data vault (excluding local disk failure). This
 -- assumption is based on a functional marquise daemon with connectivity
 -- eventually running within your namespace.
 --
@@ -46,7 +46,7 @@ import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
-import Marquise.IO (MarquiseClientMonad (..))
+import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
 import Marquise.Types (NameSpace (..), TimeStamp (..))
 import Vaultaire.CoreTypes (Address (..))
 
@@ -57,9 +57,14 @@ makeNameSpace s
     | any (not . isAlphaNum) s = Left "non-alphanumeric namespace"
     | otherwise = Right $ NameSpace s
 
-requestUnique :: IO Address -- FIXME
-requestUnique = undefined
 
+-- | For the case where you can track Addresses yourself, we provide a facility
+-- to generate unique ones for you, guaranteed free of collision.
+requestUnique :: ContentsClientMonad m => m Address
+requestUnique = requestUniqueAddress
+
+-- | If you have deterministic or fixed known identifiers for your sources, you can
+-- use this function to translate it as an Address.
 hashIdentifier :: ByteString -> Address
 hashIdentifier = undefined
 

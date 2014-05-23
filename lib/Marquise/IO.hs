@@ -20,6 +20,7 @@ module Marquise.IO
     MarquiseClientMonad(..),
     MarquiseServerMonad(..),
     BurstPath(..),
+    ContentsClientMonad(..),
     spoolDir
 ) where
 
@@ -75,6 +76,14 @@ class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
                   -> Origin      -- ^ Origin
                   -> ByteString  -- ^ Bytes to send
                   -> m ()
+
+
+class Monad m => ContentsClientMonad m where
+    requestUniqueAddress :: m Address
+
+instance ContentsClientMonad IO where
+    requestUniqueAddress = undefined
+
 
 -- | "Dumb" IO implementation.
 --
