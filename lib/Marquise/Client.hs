@@ -29,9 +29,14 @@ module Marquise.Client
     -- | * Functions
     -- Note: You may read MarquiseClientMonad m as IO.
     makeNameSpace,
+
     -- | * Request or assign Addresses
     requestUnique,
     hashIdentifier,
+    updateSourceDict,
+    removeSourceDict,
+
+    -- | * Sending data to Vaultaire
     sendSimple,
     sendExtended,
     flush,
@@ -45,6 +50,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
+import Data.Text (Text)
 import Data.Word (Word64)
 import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
 import Marquise.Types (NameSpace (..), TimeStamp (..))
@@ -67,6 +73,13 @@ requestUnique = requestUniqueAddress
 -- use this function to translate it as an Address.
 hashIdentifier :: ByteString -> Address
 hashIdentifier = undefined
+
+updateSourceDict :: ContentsClientMonad m => Address -> [(Text,Text)] -> m ()
+updateSourceDict = undefined
+
+
+removeSourceDict :: ContentsClientMonad m => Address -> [(Text,Text)] -> m ()
+removeSourceDict = undefined
 
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.

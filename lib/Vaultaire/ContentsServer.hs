@@ -104,7 +104,7 @@ parseSourceDict :: Unpacking SourceDict
 parseSourceDict = do
     n  <- getWord64LE
     b' <- getBytes (fromIntegral n)
-    return $ handleSourceArgument b'
+    return $ handleSourceArgument b'    -- FIXME needs to handle UTF8 decode errors
 
 {-
     We could replace this with a proper parser in order to get better
