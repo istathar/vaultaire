@@ -5,6 +5,7 @@ import Control.Monad
 import qualified Data.ByteString.Char8 as BS
 import Data.Maybe (fromJust)
 import Data.Word (Word32)
+import Marquise.Server (marquiseServer)
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
@@ -16,7 +17,6 @@ import Vaultaire.Broker
 import Vaultaire.Reader (startReader)
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
-import Marquise.Server(marquiseServer)
 
 data Options = Options
   { pool      :: String

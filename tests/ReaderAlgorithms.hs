@@ -12,7 +12,6 @@ import Control.Monad.ST
 import Data.ByteString (ByteString)
 import qualified Data.Vector.Algorithms.Merge as M
 import Data.Vector.Generic.Mutable (MVector)
-import Vaultaire.CoreTypes(Address(..))
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Data.Vector.Storable.ByteString
@@ -21,6 +20,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
+import Vaultaire.CoreTypes (Address (..))
 import Vaultaire.ReaderAlgorithms (Point (..))
 import qualified Vaultaire.ReaderAlgorithms as A
 

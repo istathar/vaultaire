@@ -33,9 +33,10 @@ import qualified Pipes.Prelude as Pipes
 import System.Log.Logger
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon (Daemon)
-import Vaultaire.Reader (ReadDetails (..), Request (..), readExtended, getBuckets)
+import Vaultaire.Reader (ReadDetails (..), Request (..), getBuckets,
+                         readExtended)
+import Vaultaire.ReaderAlgorithms (mergeNoFilter)
 import Vaultaire.Writer (BatchState (..), appendExtended, write)
-import Vaultaire.ReaderAlgorithms(mergeNoFilter)
 
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon ()

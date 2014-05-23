@@ -18,7 +18,7 @@
 -- some point end up in the data vault (excluiding local disk failure). This
 -- assumption is based on a functional marquise daemon with connectivity
 -- eventually running within your namespace.
--- 
+--
 -- We provide no way to *absolutely* ensure that a point is currently written
 -- to the vault. Such a guarantee would require blocking and complex queuing,
 -- or observing various underlying mechanisms that should ideally remain
@@ -37,15 +37,15 @@ module Marquise.Client
     Address,
 ) where
 
-import Data.ByteString(ByteString)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
-import Vaultaire.CoreTypes(Address(..))
-import Data.Word(Word64)
-import Marquise.Types(NameSpace(..), TimeStamp(..))
-import Marquise.IO(MarquiseClientMonad(..))
-import Data.Packer(runPacking, putWord64LE, putBytes)
-import Data.Char(isAlphaNum)
+import Data.Char (isAlphaNum)
+import Data.Packer (putBytes, putWord64LE, runPacking)
+import Data.Word (Word64)
+import Marquise.IO (MarquiseClientMonad (..))
+import Marquise.Types (NameSpace (..), TimeStamp (..))
+import Vaultaire.CoreTypes (Address (..))
 
 -- | Create a namespace, only alphanumeric characters are allowed, max length
 -- is 32 characters.
@@ -64,7 +64,7 @@ sendSimple
     -> Word64
     -> m ()
 sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
-  where 
+  where
     bytes = LB.fromStrict $ runPacking 24 $ do
         putWord64LE ad
         putWord64LE ts

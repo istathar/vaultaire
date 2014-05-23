@@ -16,7 +16,7 @@ module Marquise.Types
     TimeStamp(..),
 ) where
 
-import Data.Word(Word64)
+import Data.Word (Word64)
 
 -- | A NameSpace implies a certain amount of Marquise server-side state. This
 -- state being the Marquise server's authentication and origin configuration.
@@ -26,5 +26,5 @@ newtype NameSpace = NameSpace String
 -- | Time since epoch in nanoseconds. Internally a 'Word64'.
 newtype TimeStamp = TimeStamp Word64
   deriving (Show, Eq, Num, Bounded)
- 
+
 
