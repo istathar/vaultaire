@@ -6,6 +6,7 @@ module Main where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS
 import Marquise.Client
 import Marquise.IO
 import System.ZMQ4.Monadic hiding (async)
@@ -49,6 +50,18 @@ suite =
 
             nextBurst ns1 >>= (`shouldBe` Nothing)
             nextBurst ns2 >>= (`shouldBe` Nothing)
+
+        it "splits up after 1MB" $ do
+            let large_burst = BS.replicate 1048584 'B'
+            append ns1 large_burst
+            append ns1 "DDDDDDDDDDDDDDDDDDDDDDDD"
+            Just (bp1,bytes1) <- nextBurst ns1
+            Just (bp2,bytes2) <- nextBurst ns1
+            nextBurst ns1 >>= (`shouldBe` Nothing)
+
+            (bp1 == bp2) `shouldBe` False
+            bytes1 `shouldBe` BS.toStrict large_burst
+            bytes2 `shouldBe` "DDDDDDDDDDDDDDDDDDDDDDDD"
 
         it "talks to a vaultaire daemon" $ do
             shutdown <- newEmptyMVar

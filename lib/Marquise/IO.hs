@@ -130,7 +130,6 @@ sendViaZMQ broker (Origin origin) bytes =
                     _ ->
                         error "sendViaZMQ: panic: Invalid ack"
 
-
 waitTimeout :: IO ()
 waitTimeout = threadDelay 60000000
 
