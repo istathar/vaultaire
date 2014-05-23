@@ -33,6 +33,7 @@ import qualified Data.ByteString.Char8 as S
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (isJust)
+import Data.Monoid (mempty)
 import Data.Packer
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
@@ -170,6 +171,7 @@ performRegisterRequest reply o =
     allocateNewAddressInVault o
     >>= reply . Response . encodeAddressToBytes
 
+
 allocateNewAddressInVault :: Origin -> Daemon Address
 allocateNewAddressInVault o = do
     num <- liftIO rollDice
@@ -179,7 +181,9 @@ allocateNewAddressInVault o = do
         exists <- isAddressInVault o a
         if exists
             then allocateNewAddressInVault o
-            else return a
+            else do
+                writeSourceTagsForAddress o a mempty
+                return a
   where
         rollDice = getStdRandom (randomR (0, maxBound :: Word64))
 
