@@ -80,14 +80,10 @@ requestUnique = requestUniqueAddress
 -- | If you have deterministic or fixed known identifiers for your sources, you can
 -- use this function to translate it as an Address.
 hashIdentifier :: ByteString -> Address
-hashIdentifier x =
-  let
-    s = SipKey 0 0
-    h = hash s x
-    (SipHash a) = h
-    a' = a `clearBit` 0
-  in
-    Address a'
+hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
+  where
+    iv = SipKey 0 0
+    unSipHash (SipHash h) = h
 
 -- | Set the key,value tags as metadata on the given Address.
 updateSourceDict :: ContentsClientMonad m => Address -> [(Text,Text)] -> m ()
