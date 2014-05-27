@@ -32,7 +32,10 @@ library
                      Vaultaire.Reader,
                      Vaultaire.ReaderAlgorithms,
                      Vaultaire.InternalStore,
-                     Vaultaire.ContentsServer
+                     Vaultaire.ContentsServer,
+                     Vaultaire.WireFormats.Class,
+                     Vaultaire.WireFormats.ContentsOperation,
+                     Vaultaire.WireFormats.SourceDict,
                      Marquise.Client
                      Marquise.Server
                      Marquise.IO
@@ -322,6 +325,28 @@ test-suite           contents-test
                      -Wwarn
                      -fwarn-tabs
 
+test-suite           wire-formats-test
+  hs-source-dirs:    tests
+  main-is:           WireFormatsTest.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     containers,
+                     unordered-containers,
+                     text,
+                     QuickCheck,
+                     mtl,
+                     bytestring,
+                     quickcheck-instances,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
 
 benchmark writer-bench
   hs-source-dirs:    bench, tests

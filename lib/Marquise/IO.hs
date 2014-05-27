@@ -31,7 +31,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
 import Control.Exception (ErrorCall, try)
 import Control.Monad (unless, when)
-import Control.Monad.Reader (MonadReader, ReaderT)
+import Control.Monad.Reader (MonadReader, ReaderT, ask)
 import Control.Monad.State (evalStateT, get, lift, put)
 import Data.Attoparsec (Parser)
 import qualified Data.Attoparsec as Parser
@@ -49,7 +49,7 @@ import System.Directory (doesFileExist)
 import System.IO (hClose)
 import System.Posix.Files (removeLink, rename)
 import System.Posix.Temp (mkstemp)
-import System.ZMQ4 (Dealer (..), connect, receiveMulti, sendMulti,
+import System.ZMQ4 (Dealer (..), Socket, connect, receiveMulti, sendMulti,
                     withContext, withSocket)
 import Vaultaire.CoreTypes (Address (..), Origin (..), isAddressExtended)
 
@@ -85,11 +85,14 @@ class MonadReader String m => ContentsClientMonad m where
     requestUniqueAddress :: m Address
 
 instance ContentsClientMonad (ReaderT String IO) where
-    requestUniqueAddress = undefined
+    requestUniqueAddress = do
+        broker <- ask
+        response <- lift $ withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
+                                               (awaitResponse request)
+        return undefined
+      where
+        request = undefined
 
-
--- | "Dumb" IO implementation.
---
 -- Making MonadIO m an instance is impractical, as it would require
 -- undecidable instances.
 --
@@ -111,12 +114,12 @@ instance MarquiseServerMonad IO BurstPath where
 
     transmitBytes = sendViaZMQ
 
+awaitResponse :: ByteString -> Socket Dealer -> IO ByteString
+awaitResponse = undefined
+
 sendViaZMQ :: String -> Origin -> ByteString -> IO ()
 sendViaZMQ broker (Origin origin) bytes =
-    withContext $ \ctx ->
-    withSocket ctx Dealer $ \s -> do
-        connect s ("tcp://" ++ broker ++ ":5560")
-        transmitLoop ["\x01"] s
+    withVaultaireSocket ("tcp://" ++ broker ++ ":5560") (transmitLoop ["\x01"])
   where
     -- We keep around all identifiers we've sent so that if we end up getting an
     -- ack for an earlier message we can be done earlier.
@@ -141,6 +144,13 @@ sendViaZMQ broker (Origin origin) bytes =
                         return ()
                     _ ->
                         error "sendViaZMQ: panic: Invalid ack"
+
+withVaultaireSocket :: String -> (Socket Dealer -> IO a) -> IO a
+withVaultaireSocket broker f =
+    withContext $ \ctx ->
+    withSocket ctx Dealer $ \s -> do
+        connect s broker
+        f s
 
 waitTimeout :: IO ()
 waitTimeout = threadDelay 60000000

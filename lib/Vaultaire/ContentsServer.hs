@@ -15,8 +15,6 @@ module Vaultaire.ContentsServer
 (
     startContents,
     -- testing
-    handleSourceArgument,
-    encodeSourceDict,
     encodeAddressToBytes,
     decodeAddressFromBytes,
     encodeContentsListEntry
@@ -29,18 +27,16 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
-import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (isJust)
 import Data.Monoid (mempty)
 import Data.Packer
-import Data.Text (Text)
-import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
 import Pipes
 import System.Random
 import Vaultaire.WireFormats.ContentsOperation (ContentsOperation (..),
-                                                SourceDict, fromWire,
-                                                handleSourceArgument)
+                                                SourceDict)
+import Vaultaire.WireFormats.SourceDict (diffSource, unionSource)
+import Vaultaire.WireFormats.Class (fromWire, toWire)
 
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon
@@ -66,17 +62,6 @@ handleRequest (Message reply origin payload) =
             UpdateSourceTag a s   -> performUpdateRequest reply origin a s
             RemoveSourceTag a s   -> performRemoveRequest reply origin a s
 
-encodeSourceDict :: SourceDict -> ByteString
-encodeSourceDict s =
-  let
-    pairs = HashMap.toList s
-
-    toBytes :: (Text, Text) -> ByteString
-    toBytes (k,v) = S.concat [T.encodeUtf8 k, ":", T.encodeUtf8 v]
-  in
-    S.intercalate "," $ map toBytes pairs
-
-
 failWithString :: (Response -> Daemon ()) -> String -> SomeException -> Daemon ()
 failWithString reply msg e = do
     liftIO $ putStrLn $ msg ++ "; " ++ show e
@@ -94,7 +79,7 @@ failWithString reply msg e = do
     times, so each reply here represents one Address,SourceDict pair.
 -}
 performListRequest :: (Response -> Daemon ()) -> Origin ->  Daemon ()
-performListRequest reply o = do
+performListRequest reply o =
     runEffect $
         for (InternalStore.enumerateOrigin o) (lift . reply . Response . encodeContentsListEntry)
 
@@ -129,14 +114,14 @@ decodeAddressFromBytes = Address . runUnpacking getWord64LE
 
 
 encodeContentsListEntry :: (Address, ByteString) -> ByteString
-encodeContentsListEntry ((Address a), x') =
+encodeContentsListEntry (Address a, x') =
   let
     len  = B.length x'
     size = 8 + 8 + len
   in
     runPacking size $ do
         putWord64LE a
-        putWord64LE (fromIntegral $ len)
+        putWord64LE (fromIntegral len)
         putBytes x'
 
 performUpdateRequest
@@ -146,12 +131,8 @@ performUpdateRequest
     -> SourceDict
     -> Daemon ()
 performUpdateRequest reply o a s = do
-    s0 <- retreiveSourceTagsForAddress o a
-
-    -- elements in first map win
-    let s1 = HashMap.union s s0
-
-    writeSourceTagsForAddress o a s1
+    s' <- retreiveSourceTagsForAddress o a
+    writeSourceTagsForAddress o a (unionSource s s')
     reply Success
 
 
@@ -164,13 +145,13 @@ retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
 retreiveSourceTagsForAddress o a = do
     result <- InternalStore.readFrom o a
     return $ case result of
-        Just b'     -> handleSourceArgument b'
-        Nothing     -> HashMap.empty
+        Just b'     -> either throw id (fromWire b')
+        Nothing     -> mempty
 
 
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
 writeSourceTagsForAddress o a s =
-    InternalStore.writeTo o a (encodeSourceDict s)
+    InternalStore.writeTo o a (toWire s)
 
 
 performRemoveRequest
@@ -180,11 +161,6 @@ performRemoveRequest
     -> SourceDict
     -> Daemon ()
 performRemoveRequest reply o a s = do
-    s0 <- retreiveSourceTagsForAddress o a
-
-    -- elements of first not existing in second
-    let s1 = HashMap.difference s0 s
-
-    writeSourceTagsForAddress o a s1
+    s' <- retreiveSourceTagsForAddress o a
+    writeSourceTagsForAddress o a $ diffSource s' s
     reply Success
-

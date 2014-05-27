@@ -20,6 +20,8 @@ import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
+import Vaultaire.CoreTypes (Address (..))
+import Vaultaire.WireFormats.SourceDict
 
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
@@ -40,22 +42,6 @@ main = do
 
 suite :: Spec
 suite = do
-    describe "Requests" $ do
-        it "Operations encode correctly" $ do
-            opcodeToWord64 ContentsListRequest `shouldBe`           0x0
-            opcodeToWord64 GenerateNewAddress `shouldBe`                0x1
-            opcodeToWord64 (UpdateSourceTag 0 HashMap.empty) `shouldBe`   0x2
-            opcodeToWord64 (RemoveSourceTag 0 HashMap.empty) `shouldBe`   0x3
-
-    describe "Source dictionaries" $ do
-        let s = HashMap.fromList [("metric","cpu"), ("server","www.example.com")]
-
-        it "parses string to map" $ do
-            handleSourceArgument "server:www.example.com,metric:cpu" `shouldBe` s
-
-        it "encodes map to string" $ do
-            encodeSourceDict s `shouldBe` "metric:cpu,server:www.example.com"
-
     describe "Addresses" $ do
         it "encodes an address in base62" $ do
             encodeAddressToString 0 `shouldBe` "00000000000"
@@ -71,25 +57,11 @@ suite = do
 
     describe "Contents list reply" $
       let
-        a1  = 1
-        s1  = HashMap.fromList [("metric","cpu"), ("server","www.example.com")]
-        s1' = encodeSourceDict s1
-        a2  = 2
-        s2  = HashMap.fromList [("metric","eth0"), ("server","db3.example.com")]
-        s2' = encodeSourceDict s2
+        either_source_dict = makeSourceDict $ HashMap.fromList [("metric","cpu"), ("server","www.example.com")]
+        source_dict = either error toWire either_source_dict
       in do
         it "single source response correctly encoded" $ do
-            encodeContentsListEntry (a1,s1') `shouldBe`
+            encodeContentsListEntry (1,source_dict) `shouldBe`
                 "\x01\x00\x00\x00\x00\x00\x00\x00\
-                \\x21\x00\x00\x00\x00\x00\x00\x00\
-                \metric:cpu,server:www.example.com"
-
-        it "multiple sources response correctly encoded" $ do
-            B.concat [encodeContentsListEntry (a1,s1'), encodeContentsListEntry (a2,s2')] `shouldBe`
-                "\x01\x00\x00\x00\x00\x00\x00\x00\
-                \\x21\x00\x00\x00\x00\x00\x00\x00\
-                \metric:cpu,server:www.example.com\
-                \\x02\x00\x00\x00\x00\x00\x00\x00\
                 \\x22\x00\x00\x00\x00\x00\x00\x00\
-                \metric:eth0,server:db3.example.com"
-
+                \metric:cpu,server:www.example.com,"
