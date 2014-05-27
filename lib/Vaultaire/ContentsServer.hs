@@ -14,12 +14,11 @@
 module Vaultaire.ContentsServer
 (
     startContents,
-    Operation(..),
     -- testing
-    opcodeToWord64,
     handleSourceArgument,
     encodeSourceDict,
     encodeAddressToBytes,
+    decodeAddressFromBytes,
     encodeContentsListEntry
 ) where
 
@@ -30,7 +29,6 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as S
-import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (isJust)
 import Data.Monoid (mempty)
@@ -40,25 +38,13 @@ import qualified Data.Text.Encoding as T
 import Data.Word (Word64)
 import Pipes
 import System.Random
+import Vaultaire.WireFormats.ContentsOperation (ContentsOperation (..),
+                                                SourceDict, fromWire,
+                                                handleSourceArgument)
 
 import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import qualified Vaultaire.InternalStore as InternalStore
-
---
--- Daemon implementation
---
-
-data Operation =
-    ContentsListRequest |
-    GenerateNewAddress |
-    UpdateSourceTag Address SourceDict |
-    RemoveSourceTag Address SourceDict
-  deriving
-    (Show, Eq)
-
-
-type SourceDict = HashMap Text Text
 
 -- | Start a writer daemon, never returns.
 startContents
@@ -71,58 +57,14 @@ startContents broker user pool =
 
 
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply o p') =
-    case tryUnpacking parseOperationMessage p' of
+handleRequest (Message reply origin payload) =
+    case fromWire payload of
         Left err         -> failWithString reply "Unable to parse request message" err
         Right op -> case op of
-            ContentsListRequest   -> performListRequest reply o
-            GenerateNewAddress    -> performRegisterRequest reply o
-            UpdateSourceTag a s   -> performUpdateRequest reply o a s
-            RemoveSourceTag a s   -> performRemoveRequest reply o a s
-
-
-parseOperationMessage :: Unpacking Operation
-parseOperationMessage = do
-    word <- getWord64LE
-    case word of
-        0x0 -> do
-            return ContentsListRequest
-        0x1 -> do
-            return GenerateNewAddress
-        0x2 -> do
-            a <- getWord64LE
-            s <- parseSourceDict
-            return (UpdateSourceTag (Address a) s)
-        0x3 -> do
-            a <- getWord64LE
-            s <- parseSourceDict
-            return (RemoveSourceTag (Address a) s)
-        _   -> fail "Illegal op code"
-
-
-parseSourceDict :: Unpacking SourceDict
-parseSourceDict = do
-    n  <- getWord64LE
-    b' <- getBytes (fromIntegral n)
-    return $ handleSourceArgument b'    -- FIXME needs to handle UTF8 decode errors
-
-{-
-    We could replace this with a proper parser in order to get better
-    error reporting if this ever starts being a problem.
--}
-handleSourceArgument :: ByteString -> SourceDict
-handleSourceArgument b' =
-  let
-    items' = S.split ',' b'
-    pairs' = map (S.split ':') items'
-    pairs  = map toTag pairs'
-  in
-    HashMap.fromList pairs
-  where
-    toTag :: [ByteString] -> (Text, Text)
-    toTag [k',v'] = (T.decodeUtf8 k', T.decodeUtf8 v')
-    toTag _ = error "invalid source argument"
-
+            ContentsListRequest   -> performListRequest reply origin
+            GenerateNewAddress    -> performRegisterRequest reply origin
+            UpdateSourceTag a s   -> performUpdateRequest reply origin a s
+            RemoveSourceTag a s   -> performRemoveRequest reply origin a s
 
 encodeSourceDict :: SourceDict -> ByteString
 encodeSourceDict s =
@@ -139,15 +81,6 @@ failWithString :: (Response -> Daemon ()) -> String -> SomeException -> Daemon (
 failWithString reply msg e = do
     liftIO $ putStrLn $ msg ++ "; " ++ show e
     reply (Failure (S.pack msg))
-
-
-opcodeToWord64 :: Operation -> Word64
-opcodeToWord64 op =
-    case op of
-        ContentsListRequest   -> 0x0
-        GenerateNewAddress    -> 0x1
-        UpdateSourceTag _ _   -> 0x2
-        RemoveSourceTag _ _   -> 0x3
 
 
 {-
@@ -191,6 +124,9 @@ allocateNewAddressInVault o = do
 encodeAddressToBytes :: Address -> ByteString
 encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
 
+decodeAddressFromBytes :: ByteString -> Address
+decodeAddressFromBytes = Address . runUnpacking getWord64LE
+
 
 encodeContentsListEntry :: (Address, ByteString) -> ByteString
 encodeContentsListEntry ((Address a), x') =
@@ -202,7 +138,6 @@ encodeContentsListEntry ((Address a), x') =
         putWord64LE a
         putWord64LE (fromIntegral $ len)
         putBytes x'
-
 
 performUpdateRequest
     :: (Response -> Daemon ())
