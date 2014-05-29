@@ -1,4 +1,4 @@
-module Vaultaire.WireFormat.Class
+module Vaultaire.Classes.WireFormat
 (
     WireFormat(..),
 ) where

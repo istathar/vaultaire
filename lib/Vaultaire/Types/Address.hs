@@ -2,7 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Vaultaire.WireFormat.Address
+module Vaultaire.Types.Address
 (
     Address(..),
     encodeAddressToString,
@@ -20,7 +20,7 @@ import Data.String
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
-import Vaultaire.WireFormat.Class
+import Vaultaire.Classes.WireFormat
 
 newtype Address = Address {
     unAddress :: Word64

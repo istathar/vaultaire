@@ -41,8 +41,8 @@ module Vaultaire.Types
     WireFormat(fromWire, toWire)
 ) where
 
-import Vaultaire.WireFormat.Address
-import Vaultaire.WireFormat.Class
-import Vaultaire.WireFormat.ContentsOperation
-import Vaultaire.WireFormat.SourceDict
+import Vaultaire.Classes.WireFormat
+import Vaultaire.Types.Address
+import Vaultaire.Types.ContentsOperation
+import Vaultaire.Types.SourceDict
 

@@ -12,7 +12,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Vaultaire.WireFormat.SourceDict
+module Vaultaire.Types.SourceDict
 (
     SourceDict,
     unionSource,
@@ -32,7 +32,7 @@ import Data.Maybe (isNothing)
 import Data.Monoid (Monoid, mempty, (<>))
 import Data.Text (Text, find)
 import Data.Text.Encoding (decodeUtf8', encodeUtf8)
-import Vaultaire.WireFormat.Class
+import Vaultaire.Classes.WireFormat
 
 newtype SourceDict = SourceDict { unSourceDict :: HashMap Text Text }
   deriving (Show, Eq, Monoid)

@@ -37,10 +37,10 @@ library
                      Marquise.Server
                      Marquise.IO
 
-  other-modules:     Vaultaire.WireFormat.Class,
-                     Vaultaire.WireFormat.ContentsOperation,
-                     Vaultaire.WireFormat.SourceDict,
-                     Vaultaire.WireFormat.Address
+  other-modules:     Vaultaire.Classes.WireFormat
+                     Vaultaire.Types.ContentsOperation,
+                     Vaultaire.Types.SourceDict,
+                     Vaultaire.Types.Address
 
   build-depends:     base >=3 && <5,
                      bytestring,
