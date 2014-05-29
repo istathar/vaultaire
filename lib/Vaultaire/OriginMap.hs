@@ -10,7 +10,7 @@ module Vaultaire.OriginMap
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 
-import Vaultaire.CoreTypes
+import Vaultaire.Types
 
 type OriginMap = HashMap Origin
 

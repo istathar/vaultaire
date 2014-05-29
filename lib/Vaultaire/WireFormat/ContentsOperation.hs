@@ -11,20 +11,19 @@
 --
 
 {-# LANGUAGE OverloadedStrings #-}
-module Vaultaire.WireFormats.ContentsOperation
+module Vaultaire.WireFormat.ContentsOperation
 (
     ContentsOperation(..),
     SourceDict,
-    module Vaultaire.WireFormats.Class
 ) where
 
 import Control.Applicative ((<$>), (<*>))
 import qualified Data.ByteString as S
 import Data.Packer (getBytes, getWord64LE, putBytes, putWord64LE, runPacking,
                     tryUnpacking)
-import Vaultaire.CoreTypes (Address (..))
-import Vaultaire.WireFormats.Class
-import Vaultaire.WireFormats.SourceDict (SourceDict)
+import Vaultaire.WireFormat.Address
+import Vaultaire.WireFormat.Class
+import Vaultaire.WireFormat.SourceDict (SourceDict)
 
 data ContentsOperation = ContentsListRequest
                        | GenerateNewAddress

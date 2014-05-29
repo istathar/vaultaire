@@ -51,7 +51,7 @@ import System.Posix.Files (removeLink, rename)
 import System.Posix.Temp (mkstemp)
 import System.ZMQ4 (Dealer (..), Socket, connect, receiveMulti, sendMulti,
                     withContext, withSocket)
-import Vaultaire.CoreTypes (Address (..), Origin (..), isAddressExtended)
+import Vaultaire.Types (Address (..), Origin (..), isAddressExtended)
 
 newtype BurstPath = BurstPath { unBurstPath :: FilePath }
     deriving (Show, Eq)

@@ -88,3 +88,5 @@ clean:
 	-rm -f tags
 	-rm -f *.prof
 
+doc:
+	cabal haddock

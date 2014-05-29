@@ -17,9 +17,9 @@ import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import TestHelpers
-import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.InternalStore (enumerateOrigin, readFrom, writeTo)
+import Vaultaire.Types
 
 instance Arbitrary ByteString where
     arbitrary = BS.pack <$> arbitrary

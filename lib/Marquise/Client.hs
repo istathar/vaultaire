@@ -57,7 +57,7 @@ import Data.Text (Text)
 import Data.Word (Word64)
 import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
 import Marquise.Types (NameSpace (..), TimeStamp (..))
-import Vaultaire.CoreTypes (Address (..))
+import Vaultaire.Types (Address (..))
 
 import Control.Monad.Reader
 

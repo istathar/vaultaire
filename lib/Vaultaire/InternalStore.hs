@@ -31,11 +31,11 @@ import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as Pipes
 import System.Log.Logger
-import Vaultaire.CoreTypes
 import Vaultaire.Daemon (Daemon)
 import Vaultaire.Reader (ReadDetails (..), Request (..), getBuckets,
                          readExtended)
 import Vaultaire.ReaderAlgorithms (mergeNoFilter)
+import Vaultaire.Types
 import Vaultaire.Writer (BatchState (..), appendExtended, write)
 
 -- | Given an origin and an address, write the given bytes.

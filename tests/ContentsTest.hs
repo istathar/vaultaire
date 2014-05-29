@@ -15,17 +15,14 @@
 
 module Main where
 
-import qualified Data.ByteString as B
 import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
-import Vaultaire.CoreTypes (Address (..))
-import Vaultaire.WireFormats.SourceDict
 
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
-import Vaultaire.CoreTypes
+import Vaultaire.Types
 import Vaultaire.Util
 
 

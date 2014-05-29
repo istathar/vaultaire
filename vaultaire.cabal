@@ -22,7 +22,7 @@ library
   default-language:  Haskell2010
 
   exposed-modules:   Vaultaire.Daemon,
-                     Vaultaire.CoreTypes,
+                     Vaultaire.Types,
                      Vaultaire.RollOver,
                      Vaultaire.Broker,
                      Vaultaire.DayMap,
@@ -33,13 +33,14 @@ library
                      Vaultaire.ReaderAlgorithms,
                      Vaultaire.InternalStore,
                      Vaultaire.ContentsServer,
-                     Vaultaire.WireFormats.Class,
-                     Vaultaire.WireFormats.ContentsOperation,
-                     Vaultaire.WireFormats.SourceDict,
                      Marquise.Client
                      Marquise.Server
                      Marquise.IO
-  other-modules:
+
+  other-modules:     Vaultaire.WireFormat.Class,
+                     Vaultaire.WireFormat.ContentsOperation,
+                     Vaultaire.WireFormat.SourceDict,
+                     Vaultaire.WireFormat.Address
 
   build-depends:     base >=3 && <5,
                      bytestring,
@@ -71,6 +72,7 @@ library
                      random,
                      locators >= 0.2.4,
                      siphash,
+                     blaze-builder,
                      rados-haskell >= 3
 
   ghc-options:       -O2

@@ -40,11 +40,11 @@ import Pipes.Concurrent
 import Pipes.Lift
 import System.Log.Logger
 import System.Rados.Monadic hiding (async)
-import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.RollOver
+import Vaultaire.Types
 import Vaultaire.Util (fatal)
 
 type DispatchMap = OriginMap (Output Event)

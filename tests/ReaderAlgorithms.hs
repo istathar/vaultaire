@@ -20,9 +20,9 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
-import Vaultaire.CoreTypes (Address (..))
 import Vaultaire.ReaderAlgorithms (Point (..))
 import qualified Vaultaire.ReaderAlgorithms as A
+import Vaultaire.Types (Address (..))
 
 data AddrStartEnd = AddrStartEnd Address Word64 Word64
   deriving Show

@@ -33,14 +33,9 @@ import Data.Packer
 import Data.Word (Word64)
 import Pipes
 import System.Random
-import Vaultaire.WireFormats.ContentsOperation (ContentsOperation (..),
-                                                SourceDict)
-import Vaultaire.WireFormats.SourceDict (diffSource, unionSource)
-import Vaultaire.WireFormats.Class (fromWire, toWire)
-
-import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import qualified Vaultaire.InternalStore as InternalStore
+import Vaultaire.Types
 
 -- | Start a writer daemon, never returns.
 startContents

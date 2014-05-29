@@ -12,28 +12,27 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Vaultaire.WireFormats.SourceDict
+module Vaultaire.WireFormat.SourceDict
 (
     SourceDict,
     unionSource,
     diffSource,
     makeSourceDict,
-    module Vaultaire.WireFormats.Class
 ) where
 
-import Control.Applicative (optional, many, (<$>), (<*), (<*>))
+import Blaze.ByteString.Builder (fromByteString, toByteString)
+import Blaze.ByteString.Builder.Char8 (fromChar)
+import Control.Applicative (many, optional, (<$>), (<*), (<*>))
 import Control.Exception (SomeException (..))
 import Data.Attoparsec.Text (parseOnly, (<*.))
 import qualified Data.Attoparsec.Text as PT
-import Data.ByteString.Builder (byteString, toLazyByteString)
-import Data.ByteString.Lazy (toStrict)
 import Data.HashMap.Strict (HashMap, difference, foldlWithKey', fromList,
                             union)
-import Data.Monoid (Monoid, (<>))
+import Data.Maybe (isNothing)
+import Data.Monoid (Monoid, mempty, (<>))
 import Data.Text (Text, find)
 import Data.Text.Encoding (decodeUtf8', encodeUtf8)
-import Data.Maybe(isNothing)
-import Vaultaire.WireFormats.Class
+import Vaultaire.WireFormat.Class
 
 newtype SourceDict = SourceDict { unSourceDict :: HashMap Text Text }
   deriving (Show, Eq, Monoid)
@@ -58,9 +57,10 @@ instance WireFormat SourceDict where
             k = PT.takeWhile (/= ':') <*. ":"
             v = PT.takeWhile (/= ',') <* optional ","
 
-    toWire = toStrict . toLazyByteString . foldlWithKey' f "" . unSourceDict
-      where f acc k v = acc <> text k <> ":" <> text v <> ","
-            text = byteString . encodeUtf8
+    toWire = toByteString . foldlWithKey' f mempty . unSourceDict
+      where
+        f acc k v = acc <> text k <> fromChar ':' <> text v <> fromChar ','
+        text = fromByteString . encodeUtf8
 
 unionSource :: SourceDict -> SourceDict -> SourceDict
 unionSource (SourceDict a) (SourceDict b) = SourceDict $ union a b

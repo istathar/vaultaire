@@ -25,7 +25,7 @@ import Marquise.Client (makeNameSpace)
 import Marquise.IO (MarquiseServerMonad (..), spoolDir)
 import Marquise.Types (NameSpace (..))
 import System.Directory (doesDirectoryExist)
-import Vaultaire.CoreTypes (Origin (..))
+import Vaultaire.Types (Origin (..))
 
 -- | Send the next burst, returns when the burst is acknowledged and thus in
 -- the vault.

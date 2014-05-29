@@ -22,10 +22,10 @@ import Data.ByteString (ByteString)
 import Data.Packer
 import Pipes
 import System.Rados.Monadic
-import Vaultaire.CoreTypes
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
+import Vaultaire.Types
 
 data Simple
 data Extended

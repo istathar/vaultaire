@@ -12,8 +12,8 @@ import Marquise.IO
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
 import Vaultaire.Broker
-import Vaultaire.CoreTypes
 import Vaultaire.Daemon hiding (async)
+import Vaultaire.Types
 import Vaultaire.Util
 
 ns1, ns2, ns3 :: NameSpace

@@ -12,10 +12,10 @@ import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
 import TestHelpers
 import Vaultaire.Broker
-import Vaultaire.CoreTypes (Origin (..))
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
 import Vaultaire.RollOver
+import Vaultaire.Types (Origin (..))
 import Vaultaire.Util
 
 main :: IO ()

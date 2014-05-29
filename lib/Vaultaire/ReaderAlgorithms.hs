@@ -32,7 +32,7 @@ import Foreign.Storable
 import Pipes
 import Prelude hiding (filter)
 
-import Vaultaire.CoreTypes (Address (..))
+import Vaultaire.Types (Address (..))
 
 data Point = Point { address :: !Word64
                    , time    :: !Word64

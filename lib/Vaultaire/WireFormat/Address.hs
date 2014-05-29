@@ -2,7 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Vaultaire.CoreTypes
+module Vaultaire.WireFormat.Address
 (
     Address(..),
     encodeAddressToString,
@@ -19,6 +19,8 @@ import Data.Locator
 import Data.String
 import Data.Word (Word64)
 import GHC.Generics (Generic)
+
+import Vaultaire.WireFormat.Class
 
 newtype Address = Address {
     unAddress :: Word64

@@ -18,16 +18,14 @@
 module Main where
 
 import Control.Applicative ((<$>), (<*>))
+import Control.Exception (throw)
+import Data.HashMap.Strict (fromList)
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
 import Test.QuickCheck.Instances ()
-import Vaultaire.CoreTypes (Address (..))
-import Vaultaire.WireFormats.ContentsOperation
-import Vaultaire.WireFormats.SourceDict
-import Control.Exception(throw)
-import Data.HashMap.Strict(fromList)
+import Vaultaire.Types
 
 instance Arbitrary Address where
     arbitrary = Address <$> arbitrary

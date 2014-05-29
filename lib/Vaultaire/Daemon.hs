@@ -56,9 +56,9 @@ import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4.Monadic as ZMQ
 import Text.Printf
-import Vaultaire.CoreTypes
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
+import Vaultaire.Types
 import Vaultaire.Util
 
 -- User facing API
