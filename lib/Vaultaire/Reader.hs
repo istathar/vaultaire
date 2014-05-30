@@ -65,7 +65,7 @@ processSimple s@(Simple (ReadDetails _ start end)) origin' reply_f = do
     case maybe_range of
         Just range ->
             runEffect $ for (each range >-> readSimple origin' s
-                                                       (reply_f . Failure))
+                                                       (reply_f . SFailure))
                             (lift . reply_f . Response)
         Nothing -> reply_f $ Failure "Invalid origin"
 

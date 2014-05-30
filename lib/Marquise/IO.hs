@@ -29,7 +29,7 @@ module Marquise.IO
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
-import Control.Exception (ErrorCall, try)
+import Control.Exception (ErrorCall, SomeException (..), try)
 import Control.Monad (unless, when)
 import Control.Monad.Reader (MonadReader, ReaderT, ask)
 import Control.Monad.State (evalStateT, get, lift, put)
@@ -51,7 +51,8 @@ import System.Posix.Files (removeLink, rename)
 import System.Posix.Temp (mkstemp)
 import System.ZMQ4 (Dealer (..), Socket, connect, receiveMulti, sendMulti,
                     withContext, withSocket)
-import Vaultaire.Types (Address (..), Origin (..), isAddressExtended)
+import Vaultaire.Types (Address (..), ContentsOperation (..), Origin (..),
+                        Response (..), fromWire, isAddressExtended, toWire, WireFormat)
 
 newtype BurstPath = BurstPath { unBurstPath :: FilePath }
     deriving (Show, Eq)
@@ -82,16 +83,21 @@ class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
 
 
 class MonadReader String m => ContentsClientMonad m where
-    requestUniqueAddress :: m Address
+    requestUniqueAddress :: m (Either SomeException Address)
 
 instance ContentsClientMonad (ReaderT String IO) where
     requestUniqueAddress = do
         broker <- ask
         response <- lift $ withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
-                                               (awaitResponse request)
-        return undefined
+                                               (awaitResponse GenerateNewAddress "")
+        return $ either Left processResponse response
       where
-        request = undefined
+        processResponse :: Response Address -> Either SomeException Address
+        processResponse (Failure msg) =
+            Left $ SomeException $ userError (BS.unpack msg)
+        processResponse Success =
+            Left $ SomeException $ userError "unexpected Success"
+        processResponse (Response address) = Right address
 
 -- Making MonadIO m an instance is impractical, as it would require
 -- undecidable instances.
@@ -114,8 +120,28 @@ instance MarquiseServerMonad IO BurstPath where
 
     transmitBytes = sendViaZMQ
 
-awaitResponse :: ByteString -> Socket Dealer -> IO ByteString
-awaitResponse = undefined
+-- | Send the request over the socket, waiting for a response, with a timeout.
+-- This can be used on non-idempotent actions, as it will only request once.
+--
+-- This is not thread-safe and should be the sole user of the connection.
+awaitResponse :: (WireFormat request, WireFormat response)
+              => request
+              -> ByteString
+              -> Socket Dealer
+              -> IO (Either SomeException response)
+awaitResponse request identifier sock = do
+    let payload = fromList [identifier, toWire request]
+    sendMulti sock payload
+    either Left id <$> race waitTimeout waitResponse 
+  where
+    waitResponse = do
+        resp <- receiveMulti sock
+        case resp of
+            [identifier', msg] ->
+                if identifier' == identifier
+                    then return $ fromWire msg
+                    else waitResponse
+            _ -> return $ Left $ SomeException $ userError "not two msg parts"
 
 sendViaZMQ :: String -> Origin -> ByteString -> IO ()
 sendViaZMQ broker (Origin origin) bytes =
@@ -130,7 +156,7 @@ sendViaZMQ broker (Origin origin) bytes =
         -- We race, as I don't trust a foreign call to be interruptable.
         result <- race waitTimeout (receiveMulti s)
         case result of
-            Left () ->
+            Left _ ->
                 let new_identifier = BS.append identifier identifier
                 in transmitLoop (new_identifier:identifiers) s
             Right ack ->
@@ -152,8 +178,10 @@ withVaultaireSocket broker f =
         connect s broker
         f s
 
-waitTimeout :: IO ()
-waitTimeout = threadDelay 60000000
+waitTimeout :: IO SomeException
+waitTimeout = do
+    threadDelay 60000000
+    return $ SomeException $ userError "Timeout"
 
 doSwap :: NameSpace -> IO (Maybe (BurstPath, ByteString))
 doSwap ns =  do

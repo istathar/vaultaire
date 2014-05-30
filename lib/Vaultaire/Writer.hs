@@ -53,7 +53,7 @@ type EpochMap = HashMap Epoch
 type BucketMap = HashMap Bucket
 
 data BatchState = BatchState
-    { replyFs        :: ![Response -> Daemon ()]
+    { replyFs        :: ![Response () -> Daemon ()]
     , simple         :: !(EpochMap (BucketMap Builder))
     , extended       :: !(EpochMap (BucketMap Builder))
     , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
@@ -146,7 +146,7 @@ badOrigin = do
     event <- await
     case event of
         Msg (Message reply_f _ _) ->
-            lift $ reply_f $ Failure "No such origin"
+            lift $ reply_f $ (Failure "No such origin" :: Response ())
         Tick -> badOrigin
 
 feedTicks :: Output Event -> IO ()

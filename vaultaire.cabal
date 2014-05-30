@@ -37,11 +37,6 @@ library
                      Marquise.Server
                      Marquise.IO
 
-  other-modules:     Vaultaire.Classes.WireFormat
-                     Vaultaire.Types.ContentsOperation,
-                     Vaultaire.Types.SourceDict,
-                     Vaultaire.Types.Address
-
   build-depends:     base >=3 && <5,
                      bytestring,
                      text,
@@ -52,6 +47,7 @@ library
                      containers,
                      primitive,
                      attoparsec,
+                     bifunctors,
                      spool,
                      pipes-parse,
                      hslogger,

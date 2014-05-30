@@ -56,6 +56,7 @@ import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Text (Text)
 import Data.Word (Word64)
 import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
+import Control.Exception(SomeException)
 import Marquise.Types (NameSpace (..), TimeStamp (..))
 import Vaultaire.Types (Address (..))
 
@@ -74,7 +75,7 @@ withBroker broker action = runReaderT action broker
 
 -- | For the case where you can track Addresses yourself, we provide a facility
 -- to generate unique ones for you, guaranteed free of collision.
-requestUnique :: ContentsClientMonad m => m Address
+requestUnique :: ContentsClientMonad m => m (Either SomeException Address)
 requestUnique = requestUniqueAddress
 
 -- | If you have deterministic or fixed known identifiers for your sources, you can

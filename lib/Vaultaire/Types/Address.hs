@@ -18,6 +18,7 @@ import Data.Hashable
 import Data.Locator
 import Data.String
 import Data.Word (Word64)
+import Data.Packer(runPacking, tryUnpacking, getWord64LE, putWord64LE)
 import GHC.Generics (Generic)
 
 import Vaultaire.Classes.WireFormat
@@ -27,10 +28,14 @@ newtype Address = Address {
 } deriving (Eq, Num, Bounded)
 
 instance Show Address where
-    show a = encodeAddressToString a
+    show = encodeAddressToString
 
 instance IsString Address where
     fromString = decodeStringAsAddress
+
+instance WireFormat Address where
+    toWire = runPacking 8 . putWord64LE . unAddress
+    fromWire = tryUnpacking (Address `fmap` getWord64LE)
 
 encodeAddressToString :: Address -> String
 encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress
