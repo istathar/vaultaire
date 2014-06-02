@@ -1,3 +1,6 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+
 --
 -- Data vault for metrics
 --
@@ -6,30 +9,24 @@
 -- The code in this file, and the program it is a part of, is
 -- made available to you by its authors as open source software:
 -- you can redistribute it and/or modify it under the terms of
--- the BSD licence.
+-- the 3-clause BSD licence.
 --
-
-{-# LANGUAGE OverloadedStrings #-}
 
 module Vaultaire.ContentsServer
 (
     startContents,
-    -- testing
-    encodeContentsListEntry
 ) where
 
 import Control.Applicative
 import Control.Exception
-import Control.Monad.State.Strict
+import Control.Monad(forever)
 import Data.Bits
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as S
 import Data.Maybe (isJust)
 import Data.Monoid (mempty)
-import Data.Packer
 import Data.Word (Word64)
 import Pipes
+import System.Log.Logger
 import System.Random
 import Vaultaire.Daemon
 import qualified Vaultaire.InternalStore as InternalStore
@@ -42,23 +39,19 @@ startContents
     -> ByteString       -- ^ Pool name for Ceph
     -> IO ()
 startContents broker user pool =
-    runDaemon broker user pool $ forever $ nextMessage >>= handleRequest
+    runDaemon broker user pool . forever $ nextMessage >>= handleRequest
 
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply origin payload) =
     case fromWire payload of
-        Left err         -> failWithString reply "Unable to parse request message" err
+        Left err -> liftIO $ errorM "ContentsServer.handleRequest" $
+                                    "bad request: " ++ show err
         Right op -> case op of
             ContentsListRequest   -> performListRequest reply origin
             GenerateNewAddress    -> performRegisterRequest reply origin
             UpdateSourceTag a s   -> performUpdateRequest reply origin a s
             RemoveSourceTag a s   -> performRemoveRequest reply origin a s
-
-failWithString :: (Response -> Daemon ()) -> String -> SomeException -> Daemon ()
-failWithString reply msg e = do
-    liftIO $ putStrLn $ msg ++ "; " ++ show e
-    reply (Failure (S.pack msg))
 
 
 {-
@@ -71,47 +64,37 @@ failWithString reply msg e = do
     requesting client. Note that reply with Response can be used multiple
     times, so each reply here represents one Address,SourceDict pair.
 -}
-performListRequest :: (Response -> Daemon ()) -> Origin ->  Daemon ()
-performListRequest reply o =
-    runEffect $
-        for (InternalStore.enumerateOrigin o) (lift . reply . Response . encodeContentsListEntry)
+performListRequest :: ReplyF -> Origin ->  Daemon ()
+performListRequest reply o = do
+    runEffect $ for (InternalStore.enumerateOrigin o)
+                    (lift . reply . uncurry ContentsListBypass)
+    reply EndOfContentsList
 
 
-performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
+
+performRegisterRequest :: ReplyF -> Origin -> Daemon ()
 performRegisterRequest reply o =
-    allocateNewAddressInVault o
-    >>= reply . Response . toWire
+    allocateNewAddressInVault o >>= reply . RandomAddress
 
 
 allocateNewAddressInVault :: Origin -> Daemon Address
 allocateNewAddressInVault o = do
-    num <- liftIO rollDice
-    let a = Address (num `clearBit` 0)
+    a <- Address . (`clearBit` 0) <$> liftIO rollDice
 
     withExLock "02_addresses_lock" $ do
-        exists <- isAddressInVault o a
+        exists <- isAddressInVault a
         if exists
             then allocateNewAddressInVault o
             else do
                 writeSourceTagsForAddress o a mempty
                 return a
   where
-        rollDice = getStdRandom (randomR (0, maxBound :: Word64))
+    rollDice = getStdRandom (randomR (0, maxBound :: Word64))
+    isAddressInVault a = isJust <$> InternalStore.readFrom o a
 
-
-encodeContentsListEntry :: (Address, ByteString) -> ByteString
-encodeContentsListEntry (Address a, x') =
-  let
-    len  = B.length x'
-    size = 8 + 8 + len
-  in
-    runPacking size $ do
-        putWord64LE a
-        putWord64LE (fromIntegral len)
-        putBytes x'
 
 performUpdateRequest
-    :: (Response -> Daemon ())
+    :: ReplyF
     -> Origin
     -> Address
     -> SourceDict
@@ -119,12 +102,18 @@ performUpdateRequest
 performUpdateRequest reply o a s = do
     s' <- retreiveSourceTagsForAddress o a
     writeSourceTagsForAddress o a (unionSource s s')
-    reply Success
+    reply UpdateSuccess
 
-
-isAddressInVault :: Origin -> Address -> Daemon Bool
-isAddressInVault o a =
-    isJust <$> InternalStore.readFrom o a
+performRemoveRequest
+    :: ReplyF
+    -> Origin
+    -> Address
+    -> SourceDict
+    -> Daemon ()
+performRemoveRequest reply o a s = do
+    s' <- retreiveSourceTagsForAddress o a
+    writeSourceTagsForAddress o a (diffSource s' s)
+    reply RemoveSuccess
 
 
 retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
@@ -138,15 +127,3 @@ retreiveSourceTagsForAddress o a = do
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
 writeSourceTagsForAddress o a s =
     InternalStore.writeTo o a (toWire s)
-
-
-performRemoveRequest
-    :: (Response -> Daemon ())
-    -> Origin
-    -> Address
-    -> SourceDict
-    -> Daemon ()
-performRemoveRequest reply o a s = do
-    s' <- retreiveSourceTagsForAddress o a
-    writeSourceTagsForAddress o a $ diffSource s' s
-    reply Success

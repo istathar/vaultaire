@@ -19,6 +19,7 @@ import Data.Locator
 import Data.Packer
 import Data.String
 import Data.Word (Word64)
+import Data.Packer(runPacking, tryUnpacking, getWord64LE, putWord64LE)
 import GHC.Generics (Generic)
 
 import Vaultaire.Classes.WireFormat
@@ -28,25 +29,16 @@ newtype Address = Address {
 } deriving (Eq, Num, Bounded)
 
 instance Show Address where
-    show a = encodeAddressToString a
+    show = encodeAddressToString
 
 instance IsString Address where
     fromString = decodeStringAsAddress
 
+-- | There are assumptions made that the encoding of Address is fixed-length (8
+-- bytes). Changing that will break things subtly.
 instance WireFormat Address where
-
---  fromWire :: ByteString -> Either SomeException Address
-    fromWire = Right . decodeAddressFromBytes
---  toWire   :: Address -> ByteString
-    toWire   = encodeAddressToBytes
-
-encodeAddressToBytes :: Address -> ByteString
-encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
-
-decodeAddressFromBytes :: ByteString -> Address
-decodeAddressFromBytes = Address . runUnpacking getWord64LE
-
-
+    toWire = runPacking 8 . putWord64LE . unAddress
+    fromWire = tryUnpacking (Address `fmap` getWord64LE)
 
 encodeAddressToString :: Address -> String
 encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress

@@ -1,10 +1,6 @@
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings          #-}
-
 --
 -- |
--- Maintainer: Andrew Cowie
+-- Maintainer: The Vaultaire Team
 -- Stability: Experimental
 --
 -- /Overview/
@@ -36,6 +32,14 @@ module Vaultaire.Types
 
     -- * Operations with the contents store
     ContentsOperation(..),
+    ContentsResponse(..),
+    ContentsListBypass(..),
+    
+    -- * Streaming reads
+    ReadStream(..),
+
+    -- * Writes
+    WriteResult(..),
 
     -- * Conversion to and from wire format
     WireFormat(fromWire, toWire)
@@ -44,5 +48,8 @@ module Vaultaire.Types
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.ContentsOperation
+import Vaultaire.Types.ContentsResponse
 import Vaultaire.Types.SourceDict
-
+import Vaultaire.Types.ReadStream
+import Vaultaire.Types.WriteResult
+import Vaultaire.Types.ContentsListBypass

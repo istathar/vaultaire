@@ -11,3 +11,8 @@ import Data.ByteString (ByteString)
 class WireFormat operation where
     fromWire :: ByteString -> Either SomeException operation
     toWire   :: operation -> ByteString
+
+-- | Default dummy wire format
+instance WireFormat () where
+    fromWire = error "() has no wire format"
+    toWire = error "() has no wire format"

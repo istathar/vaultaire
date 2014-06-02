@@ -1,6 +1,7 @@
 {-# LANGUAGE EmptyDataDecls    #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Vaultaire.Reader
 (
@@ -18,6 +19,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.ST
+import System.Log.Logger
 import Data.ByteString (ByteString)
 import Data.Packer
 import Pipes
@@ -54,8 +56,8 @@ handleRequest (Message reply_f origin' payload') = do
     () <- case classifyPayload payload' of
         SomeRequest r@Simple{}   -> processSimple r origin' reply_f
         SomeRequest r@Extended{} -> processExtended r origin' reply_f
-        SomeRequest r@Invalid{}  -> processInvalid r reply_f
-    reply_f Success
+        SomeRequest r@Invalid{}  -> processInvalid r
+    reply_f EndOfStream
 
 processSimple :: Request Simple -> Origin -> ReplyF -> Daemon ()
 processSimple s@(Simple (ReadDetails _ start end)) origin' reply_f = do
@@ -64,14 +66,13 @@ processSimple s@(Simple (ReadDetails _ start end)) origin' reply_f = do
 
     case maybe_range of
         Just range ->
-            runEffect $ for (each range >-> readSimple origin' s
-                                                       (reply_f . Failure))
-                            (lift . reply_f . Response)
-        Nothing -> reply_f $ Failure "Invalid origin"
+            runEffect $ for (each range >-> readSimple origin' s)
+                            (lift . reply_f . Burst)
+        Nothing -> reply_f InvalidReadOrigin
 
-readSimple :: Origin -> Request Simple -> (ByteString -> Daemon ())
+readSimple :: Origin -> Request Simple
            -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readSimple origin' (Simple (ReadDetails addr start end)) fail_f = forever $ do
+readSimple origin' (Simple (ReadDetails addr start end)) = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
     let bucket_oid = bucketOID origin' epoch bucket "simple"
@@ -79,8 +80,8 @@ readSimple origin' (Simple (ReadDetails addr start end)) fail_f = forever $ do
     case contents of
         Left (NoEntity{}) -> return ()
         Left e -> do
-            liftIO $ putStrLn $ "Ceph error getting simple bucket: " ++ show e
-            lift $ fail_f "Failed to retrieve bucket"
+            liftIO $ errorM "Reader.readSimple" $
+                            "Ceph error getting simple bucket: " ++ show e
         Right unprocessed ->
             yield $ runST $ processBucket unprocessed addr start end
 
@@ -90,28 +91,26 @@ processExtended e@(Extended (ReadDetails _ start end)) origin' reply_f = do
     maybe_range <- withExtendedDayMap origin' (lookupRange start end)
     case maybe_range of
         Just range ->
-            runEffect $ for (each range >-> readExtended origin' e
-                                                         (reply_f . Failure))
-                            (lift . reply_f . Response)
-        Nothing -> reply_f $ Failure "Invalid origin"
+            runEffect $ for (each range >-> readExtended origin' e)
+                            (lift . reply_f . Burst)
+        Nothing -> reply_f InvalidReadOrigin
 
-readExtended :: Origin -> Request Extended -> (ByteString -> Daemon ())
+readExtended :: Origin -> Request Extended
              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtended origin (Extended (ReadDetails addr start end)) fail_f = forever $ do
+readExtended origin (Extended (ReadDetails addr start end)) = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
-    buckets <- lift $ getBuckets fail_f origin epoch bucket
+    buckets <- lift $ getBuckets origin epoch bucket
     case buckets of
         Nothing -> return ()
         Just (s,e) -> yield $ runST $ mergeSimpleExtended s e addr start end
 
 -- | Retrieve simple and extended buckets in parallel
-getBuckets :: (ByteString -> Daemon ())
-           -> Origin
+getBuckets :: Origin
            -> Epoch
            -> Bucket
            -> Daemon (Maybe (ByteString, ByteString))
-getBuckets fail_f origin epoch bucket = do
+getBuckets origin epoch bucket = do
     let simple_oid = bucketOID origin epoch bucket "simple"
     let extended_oid = bucketOID origin epoch bucket "extended"
 
@@ -124,25 +123,24 @@ getBuckets fail_f origin epoch bucket = do
     maybe_simple <- look a_simple >>= (\c -> case c of
         Left (NoEntity{}) -> return Nothing
         Left e -> do
-            liftIO $ putStrLn $ "Ceph error getting simple bucket: " ++ show e
-            fail_f "Failed to retrieve bucket"
+            liftIO $ errorM "Reader.getBuckets" $
+                            "Ceph error getting simple bucket: " ++ show e
             return Nothing
         Right unprocessed -> return $ Just unprocessed)
 
     maybe_extended <- look a_extended >>= (\c -> case c of
         Left (NoEntity{}) -> return Nothing
         Left e -> do
-            liftIO $ putStrLn $ "Ceph error getting extended bucket: " ++ show e
-            fail_f "Failed to retrieve bucket"
+            liftIO $ errorM "Reader.getBuckets" $
+                            "Ceph error getting extended bucket: " ++ show e
             return Nothing
         Right unprocessed -> return $ Just unprocessed)
 
     return $ (,) <$> maybe_simple <*> maybe_extended
 
-processInvalid :: Request Invalid -> ReplyF -> Daemon ()
-processInvalid (Invalid err) reply_f = do
+processInvalid :: Request Invalid -> Daemon ()
+processInvalid (Invalid err) =
     liftIO $ putStrLn $ "Failed to parse read request: " ++ err
-    reply_f $ Failure "Invalid request"
 
 classifyPayload :: ByteString -> SomeRequest
 classifyPayload payload' =
