@@ -33,9 +33,18 @@ library
                      Vaultaire.ReaderAlgorithms,
                      Vaultaire.InternalStore,
                      Vaultaire.ContentsServer,
-                     Marquise.Client
-                     Marquise.Server
+                     Marquise.Client,
+                     Marquise.Server,
                      Marquise.IO
+
+  other-modules:     Vaultaire.Classes.WireFormat,
+                     Vaultaire.Types.Address,
+                     Vaultaire.Types.ContentsOperation,
+                     Vaultaire.Types.ContentsResponse,
+                     Vaultaire.Types.SourceDict,
+                     Vaultaire.Types.ReadStream,
+                     Vaultaire.Types.WriteResult,
+                     Vaultaire.Types.ContentsListBypass
 
   build-depends:     base >=3 && <5,
                      bytestring,

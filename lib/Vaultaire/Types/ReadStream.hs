@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 --
 -- Data vault for metrics
 --
@@ -17,10 +18,20 @@ module Vaultaire.Types.ReadStream
 
 import Data.ByteString(ByteString)
 import Vaultaire.Classes.WireFormat
+import Control.Exception(SomeException(..))
+import qualified Data.ByteString as BS
 
-newtype ReadStream = Burst { unBurst :: ByteString }
+data ReadStream = InvalidReadOrigin
+                | Burst { unBurst :: ByteString }
+                | EndOfStream
   deriving (Show, Eq)
 
 instance WireFormat ReadStream where
-    fromWire = Right . Burst
-    toWire = unBurst
+    fromWire bs
+        | bs == "\x00" = Right InvalidReadOrigin
+        | bs == "\x01" = Right EndOfStream
+        | BS.take 1 bs == "\x02" = Right $ Burst $ BS.drop 1 bs
+        | otherwise = Left $ SomeException $ userError "Invalid ReadStream packet"
+    toWire InvalidReadOrigin = "\x00"
+    toWire EndOfStream = "\x01"
+    toWire (Burst bs) = "\x02" `BS.append` bs

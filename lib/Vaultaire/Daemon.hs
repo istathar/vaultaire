@@ -15,7 +15,6 @@ module Vaultaire.Daemon
 (
     -- * Types
     Daemon,
-    Response(..),
     Message(..),
     ReplyF,
     Address(..),
@@ -91,7 +90,7 @@ data Message = Message
     , messagePayload :: ByteString
     }
 
-type ReplyF  = WireFormat w => Response w -> Daemon ()
+type ReplyF  = WireFormat w => w -> Daemon ()
 type Payload = Word64
 type Bucket  = Word64
 type RawMsg  = (ByteString, ByteString, ByteString, ByteString, ByteString)
@@ -221,7 +220,6 @@ wrapPool pool_a (Daemon a) = do
 -- Internal
 
 type FileSize = Word64
-type Envelope = (ByteString, ByteString, ByteString)
 
 -- | Check if a cached origin has expired.
 cacheExpired :: OriginDays -> Origin -> Daemon Bool

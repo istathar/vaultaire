@@ -51,8 +51,7 @@ import System.Posix.Files (removeLink, rename)
 import System.Posix.Temp (mkstemp)
 import System.ZMQ4 (Dealer (..), Socket, connect, receiveMulti, sendMulti,
                     withContext, withSocket)
-import Vaultaire.Types (Address (..), ContentsOperation (..), Origin (..),
-                        Response (..), fromWire, isAddressExtended, toWire, WireFormat)
+import Vaultaire.Types
 
 newtype BurstPath = BurstPath { unBurstPath :: FilePath }
     deriving (Show, Eq)
@@ -92,12 +91,11 @@ instance ContentsClientMonad (ReaderT String IO) where
                                                (awaitResponse GenerateNewAddress "")
         return $ either Left processResponse response
       where
-        processResponse :: Response Address -> Either SomeException Address
-        processResponse (Failure msg) =
-            Left $ SomeException $ userError (BS.unpack msg)
-        processResponse Success =
-            Left $ SomeException $ userError "unexpected Success"
-        processResponse (Response address) = Right address
+        processResponse :: ContentsResponse -> Either SomeException Address
+        processResponse (RandomAddress addr) = Right addr
+        processResponse InvalidContentsOrigin =
+            Left $ SomeException $
+                userError "Invalid origin in contents request"
 
 -- Making MonadIO m an instance is impractical, as it would require
 -- undecidable instances.

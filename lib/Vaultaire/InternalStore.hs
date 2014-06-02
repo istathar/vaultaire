@@ -30,7 +30,6 @@ import Data.Word (Word64)
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as Pipes
-import System.Log.Logger
 import Vaultaire.Daemon (Daemon)
 import Vaultaire.Reader (ReadDetails (..), Request (..), getBuckets,
                          readExtended)
@@ -60,7 +59,7 @@ internalStoreBuckets = 128
 readFrom :: Origin -> Address -> Daemon (Maybe ByteString)
 readFrom origin addr =
     evalStateT draw $ yield (0, internalStoreBuckets)
-                      >-> readExtended (namespace origin) makeRequest fail_f
+                      >-> readExtended (namespace origin) makeRequest 
                       >-> Pipes.map extractPayload
   where
     extractPayload p = flip runUnpacking p $ do
@@ -69,18 +68,15 @@ readFrom origin addr =
         getBytes (fromIntegral len)
 
     makeRequest = Extended (ReadDetails addr 0 0)
-    fail_f = liftIO . errorM "InternalStore.readFrom" . BS.unpack
 
 -- | Provide a Producer of address and payload tuples.
 enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()
 enumerateOrigin origin =
     forM_ [0,2..internalStoreBuckets] $ \bucket -> do
-        buckets <- lift $ getBuckets logError (namespace origin) 0 bucket
+        buckets <- lift $ getBuckets (namespace origin) 0 bucket
         case buckets of
             Nothing -> return ()
             Just (s,e) -> mergeNoFilter s e
-  where
-    logError = liftIO . errorM "InternalStore.enumerateOrigin" . BS.unpack
 
 namespace :: Origin -> Origin
 namespace = Origin . (`BS.append` "_INTERNAL") . unOrigin

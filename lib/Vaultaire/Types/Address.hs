@@ -33,6 +33,8 @@ instance Show Address where
 instance IsString Address where
     fromString = decodeStringAsAddress
 
+-- | There are assumptions made that the encoding of Address is fixed-length (8
+-- bytes). Changing that will break things subtly.
 instance WireFormat Address where
     toWire = runPacking 8 . putWord64LE . unAddress
     fromWire = tryUnpacking (Address `fmap` getWord64LE)

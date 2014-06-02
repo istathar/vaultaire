@@ -32,12 +32,14 @@ module Vaultaire.Types
 
     -- * Operations with the contents store
     ContentsOperation(..),
+    ContentsResponse(..),
+    ContentsListBypass(..),
     
-    -- * Response categorisation
-    Response(..),
-
     -- * Streaming reads
     ReadStream(..),
+
+    -- * Writes
+    WriteResult(..),
 
     -- * Conversion to and from wire format
     WireFormat(fromWire, toWire)
@@ -46,6 +48,8 @@ module Vaultaire.Types
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.ContentsOperation
+import Vaultaire.Types.ContentsResponse
 import Vaultaire.Types.SourceDict
-import Vaultaire.Types.Response
 import Vaultaire.Types.ReadStream
+import Vaultaire.Types.WriteResult
+import Vaultaire.Types.ContentsListBypass
