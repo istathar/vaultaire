@@ -34,7 +34,7 @@ module Vaultaire.Types
     ContentsOperation(..),
     ContentsResponse(..),
     ContentsListBypass(..),
-    
+
     -- * Streaming reads
     ReadStream(..),
 
@@ -47,9 +47,9 @@ module Vaultaire.Types
 
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
+import Vaultaire.Types.ContentsListBypass
 import Vaultaire.Types.ContentsOperation
 import Vaultaire.Types.ContentsResponse
-import Vaultaire.Types.SourceDict
 import Vaultaire.Types.ReadStream
+import Vaultaire.Types.SourceDict
 import Vaultaire.Types.WriteResult
-import Vaultaire.Types.ContentsListBypass

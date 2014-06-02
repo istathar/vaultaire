@@ -16,10 +16,10 @@ module Vaultaire.Types.ReadStream
     ReadStream(..),
 ) where
 
-import Data.ByteString(ByteString)
-import Vaultaire.Classes.WireFormat
-import Control.Exception(SomeException(..))
+import Control.Exception (SomeException (..))
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Vaultaire.Classes.WireFormat
 
 data ReadStream = InvalidReadOrigin
                 | Burst { unBurst :: ByteString }

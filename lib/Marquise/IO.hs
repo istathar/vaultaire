@@ -130,7 +130,7 @@ awaitResponse :: (WireFormat request, WireFormat response)
 awaitResponse request identifier sock = do
     let payload = fromList [identifier, toWire request]
     sendMulti sock payload
-    either Left id <$> race waitTimeout waitResponse 
+    either Left id <$> race waitTimeout waitResponse
   where
     waitResponse = do
         resp <- receiveMulti sock

@@ -20,17 +20,17 @@
 -- forall SourceDict s.
 -- forall Address a.
 -- toWire (ContentsListBypass (a, toWire s)) == toWire (ContentsListEntry a s)
--- 
+--
 -- The point of this is to avoid re-parsing on egress from disk.
 module Vaultaire.Types.ContentsListBypass
 (
     ContentsListBypass(..)
 ) where
 
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
-import Data.ByteString(ByteString)
-import Vaultaire.Types.Address
 import Vaultaire.Classes.WireFormat
+import Vaultaire.Types.Address
 
 data ContentsListBypass = ContentsListBypass Address ByteString
 
@@ -38,5 +38,5 @@ instance WireFormat ContentsListBypass where
     -- There is no fromWire, you want to use ContentsListEntry's fromWire as
     -- the wire representation is identical. This is the whole point.
     fromWire = error "fromWire for ContentsListBypass is not implemented"
-    toWire (ContentsListBypass a s) = 
+    toWire (ContentsListBypass a s) =
         "\x02" `S.append` toWire a `S.append` s

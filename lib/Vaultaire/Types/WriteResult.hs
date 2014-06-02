@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE OverloadedStrings #-}
 --
 -- Data vault for metrics
 --
@@ -16,8 +16,8 @@ module Vaultaire.Types.WriteResult
     WriteResult(..),
 ) where
 
+import Control.Exception (SomeException (..))
 import Vaultaire.Classes.WireFormat
-import Control.Exception(SomeException(..))
 
 data WriteResult = InvalidWriteOrigin | OnDisk
   deriving (Show, Eq)

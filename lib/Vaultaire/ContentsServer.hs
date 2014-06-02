@@ -19,7 +19,7 @@ module Vaultaire.ContentsServer
 
 import Control.Applicative
 import Control.Exception
-import Control.Monad(forever)
+import Control.Monad (forever)
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust)

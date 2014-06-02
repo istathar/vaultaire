@@ -1,7 +1,7 @@
 {-# LANGUAGE EmptyDataDecls    #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes        #-}
 
 module Vaultaire.Reader
 (
@@ -19,10 +19,10 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.ST
-import System.Log.Logger
 import Data.ByteString (ByteString)
 import Data.Packer
 import Pipes
+import System.Log.Logger
 import System.Rados.Monadic
 import Vaultaire.Daemon
 import Vaultaire.DayMap

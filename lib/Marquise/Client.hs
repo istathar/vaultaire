@@ -46,6 +46,7 @@ module Marquise.Client
     Address,
 ) where
 
+import Control.Exception (SomeException)
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
@@ -56,7 +57,6 @@ import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Text (Text)
 import Data.Word (Word64)
 import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
-import Control.Exception(SomeException)
 import Marquise.Types (NameSpace (..), TimeStamp (..))
 import Vaultaire.Types (Address (..))
 

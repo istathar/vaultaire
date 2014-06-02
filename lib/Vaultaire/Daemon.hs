@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE Rank2Types          #-}
+{-# LANGUAGE Rank2Types                 #-}
 
 -- | Encapsulates runtime requirements of a generic vaultaire daemon
 --

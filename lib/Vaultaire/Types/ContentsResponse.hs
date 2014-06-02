@@ -17,7 +17,7 @@ module Vaultaire.Types.ContentsResponse
 ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Control.Exception(SomeException(..))
+import Control.Exception (SomeException (..))
 import qualified Data.ByteString as S
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address

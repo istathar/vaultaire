@@ -59,7 +59,7 @@ internalStoreBuckets = 128
 readFrom :: Origin -> Address -> Daemon (Maybe ByteString)
 readFrom origin addr =
     evalStateT draw $ yield (0, internalStoreBuckets)
-                      >-> readExtended (namespace origin) makeRequest 
+                      >-> readExtended (namespace origin) makeRequest
                       >-> Pipes.map extractPayload
   where
     extractPayload p = flip runUnpacking p $ do
