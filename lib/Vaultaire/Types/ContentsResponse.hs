@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 --
 -- Data vault for metrics
 --
@@ -10,6 +9,8 @@
 -- you can redistribute it and/or modify it under the terms of
 -- the 3-clause BSD licence.
 --
+
+{-# LANGUAGE OverloadedStrings #-}
 
 module Vaultaire.Types.ContentsResponse
 (
@@ -31,6 +32,7 @@ data ContentsResponse = RandomAddress Address
                       | RemoveSuccess
   deriving (Show, Eq)
 
+
 instance WireFormat ContentsResponse where
     fromWire bs
         | bs == "\x00" = Right InvalidContentsOrigin
@@ -48,6 +50,13 @@ instance WireFormat ContentsResponse where
     toWire (RandomAddress addr)  = "\x01" `S.append` toWire addr
     toWire (ContentsListEntry addr dict) =
         "\x02" `S.append` toWire addr `S.append` toWire dict
+
+--  Be aware there is also case such that:
+--  toWire (ContentsListBypass addr b) =
+--      "\x02" ...
+--  so that raw encoded bytes stored on disk can be tunnelled through. See
+--  Vaultaire.Types.ContentsListBypass for details
+
     toWire EndOfContentsList = "\x03"
     toWire UpdateSuccess     = "\x04"
     toWire RemoveSuccess     = "\x05"

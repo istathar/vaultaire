@@ -101,6 +101,7 @@ performUpdateRequest
     -> Daemon ()
 performUpdateRequest reply o a s = do
     s' <- retreiveSourceTagsForAddress o a
+    -- items in first SourceDict (the passed in update from user) win
     writeSourceTagsForAddress o a (unionSource s s')
     reply UpdateSuccess
 
@@ -112,6 +113,7 @@ performRemoveRequest
     -> Daemon ()
 performRemoveRequest reply o a s = do
     s' <- retreiveSourceTagsForAddress o a
+    -- elements of first SourceDict not appearing in second remain
     writeSourceTagsForAddress o a (diffSource s' s)
     reply RemoveSuccess
 

@@ -52,13 +52,3 @@ suite = do
             decodeStringAsAddress "LygHa16AHYF" `shouldBe` (2^64-1)
             decodeStringAsAddress "LygHa16AHYG" `shouldBe` 0
 
-    describe "Contents list reply" $
-      let
-        either_source_dict = makeSourceDict $ HashMap.fromList [("metric","cpu"), ("server","www.example.com")]
-        source_dict = either error toWire either_source_dict
-      in do
-        it "single source response correctly encoded" $ do
-            encodeContentsListEntry (1,source_dict) `shouldBe`
-                "\x01\x00\x00\x00\x00\x00\x00\x00\
-                \\x22\x00\x00\x00\x00\x00\x00\x00\
-                \metric:cpu,server:www.example.com,"
