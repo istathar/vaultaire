@@ -16,6 +16,7 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Hashable
 import Data.Locator
+import Data.Packer
 import Data.String
 import Data.Word (Word64)
 import GHC.Generics (Generic)
@@ -31,6 +32,21 @@ instance Show Address where
 
 instance IsString Address where
     fromString = decodeStringAsAddress
+
+instance WireFormat Address where
+
+--  fromWire :: ByteString -> Either SomeException Address
+    fromWire = Right . decodeAddressFromBytes
+--  toWire   :: Address -> ByteString
+    toWire   = encodeAddressToBytes
+
+encodeAddressToBytes :: Address -> ByteString
+encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
+
+decodeAddressFromBytes :: ByteString -> Address
+decodeAddressFromBytes = Address . runUnpacking getWord64LE
+
+
 
 encodeAddressToString :: Address -> String
 encodeAddressToString = padWithZeros 11 . toBase62 . toInteger . unAddress

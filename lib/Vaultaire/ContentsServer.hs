@@ -15,8 +15,6 @@ module Vaultaire.ContentsServer
 (
     startContents,
     -- testing
-    encodeAddressToBytes,
-    decodeAddressFromBytes,
     encodeContentsListEntry
 ) where
 
@@ -82,7 +80,7 @@ performListRequest reply o =
 performRegisterRequest :: (Response -> Daemon ()) -> Origin -> Daemon ()
 performRegisterRequest reply o =
     allocateNewAddressInVault o
-    >>= reply . Response . encodeAddressToBytes
+    >>= reply . Response . toWire
 
 
 allocateNewAddressInVault :: Origin -> Daemon Address
@@ -99,13 +97,6 @@ allocateNewAddressInVault o = do
                 return a
   where
         rollDice = getStdRandom (randomR (0, maxBound :: Word64))
-
-
-encodeAddressToBytes :: Address -> ByteString
-encodeAddressToBytes (Address a) = runPacking 8 (putWord64LE a)
-
-decodeAddressFromBytes :: ByteString -> Address
-decodeAddressFromBytes = Address . runUnpacking getWord64LE
 
 
 encodeContentsListEntry :: (Address, ByteString) -> ByteString
