@@ -35,6 +35,8 @@ import Vaultaire.Classes.WireFormat
 data ContentsListBypass = ContentsListBypass Address ByteString
 
 instance WireFormat ContentsListBypass where
+    -- There is no fromWire, you want to use ContentsListEntry's fromWire as
+    -- the wire representation is identical. This is the whole point.
     fromWire = error "fromWire for ContentsListBypass is not implemented"
     toWire (ContentsListBypass a s) = 
         "\x02" `S.append` toWire a `S.append` s
