@@ -159,15 +159,18 @@ sendViaZMQ broker (Origin origin) bytes =
                 in transmitLoop (new_identifier:identifiers) s
             Right ack ->
                 case ack of
-                    [identifier', empty] -> do
+                    [identifier', payload] -> do
                         unless (identifier' `elem` identifiers) $
-                            error "sendViaZMQ: panic: unknown identifier"
-                        unless (BS.null empty) $
-                            error $ "sendViaZMQ: panic: upstream: "
-                                  ++ BS.unpack empty
-                        return ()
+                            error "sendViaZMQ: unknown identifier"
+                        case fromWire payload of
+                            Left e ->
+                                error $ "sendViaZMQ: parse: " ++ show e
+                            Right OnDisk ->
+                                return ()
+                            Right _        ->
+                                error "sendViaZMQ: Wrong response"
                     _ ->
-                        error "sendViaZMQ: panic: Invalid ack"
+                        error "sendViaZMQ: Invalid response"
 
 withVaultaireSocket :: String -> (Socket Dealer -> IO a) -> IO a
 withVaultaireSocket broker f =
