@@ -55,7 +55,8 @@ library
                      semigroups,
                      containers,
                      primitive,
-                     attoparsec <0.12, -- parsers does not build
+                     -- parsers does not build
+                     attoparsec <0.12,
                      bifunctors,
                      spool,
                      pipes-parse,
