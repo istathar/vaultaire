@@ -57,16 +57,16 @@ suite = do
             let wire = either throw id $ fromWire "server:example,metric:cpu"
             in wire `shouldBe` expected
 
-    describe "Contents list reply" $
-      let
-        (Right source_dict) = makeSourceDict $ fromList [("metric","cpu"), ("server","www.example.com")]
-        encoded = toWire source_dict
-        expected    = "\x02\
-                       \\x01\x00\x00\x00\x00\x00\x00\x00\
-                       \\x22\x00\x00\x00\x00\x00\x00\x00\
-                       \metric:cpu,server:www.example.com,"
-      in
+    describe "Contents list reply" $ do
         it "toWire for ContentsListEntry is the same as ContentsListBypass" $ do
+            let al = [("metric","cpu"), ("server","www.example.com")]
+            let (Right source_dict) = makeSourceDict $ fromList al
+            let encoded = toWire source_dict
+            let expected = "\x02\
+                           \\x01\x00\x00\x00\x00\x00\x00\x00\
+                           \\x22\x00\x00\x00\x00\x00\x00\x00\
+                           \metric:cpu,server:www.example.com,"
+
             toWire (ContentsListEntry 1 source_dict) `shouldBe` expected
             toWire (ContentsListBypass 1 encoded) `shouldBe` expected
 

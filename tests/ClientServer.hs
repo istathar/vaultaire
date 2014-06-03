@@ -75,6 +75,6 @@ reply :: MVar () -> IO (ByteString, ByteString)
 reply shutdown =
     runDaemon "tcp://localhost:5561" Nothing "test" $ do
         Message rep_f (Origin origin') msg <- nextMessage
-        rep_f Success
+        rep_f OnDisk
         liftIO $ takeMVar shutdown
         return (origin', msg)

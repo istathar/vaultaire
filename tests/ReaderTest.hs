@@ -15,7 +15,8 @@ main :: IO ()
 main = do
     runTestDaemon "tcp://localhost:1234" (return ())
     startTestDaemons
-    sendTestMsg >>= (`shouldBe` ["\x42", ""])
+    -- Prime vault by writing a test message to it
+    sendTestMsg >>= (`shouldBe` ["\x42", "\NUL"])
     hspec suite
 
 suite :: Spec
@@ -40,19 +41,22 @@ suite = do
             `shouldBe` ()
 
     describe "full stack" $ do
-        it "reads one simple message written by writer daemon" $
-            requestSimpleTestMsg >>= (`shouldBe` ["\x43", simpleResponse])
+        it "reads one simple message written by writer daemon" $ do
+            -- Response is the data followed by an end of stream message
+            let resp = (["\x43", simpleResponse], ["\x43", "\x01"]) 
+            request simpleRequest >>= (`shouldBe` resp)
 
-        it "reads one extended message written by writer daemon" $
-            requestExtendedTestMsg >>= (`shouldBe` ["\x44", extendedResponse])
+        it "reads one extended message written by writer daemon" $ do
+            let resp = (["\x43", extendedResponse], ["\x43", "\x01"]) 
+            request extendedRequest >>= (`shouldBe` resp)
 
 simpleResponse :: ByteString
 simpleResponse =
-    "\x02\x00\x00\x00\x00\x00\x00\x00" `BS.append` simpleMessage
+    "\x02" `BS.append` simpleMessage
 
 extendedResponse :: ByteString
 extendedResponse =
-    "\x02\x00\x00\x00\x00\x00\x00\x00" `BS.append` extendedMessage
+    "\x03" `BS.append` extendedMessage
 
 simpleRequest :: ByteString
 simpleRequest = "\x00\x00\x00\x00\x00\x00\x00\x00\
@@ -66,18 +70,11 @@ extendedRequest = "\x00\x00\x00\x00\x00\x00\x00\x00\
                   \\x00\x00\x00\x00\x00\x00\x00\x00\
                   \\xff\xff\xff\xff\xff\xff\xff\xff"
 
-requestSimpleTestMsg :: IO [ByteString]
-requestSimpleTestMsg = runZMQ $ do
+request :: ByteString -> IO ([ByteString], [ByteString])
+request req = runZMQ $ do
     s <- socket Dealer
     connect s "tcp://localhost:5570"
-    sendMulti s $ fromList ["\x43", "PONY", simpleRequest]
-    r <- receiveMulti s
-    ["\x43", ""] <- receiveMulti s
-    return r
-
-requestExtendedTestMsg :: IO [ByteString]
-requestExtendedTestMsg = runZMQ $ do
-    s <- socket Dealer
-    connect s "tcp://localhost:5570"
-    sendMulti s $ fromList ["\x44", "PONY", extendedRequest]
-    receiveMulti s
+    sendMulti s $ fromList ["\x43", "PONY", req]
+    rep <- receiveMulti s
+    eof <- receiveMulti s
+    return (rep, eof) 

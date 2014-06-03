@@ -23,6 +23,7 @@ import qualified Data.ByteString as S
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.SourceDict
+import Data.Packer(runPacking, putWord8, putWord64LE, putBytes)
 
 data ContentsResponse = RandomAddress Address
                       | InvalidContentsOrigin
@@ -49,7 +50,14 @@ instance WireFormat ContentsResponse where
     toWire InvalidContentsOrigin = "\x00"
     toWire (RandomAddress addr)  = "\x01" `S.append` toWire addr
     toWire (ContentsListEntry addr dict) =
-        "\x02" `S.append` toWire addr `S.append` toWire dict
+        let addr_bytes = toWire addr
+            dict_bytes = toWire dict
+            dict_len = S.length dict_bytes
+        in runPacking (dict_len + 17) $ do
+            putWord8 0x2
+            putBytes addr_bytes
+            putWord64LE $ fromIntegral dict_len
+            putBytes dict_bytes
 
 --  Be aware there is also case such that:
 --  toWire (ContentsListBypass addr b) =

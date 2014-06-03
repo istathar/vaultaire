@@ -15,7 +15,7 @@ import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
 import Vaultaire.RollOver
-import Vaultaire.Types (Origin (..))
+import Vaultaire.Types (Origin (..), WriteResult(..))
 import Vaultaire.Util
 
 main :: IO ()
@@ -40,7 +40,7 @@ suite = do
 
             async sendBadMsg
             rep <- async $ sendPonyMsg "\x42"
-            wait rep >>= (`shouldBe` ["\x42", ""])
+            wait rep >>= (`shouldBe` ["\x42", "\NUL"])
 
             putMVar shutdown ()
             wait msg >>= (`shouldBe` ("PONY", "im in ur vaults"))
@@ -52,8 +52,8 @@ suite = do
             rep_a <- async $ sendPonyMsg "\x43"
             rep_b <- async $ sendPonyMsg "\x44"
 
-            wait rep_a >>= (`shouldBe` ["\x43", ""])
-            wait rep_b >>= (`shouldBe` ["\x44", ""])
+            wait rep_a >>= (`shouldBe` ["\x43", "\NUL"])
+            wait rep_b >>= (`shouldBe` ["\x44", "\NUL"])
 
             putMVar shutdown ()
             wait msg >>= (`shouldBe` (("PONY", "im in ur vaults")
@@ -141,7 +141,7 @@ replyOne shutdown =
 reply :: Daemon (ByteString, ByteString)
 reply = do
         Message rep_f (Origin origin') msg <- nextMessage
-        rep_f Success
+        rep_f OnDisk
         return (origin', msg)
 
 replyTwo :: MVar () -> IO ((ByteString, ByteString), (ByteString, ByteString))

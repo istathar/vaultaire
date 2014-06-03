@@ -67,7 +67,7 @@ processSimple s@(Simple (ReadDetails _ start end)) origin' reply_f = do
     case maybe_range of
         Just range ->
             runEffect $ for (each range >-> readSimple origin' s)
-                            (lift . reply_f . Burst)
+                            (lift . reply_f . SimpleBurst)
         Nothing -> reply_f InvalidReadOrigin
 
 readSimple :: Origin -> Request Simple
@@ -92,7 +92,7 @@ processExtended e@(Extended (ReadDetails _ start end)) origin' reply_f = do
     case maybe_range of
         Just range ->
             runEffect $ for (each range >-> readExtended origin' e)
-                            (lift . reply_f . Burst)
+                            (lift . reply_f . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
 readExtended :: Origin -> Request Extended
