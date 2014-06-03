@@ -22,3 +22,6 @@ roundtrip
 
 # other detruitus
 junk/
+
+.cabal-sandbox
+cabal.sandbox.config

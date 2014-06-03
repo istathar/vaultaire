@@ -55,7 +55,7 @@ library
                      semigroups,
                      containers,
                      primitive,
-                     attoparsec,
+                     attoparsec <0.12,
                      bifunctors,
                      spool,
                      pipes-parse,

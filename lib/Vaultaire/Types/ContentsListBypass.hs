@@ -39,4 +39,6 @@ instance WireFormat ContentsListBypass where
     -- the wire representation is identical. This is the whole point.
     fromWire = error "fromWire for ContentsListBypass is not implemented"
     toWire (ContentsListBypass a s) =
-        "\x02" `S.append` toWire a `S.append` s
+        let len = bs.len in
+            -- O(3n), where n is len(s). Let's see if this is slow
+            "\x02" `S.append` toWire a `S.append` len `S.append` s
