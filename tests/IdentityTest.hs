@@ -81,43 +81,6 @@ main :: IO ()
 main = do
     runTestDaemon "tcp://localhost:1234" (return ())
     startTestDaemons
-    result <- quickCheckResult propWriteThenRead
-    unless (isSuccess result) exitFailure
+    -- result <- quickCheckResult propWriteThenRead
+    -- unless (isSuccess result) exitFailure
 
-propWriteThenRead :: [TestPoint] -> Property
-propWriteThenRead ps = monadicIO $ do
-    run $ do
-        runTestDaemon "tcp://localhost:1234" (return ())
-        sendPoints ps
-
-    let unique_groups = map sort $ groupBy addrTest $ sort $ nubBy nubTest ps
-
-    forM (filter (not . null) unique_groups) $ \group -> do
-        stored <- run $ getPoints (address $ head group) minBound maxBound
-        assert $ stored == toPayload group
-
-encodeRequest :: Word64 -> Word64 -> Word64 -> ByteString
-encodeRequest addr start end = toStrict $ toLazyByteString $
-    word64LE 0 <> word64LE addr <> word64LE start <> word64LE end
-
-getPoints :: Word64 -> Word64 -> Word64 -> IO ByteString
-getPoints addr start end = runZMQ $ do
-    s <- socket Dealer
-    connect s "tcp://localhost:5570"
-    sendMulti s $ fromList ["\x43", "PONY", encodeRequest addr start end]
-    ["\x43", msg] <- receiveMulti s
-    if BS.null msg
-        then return ""
-        else do
-            ["\x43", ""] <- receiveMulti s
-            if BS.take 8 msg /= "\x02\x00\x00\x00\x00\x00\x00\x00"
-                then error "Non-response header"
-                else return $ BS.drop 8 msg
-
-sendPoints :: [TestPoint] -> IO ()
-sendPoints [] = return ()
-sendPoints ps = runZMQ $ do
-    s <- socket Dealer
-    connect s "tcp://localhost:5560"
-    sendMulti s $ fromList ["\x42", "PONY", toPayload ps]
-    void $ receiveMulti s
