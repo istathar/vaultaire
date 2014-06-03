@@ -5,6 +5,8 @@
 {-# LANGUAGE MultiParamTypeClasses    #-}
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
+{-# LANGUAGE DeriveDataTypeable      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving      #-}
 --
 -- Data vault for metrics
 --
@@ -23,13 +25,15 @@ module Marquise.IO
     MarquiseServerMonad(..),
     BurstPath(..),
     ContentsClientMonad(..),
-    spoolDir
+    spoolDir,
+    -- * Errors
+    VaultaireTimeout
 ) where
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
-import Control.Exception (ErrorCall, SomeException (..), try)
+import Control.Exception (ErrorCall, SomeException (..), try, Exception)
 import Control.Monad (unless, when)
 import Control.Monad.Reader (MonadReader, ReaderT, ask)
 import Control.Monad.State (evalStateT, get, lift, put)
@@ -52,9 +56,14 @@ import System.Posix.Temp (mkstemp)
 import System.ZMQ4 (Dealer (..), Socket, connect, receiveMulti, sendMulti,
                     withContext, withSocket)
 import Vaultaire.Types
+import Data.Typeable(Typeable)
 
 newtype BurstPath = BurstPath { unBurstPath :: FilePath }
     deriving (Show, Eq)
+
+data VaultaireTimeout = VaultaireTimeout
+    deriving (Typeable, Show)
+instance Exception VaultaireTimeout
 
 -- | This class is for convenience of testing. It encapsulates all IO
 -- interaction that the client and server will do.
@@ -207,7 +216,7 @@ withVaultaireSocket broker f =
 waitTimeout :: IO SomeException
 waitTimeout = do
     threadDelay 60000000
-    return $ SomeException $ userError "Timeout"
+    return $ SomeException VaultaireTimeout
 
 doSwap :: NameSpace -> IO (Maybe (BurstPath, ByteString))
 doSwap ns =  do
