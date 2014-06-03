@@ -83,19 +83,44 @@ class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
 
 class MonadReader String m => ContentsClientMonad m where
     requestUniqueAddress :: m (Either SomeException Address)
+    requestSourceDictUpdate :: Address -> SourceDict -> m (Either SomeException ())
+    requestSourceDictRemoval :: Address -> SourceDict -> m (Either SomeException ())
 
 instance ContentsClientMonad (ReaderT String IO) where
     requestUniqueAddress = do
-        broker <- ask
-        response <- lift $ withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
-                                               (awaitResponse GenerateNewAddress "")
-        return $ either Left processResponse response
-      where
-        processResponse :: ContentsResponse -> Either SomeException Address
-        processResponse (RandomAddress addr) = Right addr
-        processResponse InvalidContentsOrigin =
+        response <- contentsRequest GenerateNewAddress
+        return $ case response of
+            Right (RandomAddress addr) ->
+                Right addr
+            Right _ -> error "requestUniqueAddress: Invalid response"
+            Left e -> Left e
+
+    requestSourceDictUpdate addr source_dict = do
+        response <- contentsRequest $ UpdateSourceTag addr source_dict
+        return $ case response of
+            Right UpdateSuccess -> Right ()
+            Right _ -> error "requestSourceDictUpdate: Invalid response"
+            Left e -> Left e
+
+    requestSourceDictRemoval addr source_dict = do
+        response <- contentsRequest $ RemoveSourceTag addr source_dict
+        return $ case response of
+            Right RemoveSuccess -> Right ()
+            Right _ -> error "requestSourceDictRemoval: Invalid response"
+            Left e -> Left e
+
+
+contentsRequest :: ContentsOperation
+                -> ReaderT String IO (Either SomeException ContentsResponse)
+contentsRequest req = do
+    broker <- ask
+    resp <- lift $ withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
+                                       (awaitResponse req "")
+    return $ case resp of
+        Right InvalidContentsOrigin ->
             Left $ SomeException $
                 userError "Invalid origin in contents request"
+        x -> x
 
 -- Making MonadIO m an instance is impractical, as it would require
 -- undecidable instances.

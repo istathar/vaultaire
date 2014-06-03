@@ -34,6 +34,7 @@ module Marquise.Client
     -- | * Request or assign Addresses
     requestUnique,
     hashIdentifier,
+    makeSourceDict,
     updateSourceDict,
     removeSourceDict,
 
@@ -54,11 +55,10 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
-import Data.Text (Text)
 import Data.Word (Word64)
 import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
 import Marquise.Types (NameSpace (..), TimeStamp (..))
-import Vaultaire.Types (Address (..))
+import Vaultaire.Types (Address (..), SourceDict, makeSourceDict)
 
 import Control.Monad.Reader
 
@@ -68,7 +68,6 @@ makeNameSpace :: String -> Either String NameSpace
 makeNameSpace s
     | any (not . isAlphaNum) s = Left "non-alphanumeric namespace"
     | otherwise = Right $ NameSpace s
-
 
 withBroker :: Monad m => String -> ReaderT String m a -> m a
 withBroker broker action = runReaderT action broker
@@ -87,13 +86,18 @@ hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
     unSipHash (SipHash h) = h
 
 -- | Set the key,value tags as metadata on the given Address.
-updateSourceDict :: ContentsClientMonad m => Address -> [(Text,Text)] -> m ()
-updateSourceDict = undefined
+updateSourceDict :: ContentsClientMonad m
+                 => Address
+                 -> SourceDict
+                 -> m (Either SomeException ())
+updateSourceDict = requestSourceDictUpdate
 
 -- | Remove the supplied key,value tags from metadata on the Address, if present.
-removeSourceDict :: ContentsClientMonad m => Address -> [(Text,Text)] -> m ()
-removeSourceDict = undefined
-
+removeSourceDict :: ContentsClientMonad m
+                 => Address
+                 -> SourceDict
+                 -> m (Either SomeException ())
+removeSourceDict = requestSourceDictRemoval
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
