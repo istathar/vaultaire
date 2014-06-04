@@ -14,6 +14,7 @@ import System.Log.Logger
 import System.ZMQ4.Monadic
 import Text.Trifecta
 import Vaultaire.Broker
+import Vaultaire.ContentsServer
 import Vaultaire.Reader (startReader)
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
@@ -29,6 +30,7 @@ data Component = Broker
                | Reader
                | Writer { batchPeriod :: Word32 }
                | Marquise { origin :: String, namespace :: String }
+               | Contents
 
 -- | Command line option parsing
 
@@ -75,7 +77,8 @@ optionsParser Options{..} = Options <$> parsePool
        (   parseBrokerComponent
        <> parseReaderComponent
        <> parseWriterComponent
-       <> parseMarquiseComponent )
+       <> parseMarquiseComponent 
+       <> parseContentsComponent )
 
     parseBrokerComponent = command "broker" $
         info (pure Broker) (progDesc "Start a broker deamon")
@@ -88,6 +91,9 @@ optionsParser Options{..} = Options <$> parsePool
 
     parseMarquiseComponent = command "marquise" $
         info marquiseOptionsParser (progDesc "Start a marquise daemon")
+
+    parseContentsComponent = command "contents" $
+        info (pure Contents) (progDesc "Start a contents daemon")
 
 writerOptionsParser :: O.Parser Component
 writerOptionsParser = Writer <$> O.option (
@@ -161,6 +167,7 @@ main = do
         Reader -> runReader pool user broker
         Writer batch_period -> runWriter pool user broker batch_period
         Marquise origin namespace -> marquiseServer broker origin namespace
+        Contents -> runContents pool user broker
 
 runBroker :: IO ()
 runBroker = runZMQ $ do
@@ -171,6 +178,10 @@ runBroker = runZMQ $ do
     void $ async $ startProxy (Router,"tcp://*:5570")
                               (Dealer,"tcp://*:5571")
                               "tcp://*:5001"
+
+    void $ async $ startProxy (Router,"tcp://*:5580")
+                              (Dealer,"tcp://*:5581")
+                              "tcp://*:5002"
 
     liftIO $ debugM "Main.runBroker" "Proxies started."
     waitForever
@@ -187,3 +198,10 @@ runWriter pool user broker poll_period =
                 (Just $ BS.pack user)
                 (BS.pack pool)
                 (fromIntegral poll_period)
+
+runContents :: String -> String -> String -> IO ()
+runContents pool user broker =
+    startContents ("tcp://" ++ broker ++ ":5581")
+                (Just $ BS.pack user)
+                (BS.pack pool)
+
