@@ -9,10 +9,7 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RankNTypes            #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
@@ -41,24 +38,48 @@ instance Arbitrary ContentsOperation where
                       , UpdateSourceTag <$> arbitrary <*> arbitrary
                       , RemoveSourceTag <$> arbitrary <*> arbitrary ]
 
+instance Arbitrary ContentsResponse where
+    arbitrary = oneof [ RandomAddress  <$> arbitrary
+                      , return InvalidContentsOrigin
+                      , ContentsListEntry <$> arbitrary <*> arbitrary
+                      , return EndOfContentsList
+                      , return UpdateSuccess
+                      , return RemoveSuccess ]
+
+instance Arbitrary WriteResult where
+    arbitrary = oneof [ return InvalidWriteOrigin, return OnDisk ]
+
+instance Arbitrary ReadStream where
+    arbitrary = oneof [ return InvalidReadOrigin
+                      , SimpleBurst <$> arbitrary
+                      , ExtendedBurst <$> arbitrary
+                      , return EndOfStream ]
+
 main :: IO ()
 main = hspec suite
 
 suite :: Spec
 suite = do
-    describe "contents wire format" $
-        it "toWire . fromWire == id" $ property contentsOperationIdentity
+    describe "WireFormat identity tests" $ do
+        it "ContentsOperation" $ property (wireId :: ContentsOperation -> Bool)
+        it "ContentsResponse" $ property (wireId :: ContentsResponse -> Bool)
+        it "WriteResult" $ property (wireId :: WriteResult -> Bool)
+        it "ReadStream" $ property (wireId :: ReadStream -> Bool)
+        it "Address" $ property (wireId :: Address -> Bool)
+        it "SourceDict" $ property (wireId :: SourceDict -> Bool)
 
-    describe "source dict wire format" $ do
-        let hm =  fromList [ ("metric","cpu")
-                           , ("server","example")]
-        let expected = either error id $ makeSourceDict hm
-        it "parses string to map" $
+    describe "source dict wire format" $
+        it "parses string to map" $ do
+            let hm =  fromList [ ("metric","cpu")
+                            , ("server","example")]
+            let expected = either error id $ makeSourceDict hm
             let wire = either throw id $ fromWire "server:example,metric:cpu"
-            in wire `shouldBe` expected
+            wire `shouldBe` expected
 
-    describe "Contents list reply" $ do
-        it "toWire for ContentsListEntry is the same as ContentsListBypass" $ do
+    describe "Contents list bypass" $ do
+        it "has same wire format for all" $
+            property contentsListBypassId
+        it "has same wire format for known case" $ do
             let al = [("metric","cpu"), ("server","www.example.com")]
             let (Right source_dict) = makeSourceDict $ fromList al
             let encoded = toWire source_dict
@@ -70,9 +91,14 @@ suite = do
             toWire (ContentsListEntry 1 source_dict) `shouldBe` expected
             toWire (ContentsListBypass 1 encoded) `shouldBe` expected
 
+contentsListBypassId :: SourceDict -> Address -> Bool
+contentsListBypassId dict addr = toWire entry == toWire bypass
+  where
+    entry = ContentsListEntry addr dict
+    bypass = ContentsListBypass addr (toWire dict)
 
-contentsOperationIdentity :: ContentsOperation -> Bool
-contentsOperationIdentity op = id' op == op
+wireId :: (Eq w, WireFormat w) => w -> Bool
+wireId op = id' op == op
   where
     id' = fromRight . fromWire . toWire
     fromRight = either (error . show) id

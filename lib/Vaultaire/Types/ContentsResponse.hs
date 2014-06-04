@@ -20,7 +20,8 @@ module Vaultaire.Types.ContentsResponse
 import Control.Applicative ((<$>), (<*>))
 import Control.Exception (SomeException (..))
 import qualified Data.ByteString as S
-import Data.Packer (putBytes, putWord64LE, putWord8, runPacking)
+import Data.Packer (getBytes, getWord64LE, putBytes, putWord64LE, putWord8,
+                    runPacking, runUnpacking)
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.SourceDict
@@ -42,8 +43,12 @@ instance WireFormat ContentsResponse where
         | bs == "\x05" = Right RemoveSuccess
         | S.take 1 bs == "\x01" = RandomAddress <$> fromWire (S.drop 1 bs)
         -- This relies on address being fixed-length when encoded
-        | S.take 1 bs == "\x02" = ContentsListEntry <$> fromWire (S.drop 1 bs)
-                                                    <*> fromWire (S.drop 9 bs)
+        | S.take 1 bs == "\x02" = do
+            let body = S.drop 1 bs
+            let unpacker = (,) <$> getBytes 8 <*> (getWord64LE >>= getBytes . fromIntegral)
+            let (addr_bytes, dict_bytes ) = flip runUnpacking body unpacker
+            ContentsListEntry <$> fromWire addr_bytes <*> fromWire dict_bytes
+
         | otherwise = Left $ SomeException $
                         userError "Invalid ContentsResponse packet"
 
