@@ -9,10 +9,7 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RankNTypes            #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
@@ -49,17 +46,27 @@ instance Arbitrary ContentsResponse where
                       , return UpdateSuccess
                       , return RemoveSuccess ]
 
+instance Arbitrary WriteResult where
+    arbitrary = oneof [ return InvalidWriteOrigin, return OnDisk ]
+
+instance Arbitrary ReadStream where
+    arbitrary = oneof [ return InvalidReadOrigin
+                      , SimpleBurst <$> arbitrary
+                      , ExtendedBurst <$> arbitrary
+                      , return EndOfStream ]
 
 main :: IO ()
 main = hspec suite
 
 suite :: Spec
 suite = do
-    describe "contents wire format" $ do
-        it "ContentsOperation identity" $
-            property (contentsOperationIdentity :: ContentsOperation -> Bool)
-        it "ContentsResponse identity" $
-            property (contentsOperationIdentity :: ContentsResponse -> Bool)
+    describe "WireFormat identity tests" $ do
+        it "ContentsOperation" $ property (wireId :: ContentsOperation -> Bool)
+        it "ContentsResponse" $ property (wireId :: ContentsResponse -> Bool)
+        it "WriteResult" $ property (wireId :: WriteResult -> Bool)
+        it "ReadStream" $ property (wireId :: ReadStream -> Bool)
+        it "Address" $ property (wireId :: Address -> Bool)
+        it "SourceDict" $ property (wireId :: SourceDict -> Bool)
 
     describe "source dict wire format" $ do
         let hm =  fromList [ ("metric","cpu")
@@ -83,8 +90,8 @@ suite = do
             toWire (ContentsListBypass 1 encoded) `shouldBe` expected
 
 
-contentsOperationIdentity :: (Eq w, WireFormat w) => w -> Bool
-contentsOperationIdentity op = id' op == op
+wireId :: (Eq w, WireFormat w) => w -> Bool
+wireId op = id' op == op
   where
     id' = fromRight . fromWire . toWire
     fromRight = either (error . show) id
