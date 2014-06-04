@@ -29,9 +29,9 @@ module Vaultaire.Types.ContentsListBypass
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
+import Data.Packer (putBytes, putWord64LE, putWord8, runPacking)
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
-import Data.Packer(runPacking, putWord8, putWord64LE, putBytes)
 
 data ContentsListBypass = ContentsListBypass Address ByteString
 

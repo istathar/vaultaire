@@ -20,10 +20,10 @@ module Vaultaire.Types.ContentsResponse
 import Control.Applicative ((<$>), (<*>))
 import Control.Exception (SomeException (..))
 import qualified Data.ByteString as S
+import Data.Packer (putBytes, putWord64LE, putWord8, runPacking)
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.SourceDict
-import Data.Packer(runPacking, putWord8, putWord64LE, putBytes)
 
 data ContentsResponse = RandomAddress Address
                       | InvalidContentsOrigin

@@ -15,7 +15,7 @@ import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
 import Vaultaire.RollOver
-import Vaultaire.Types (Origin (..), WriteResult(..))
+import Vaultaire.Types (Origin (..), WriteResult (..))
 import Vaultaire.Util
 
 main :: IO ()

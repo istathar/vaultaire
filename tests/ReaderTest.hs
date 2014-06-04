@@ -43,11 +43,11 @@ suite = do
     describe "full stack" $ do
         it "reads one simple message written by writer daemon" $ do
             -- Response is the data followed by an end of stream message
-            let resp = (["\x43", simpleResponse], ["\x43", "\x01"]) 
+            let resp = (["\x43", simpleResponse], ["\x43", "\x01"])
             request simpleRequest >>= (`shouldBe` resp)
 
         it "reads one extended message written by writer daemon" $ do
-            let resp = (["\x43", extendedResponse], ["\x43", "\x01"]) 
+            let resp = (["\x43", extendedResponse], ["\x43", "\x01"])
             request extendedRequest >>= (`shouldBe` resp)
 
 simpleResponse :: ByteString
@@ -77,4 +77,4 @@ request req = runZMQ $ do
     sendMulti s $ fromList ["\x43", "PONY", req]
     rep <- receiveMulti s
     eof <- receiveMulti s
-    return (rep, eof) 
+    return (rep, eof)

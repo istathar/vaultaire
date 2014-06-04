@@ -1,12 +1,12 @@
-{-# LANGUAGE FlexibleContexts         #-}
-{-# LANGUAGE FlexibleInstances        #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE FunctionalDependencies   #-}
-{-# LANGUAGE MultiParamTypeClasses    #-}
-{-# LANGUAGE OverloadedStrings        #-}
-{-# LANGUAGE ScopedTypeVariables      #-}
-{-# LANGUAGE DeriveDataTypeable      #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving      #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE ForeignFunctionInterface   #-}
+{-# LANGUAGE FunctionalDependencies     #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 --
 -- Data vault for metrics
 --
@@ -33,7 +33,7 @@ module Marquise.IO
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
-import Control.Exception (ErrorCall, SomeException (..), try, Exception)
+import Control.Exception (ErrorCall, Exception, SomeException (..), try)
 import Control.Monad (unless, when)
 import Control.Monad.Reader (MonadReader, ReaderT, ask)
 import Control.Monad.State (evalStateT, get, lift, put)
@@ -47,8 +47,9 @@ import qualified Data.ByteString.Lazy as LB
 import Data.List.NonEmpty (fromList)
 import Data.Maybe (fromMaybe)
 import Data.Packer (getWord64LE, runUnpacking, unpackSkip)
+import Data.Typeable (Typeable)
 import Data.Word (Word64)
-import Marquise.Types (NameSpace (..))
+import Marquise.Types (SpoolName (..))
 import System.Directory (doesFileExist)
 import System.IO (hClose)
 import System.Posix.Files (removeLink, rename)
@@ -56,7 +57,6 @@ import System.Posix.Temp (mkstemp)
 import System.ZMQ4 (Dealer (..), Socket, connect, receiveMulti, sendMulti,
                     withContext, withSocket)
 import Vaultaire.Types
-import Data.Typeable(Typeable)
 
 newtype BurstPath = BurstPath { unBurstPath :: FilePath }
     deriving (Show, Eq)
@@ -71,15 +71,15 @@ class Monad m => MarquiseClientMonad m where
     -- | This append does not imply that the given data is synced to disk, just
     -- that it is queued to do so. This assumes no state, so any file handles
     -- must be stashed globally or re-opened and closed.
-    append :: NameSpace -> LB.ByteString -> m ()
+    append :: SpoolName -> LB.ByteString -> m ()
     -- | Close any open handles and flush all previously appended datum to disk
-    close :: NameSpace -> m ()
+    close :: SpoolName -> m ()
 
 class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
     -- | Atomically empty the underlying store and retrieve the next "burst" of
     -- appended datums. Appended datums are *not* separated. They're all
     -- concatenated together into the same ByteString.
-    nextBurst :: NameSpace -> m (Maybe (bp, ByteString))
+    nextBurst :: SpoolName -> m (Maybe (bp, ByteString))
     -- | Clean up a sent burst. This should be called on a successfull ack.
     flagSent :: bp -> m ()
 
@@ -218,7 +218,7 @@ waitTimeout = do
     threadDelay 60000000
     return $ SomeException VaultaireTimeout
 
-doSwap :: NameSpace -> IO (Maybe (BurstPath, ByteString))
+doSwap :: SpoolName -> IO (Maybe (BurstPath, ByteString))
 doSwap ns =  do
     -- Create a temp file to atomically move our data into.
     (tmp_path, tmp_handle) <- mkstemp (tmpTemplate ns)
@@ -287,11 +287,11 @@ idealBurstSize = 1048576 -- 1MB
 
 foreign import ccall "unistd.h sync" c_sync :: IO ()
 
-tmpTemplate :: NameSpace -> String
+tmpTemplate :: SpoolName -> String
 tmpTemplate ns = dataFilePath ns ++ "_"
 
-dataFilePath :: NameSpace -> String
-dataFilePath (NameSpace ns) = spoolDir ++ ns
+dataFilePath :: SpoolName -> String
+dataFilePath (SpoolName ns) = spoolDir ++ ns
 
 -- Trailing slash is important
 spoolDir :: FilePath

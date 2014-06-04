@@ -28,7 +28,7 @@ module Marquise.Client
 (
     -- | * Functions
     -- Note: You may read MarquiseClientMonad m as IO.
-    makeNameSpace,
+    makeSpoolName,
     withBroker,
 
     -- | * Request or assign Addresses
@@ -43,7 +43,7 @@ module Marquise.Client
     sendExtended,
     flush,
     -- * Types
-    NameSpace,
+    SpoolName,
     Address,
 ) where
 
@@ -57,17 +57,17 @@ import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
 import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
-import Marquise.Types (NameSpace (..), TimeStamp (..))
+import Marquise.Types (SpoolName (..), TimeStamp (..))
 import Vaultaire.Types (Address (..), SourceDict, makeSourceDict)
 
 import Control.Monad.Reader
 
--- | Create a namespace, only alphanumeric characters are allowed, max length
+-- | Create a name in the spool. Only alphanumeric characters are allowed, max length
 -- is 32 characters.
-makeNameSpace :: String -> Either String NameSpace
-makeNameSpace s
-    | any (not . isAlphaNum) s = Left "non-alphanumeric namespace"
-    | otherwise = Right $ NameSpace s
+makeSpoolName :: String -> Either String SpoolName
+makeSpoolName s
+    | any (not . isAlphaNum) s = Left "non-alphanumeric spool name"
+    | otherwise = Right $ SpoolName s
 
 withBroker :: Monad m => String -> ReaderT String m a -> m a
 withBroker broker action = runReaderT action broker
@@ -103,7 +103,7 @@ removeSourceDict = requestSourceDictRemoval
 -- float/signed is up to you, but it must be sent in the form of a Word64.
 sendSimple
     :: MarquiseClientMonad m
-    => NameSpace
+    => SpoolName
     -> Address
     -> TimeStamp
     -> Word64
@@ -118,7 +118,7 @@ sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
 -- | Send an "extended" data point. Again, representation is up to you.
 sendExtended
     :: MarquiseClientMonad m
-    => NameSpace
+    => SpoolName
     -> Address
     -> TimeStamp
     -> ByteString
@@ -135,6 +135,6 @@ sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
 -- | Ensure that all sent points have hit the local disk.
 flush
     :: MarquiseClientMonad m
-    => NameSpace
+    => SpoolName
     -> m ()
 flush = close

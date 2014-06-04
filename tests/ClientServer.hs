@@ -16,10 +16,10 @@ import Vaultaire.Daemon hiding (async)
 import Vaultaire.Types
 import Vaultaire.Util
 
-ns1, ns2, ns3 :: NameSpace
-ns1 = either error id $ makeNameSpace "ns1"
-ns2 = either error id $ makeNameSpace "ns2"
-ns3 = either error id $ makeNameSpace "ns3"
+ns1, ns2, ns3 :: SpoolName
+ns1 = either error id $ makeSpoolName "ns1"
+ns2 = either error id $ makeSpoolName "ns2"
+ns3 = either error id $ makeSpoolName "ns3"
 
 main :: IO ()
 main = do

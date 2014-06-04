@@ -21,16 +21,16 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
 import Control.Monad (forever, unless)
 import qualified Data.ByteString.Char8 as BS
-import Marquise.Client (makeNameSpace)
+import Marquise.Client (makeSpoolName)
 import Marquise.IO (MarquiseServerMonad (..), spoolDir)
-import Marquise.Types (NameSpace (..))
+import Marquise.Types (SpoolName (..))
 import System.Directory (doesDirectoryExist)
 import Vaultaire.Types (Origin (..))
 
 -- | Send the next burst, returns when the burst is acknowledged and thus in
 -- the vault.
 sendNextBurst :: MarquiseServerMonad m bp
-              => String -> Origin -> NameSpace -> m ()
+              => String -> Origin -> SpoolName -> m ()
 sendNextBurst broker origin ns = do
     maybe_burst <- nextBurst ns
     case maybe_burst of
@@ -41,14 +41,14 @@ sendNextBurst broker origin ns = do
             flagSent bp
 
 marquiseServer :: String -> String -> String -> IO ()
-marquiseServer broker origin user_ns = do
+marquiseServer broker origin user_sn = do
     spool_exists <- doesDirectoryExist spoolDir
     unless spool_exists $ throwIO $ userError $
         "spool directory does not exist: " ++ spoolDir
-    case makeNameSpace user_ns of
+    case makeSpoolName user_sn of
         Left e -> throwIO $ userError e
-        Right ns -> forever $ do
-            sendNextBurst broker (Origin $ BS.pack origin) ns
+        Right sn -> forever $ do
+            sendNextBurst broker (Origin $ BS.pack origin) sn
             threadDelay idleTime
 
 idleTime :: Int
