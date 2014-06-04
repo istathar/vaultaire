@@ -77,7 +77,7 @@ optionsParser Options{..} = Options <$> parsePool
        (   parseBrokerComponent
        <> parseReaderComponent
        <> parseWriterComponent
-       <> parseMarquiseComponent 
+       <> parseMarquiseComponent
        <> parseContentsComponent )
 
     parseBrokerComponent = command "broker" $

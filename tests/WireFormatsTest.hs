@@ -9,7 +9,7 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
