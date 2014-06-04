@@ -68,16 +68,18 @@ suite = do
         it "Address" $ property (wireId :: Address -> Bool)
         it "SourceDict" $ property (wireId :: SourceDict -> Bool)
 
-    describe "source dict wire format" $ do
-        let hm =  fromList [ ("metric","cpu")
-                           , ("server","example")]
-        let expected = either error id $ makeSourceDict hm
-        it "parses string to map" $
+    describe "source dict wire format" $
+        it "parses string to map" $ do
+            let hm =  fromList [ ("metric","cpu")
+                            , ("server","example")]
+            let expected = either error id $ makeSourceDict hm
             let wire = either throw id $ fromWire "server:example,metric:cpu"
-            in wire `shouldBe` expected
+            wire `shouldBe` expected
 
-    describe "Contents list reply" $ do
-        it "toWire for ContentsListEntry is the same as ContentsListBypass" $ do
+    describe "Contents list bypass" $ do
+        it "has same wire format for all" $
+            property contentsListBypassId
+        it "has same wire format for known case" $ do
             let al = [("metric","cpu"), ("server","www.example.com")]
             let (Right source_dict) = makeSourceDict $ fromList al
             let encoded = toWire source_dict
@@ -89,6 +91,11 @@ suite = do
             toWire (ContentsListEntry 1 source_dict) `shouldBe` expected
             toWire (ContentsListBypass 1 encoded) `shouldBe` expected
 
+contentsListBypassId :: SourceDict -> Address -> Bool
+contentsListBypassId dict addr = toWire entry == toWire bypass
+  where
+    entry = ContentsListEntry addr dict
+    bypass = ContentsListBypass addr (toWire dict)
 
 wireId :: (Eq w, WireFormat w) => w -> Bool
 wireId op = id' op == op
