@@ -16,7 +16,6 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Hashable
 import Data.Locator
-import Data.Packer
 import Data.Packer (getWord64LE, putWord64LE, runPacking, tryUnpacking)
 import Data.String
 import Data.Word (Word64)

@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.0.0
+version:             2.0.1
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Andrew Cowie <andrew@operationaldynamics.com>
@@ -84,7 +84,7 @@ library
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
   ghc-prof-options:  -fprof-auto
@@ -107,7 +107,7 @@ executable vault
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
   ghc-prof-options:  -fprof-auto
@@ -145,7 +145,7 @@ test-suite           daymap-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 
@@ -173,7 +173,7 @@ test-suite           writer-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 
@@ -200,7 +200,7 @@ test-suite           reader-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 
@@ -226,7 +226,7 @@ test-suite           reader-algorithms-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 test-suite           identity-test
@@ -250,7 +250,7 @@ test-suite           identity-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 test-suite           internal-store-test
@@ -276,7 +276,7 @@ test-suite           internal-store-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 test-suite           client-server-test
@@ -302,7 +302,7 @@ test-suite           client-server-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 
@@ -330,7 +330,7 @@ test-suite           contents-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 test-suite           wire-formats-test
@@ -353,7 +353,7 @@ test-suite           wire-formats-test
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 benchmark writer-bench
@@ -373,7 +373,7 @@ benchmark writer-bench
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
 
@@ -393,7 +393,7 @@ benchmark reader-algorithms
   ghc-options:       -O2
                      -threaded
                      -Wall
-                     -Wwarn
+                     -Werror
                      -fwarn-tabs
 
   ghc-prof-options:  -fprof-auto

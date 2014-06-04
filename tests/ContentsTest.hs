@@ -15,7 +15,6 @@
 
 module Main where
 
-import qualified Data.HashMap.Strict as HashMap
 import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
