@@ -179,6 +179,10 @@ runBroker = runZMQ $ do
                               (Dealer,"tcp://*:5571")
                               "tcp://*:5001"
 
+    void $ async $ startProxy (Router,"tcp://*:5580")
+                              (Dealer,"tcp://*:5581")
+                              "tcp://*:5002"
+
     liftIO $ debugM "Main.runBroker" "Proxies started."
     waitForever
 
@@ -197,7 +201,7 @@ runWriter pool user broker poll_period =
 
 runContents :: String -> String -> String -> IO ()
 runContents pool user broker =
-    startContents ("tcp://" ++ broker ++ ":5561")
+    startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ BS.pack user)
                 (BS.pack pool)
 
