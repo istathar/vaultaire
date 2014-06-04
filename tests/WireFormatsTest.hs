@@ -41,13 +41,25 @@ instance Arbitrary ContentsOperation where
                       , UpdateSourceTag <$> arbitrary <*> arbitrary
                       , RemoveSourceTag <$> arbitrary <*> arbitrary ]
 
+instance Arbitrary ContentsResponse where
+    arbitrary = oneof [ RandomAddress  <$> arbitrary
+                      , return InvalidContentsOrigin
+                      , ContentsListEntry <$> arbitrary <*> arbitrary
+                      , return EndOfContentsList
+                      , return UpdateSuccess
+                      , return RemoveSuccess ]
+
+
 main :: IO ()
 main = hspec suite
 
 suite :: Spec
 suite = do
-    describe "contents wire format" $
-        it "toWire . fromWire == id" $ property contentsOperationIdentity
+    describe "contents wire format" $ do
+        it "ContentsOperation identity" $
+            property (contentsOperationIdentity :: ContentsOperation -> Bool)
+        it "ContentsResponse identity" $
+            property (contentsOperationIdentity :: ContentsResponse -> Bool)
 
     describe "source dict wire format" $ do
         let hm =  fromList [ ("metric","cpu")
@@ -71,7 +83,7 @@ suite = do
             toWire (ContentsListBypass 1 encoded) `shouldBe` expected
 
 
-contentsOperationIdentity :: ContentsOperation -> Bool
+contentsOperationIdentity :: (Eq w, WireFormat w) => w -> Bool
 contentsOperationIdentity op = id' op == op
   where
     id' = fromRight . fromWire . toWire
