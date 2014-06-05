@@ -37,3 +37,4 @@ script:
   - 'cabal-$CABALVER sdist'
   - 'cabal-$CABALVER test daymap-test'
   - 'cabal-$CABALVER test reader-algorithms-test'
+  - 'cabal-$CABALVER test wire-formats-test'
