@@ -19,8 +19,8 @@ module Vaultaire.Types.ContentsOperation
 
 import Control.Applicative ((<$>), (<*>))
 import qualified Data.ByteString as S
-import Data.Packer (getBytes, getWord64LE, putBytes, putWord64LE, runPacking,
-                    tryUnpacking)
+import Data.Packer (getBytes, getWord64LE, getWord8, putBytes, putWord64LE,
+                    putWord8, runPacking, tryUnpacking)
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.SourceDict (SourceDict)
@@ -33,7 +33,7 @@ data ContentsOperation = ContentsListRequest
 
 instance WireFormat ContentsOperation where
     fromWire bs = flip tryUnpacking bs $ do
-        header <- getWord64LE
+        header <- getWord8
         case header of
             0x0 -> return ContentsListRequest
             0x1 -> return GenerateNewAddress
@@ -48,16 +48,16 @@ instance WireFormat ContentsOperation where
 
     toWire op =
         case op of
-            ContentsListRequest   -> "\x00\x00\x00\x00\x00\x00\x00\x00"
-            GenerateNewAddress    -> "\x01\x00\x00\x00\x00\x00\x00\x00"
+            ContentsListRequest   -> "\x00"
+            GenerateNewAddress    -> "\x01"
             UpdateSourceTag addr dict -> sourceOpToWire 0x2 addr dict
             RemoveSourceTag addr dict -> sourceOpToWire 0x3 addr dict
       where
         sourceOpToWire header (Address addr) dict =
             let dict_bytes = toWire dict in
             let dict_len = S.length dict_bytes in
-            runPacking (24 + dict_len) $ do
-                putWord64LE header
+            runPacking (17 + dict_len) $ do
+                putWord8 header
                 putWord64LE addr
                 putWord64LE (fromIntegral dict_len)
                 putBytes dict_bytes
