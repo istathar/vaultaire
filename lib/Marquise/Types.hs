@@ -1,4 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 --
 -- Data vault for metrics
 --
@@ -9,6 +8,9 @@
 -- you can redistribute it and/or modify it under the terms of
 -- the 3-clause BSD licence.
 --
+
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_HADDOCK hide, prune #-}
 
 module Marquise.Types
 (

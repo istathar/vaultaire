@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.0.1
+version:             2.0.2
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Andrew Cowie <andrew@operationaldynamics.com>
@@ -35,6 +35,7 @@ library
                      Vaultaire.ContentsServer,
                      Marquise.Client,
                      Marquise.Server,
+                     Marquise.Types,
                      Marquise.IO
 
   other-modules:     Vaultaire.Classes.WireFormat,

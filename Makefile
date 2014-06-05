@@ -91,3 +91,6 @@ clean:
 
 doc:
 	cabal haddock
+
+install:
+	cabal install
