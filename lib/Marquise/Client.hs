@@ -56,10 +56,9 @@ import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
-import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
+import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..), ContentsConfig(..))
 import Marquise.Types (SpoolName (..), TimeStamp (..))
-import Vaultaire.Types (Address (..), SourceDict, makeSourceDict)
-
+import Vaultaire.Types (Address (..), SourceDict, makeSourceDict, Origin)
 import Control.Monad.Reader
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
@@ -69,13 +68,12 @@ makeSpoolName s
     | any (not . isAlphaNum) s = Left "non-alphanumeric spool name"
     | otherwise = Right $ SpoolName s
 
-withBroker :: Monad m => String -> ReaderT String m a -> m a
-withBroker broker action = runReaderT action broker
+withBroker :: Monad m => String -> Origin -> ReaderT ContentsConfig m a -> m a
+withBroker broker origin action = runReaderT action (ContentsConfig broker origin)
 
 -- | Generate an un-used Address. You will need to store this for later re-use.
 requestUnique :: ContentsClientMonad m => m (Either SomeException Address)
 requestUnique = requestUniqueAddress
-
 
 -- | Deterministically convert a ByteString to an Address, this uses siphash.
 hashIdentifier :: ByteString -> Address

@@ -25,6 +25,7 @@ module Marquise.IO
     MarquiseServerMonad(..),
     BurstPath(..),
     ContentsClientMonad(..),
+    ContentsConfig(..),
     spoolDir,
     -- * Errors
     VaultaireTimeout
@@ -65,6 +66,8 @@ data VaultaireTimeout = VaultaireTimeout
     deriving (Typeable, Show)
 instance Exception VaultaireTimeout
 
+data ContentsConfig = ContentsConfig String Origin
+
 -- | This class is for convenience of testing. It encapsulates all IO
 -- interaction that the client and server will do.
 class Monad m => MarquiseClientMonad m where
@@ -90,12 +93,12 @@ class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
                   -> m ()
 
 
-class MonadReader String m => ContentsClientMonad m where
+class MonadReader ContentsConfig m => ContentsClientMonad m where
     requestUniqueAddress :: m (Either SomeException Address)
     requestSourceDictUpdate :: Address -> SourceDict -> m (Either SomeException ())
     requestSourceDictRemoval :: Address -> SourceDict -> m (Either SomeException ())
 
-instance ContentsClientMonad (ReaderT String IO) where
+instance ContentsClientMonad (ReaderT ContentsConfig IO) where
     requestUniqueAddress = do
         response <- contentsRequest GenerateNewAddress
         return $ case response of
@@ -120,11 +123,11 @@ instance ContentsClientMonad (ReaderT String IO) where
 
 
 contentsRequest :: ContentsOperation
-                -> ReaderT String IO (Either SomeException ContentsResponse)
+                -> ReaderT ContentsConfig IO (Either SomeException ContentsResponse)
 contentsRequest req = do
-    broker <- ask
+    ContentsConfig broker origin <- ask
     resp <- lift $ withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
-                                       (awaitResponse req "")
+                                       (awaitResponse req origin "")
     return $ case resp of
         Right InvalidContentsOrigin ->
             Left $ SomeException $
@@ -158,11 +161,12 @@ instance MarquiseServerMonad IO BurstPath where
 -- This is not thread-safe and should be the sole user of the connection.
 awaitResponse :: (WireFormat request, WireFormat response)
               => request
+              -> Origin
               -> ByteString
               -> Socket Dealer
               -> IO (Either SomeException response)
-awaitResponse request identifier sock = do
-    let payload = fromList [identifier, toWire request]
+awaitResponse request (Origin origin) identifier sock = do
+    let payload = fromList [identifier, origin, toWire request]
     sendMulti sock payload
     either Left id <$> race waitTimeout waitResponse
   where
