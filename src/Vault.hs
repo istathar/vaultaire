@@ -103,14 +103,14 @@ writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
         <> short 'p'
         <> value 4
         <> showDefault
-        <> help "Number of seconds to wait before flushing writes" 
+        <> help "Number of seconds to wait before flushing writes"
 
     parseBucketSize = O.option $
         long "roll_over_size"
         <> short 'r'
         <> value 4194304
         <> showDefault
-        <> help "Maximum bytes in any given bucket before rollover" 
+        <> help "Maximum bytes in any given bucket before rollover"
 
 marquiseOptionsParser :: O.Parser Component
 marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace

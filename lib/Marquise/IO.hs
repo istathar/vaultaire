@@ -33,7 +33,7 @@ module Marquise.IO
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (race, async, link)
+import Control.Concurrent.Async (async, link, race)
 import Control.Exception (ErrorCall, Exception, SomeException (..), try)
 import Control.Monad (unless, when)
 import Control.Monad.Reader (MonadReader, ReaderT, ask)
@@ -51,6 +51,8 @@ import Data.Packer (getWord64LE, runUnpacking, unpackSkip)
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import Marquise.Types (SpoolName (..))
+import Pipes (Producer, liftIO, runEffect, yield, (>->))
+import Pipes.Concurrent (Buffer (..), atomically, fromInput, spawn', toOutput)
 import System.Directory (doesFileExist)
 import System.IO (hClose)
 import System.Posix.Files (removeLink, rename)
@@ -58,8 +60,6 @@ import System.Posix.Temp (mkstemp)
 import System.ZMQ4 (Dealer (..), Socket, connect, receiveMulti, sendMulti,
                     withContext, withSocket)
 import Vaultaire.Types
-import Pipes(runEffect, Producer, liftIO, (>->), yield)
-import Pipes.Concurrent(spawn', fromInput, toOutput, Buffer(..), atomically)
 
 newtype BurstPath = BurstPath { unBurstPath :: FilePath }
     deriving (Show, Eq)
@@ -194,7 +194,7 @@ requestResponse :: (WireFormat request, WireFormat response)
               -> Socket Dealer
               -> IO (Either SomeException response)
 requestResponse request identifier origin sock = do
-    sendRequest identifier origin sock request 
+    sendRequest identifier origin sock request
     waitResponse sock identifier
 
 waitResponse :: WireFormat response
@@ -213,7 +213,7 @@ waitResponse sock identifier = either Left id <$> race waitTimeout doWait
             _ -> return $ Left $ SomeException $ userError "not two msg parts"
 
 sendRequest :: WireFormat request => ByteString -> Origin -> Socket Dealer -> request -> IO ()
-sendRequest identifier (Origin origin) sock request = 
+sendRequest identifier (Origin origin) sock request =
     let payload = fromList [identifier, origin, toWire request]
     in sendMulti sock payload
 

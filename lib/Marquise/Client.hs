@@ -48,6 +48,7 @@ module Marquise.Client
 ) where
 
 import Control.Exception (SomeException)
+import Control.Monad.Reader
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
@@ -56,11 +57,11 @@ import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
-import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..), ContentsConfig(..))
+import Marquise.IO (ContentsClientMonad (..), ContentsConfig (..),
+                    MarquiseClientMonad (..))
 import Marquise.Types (SpoolName (..), TimeStamp (..))
-import Vaultaire.Types (Address (..), SourceDict, makeSourceDict, Origin)
-import Control.Monad.Reader
-import Pipes(Producer)
+import Pipes (Producer)
+import Vaultaire.Types (Address (..), Origin, SourceDict, makeSourceDict)
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
 -- is 32 characters.
