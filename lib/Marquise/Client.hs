@@ -60,6 +60,7 @@ import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..), Contents
 import Marquise.Types (SpoolName (..), TimeStamp (..))
 import Vaultaire.Types (Address (..), SourceDict, makeSourceDict, Origin)
 import Control.Monad.Reader
+import Pipes(Producer)
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
 -- is 32 characters.
@@ -80,7 +81,7 @@ hashIdentifier :: ByteString -> Address
 hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
   where
     iv = SipKey 0 0
-    unSipHash (SipHash h) = h
+    unSipHash (SipHash h) = h :: Word64
 
 -- | Set the key,value tags as metadata on the given Address.
 updateSourceDict :: ContentsClientMonad m
@@ -95,6 +96,10 @@ removeSourceDict :: ContentsClientMonad m
                  -> SourceDict
                  -> m (Either SomeException ())
 removeSourceDict = requestSourceDictRemoval
+
+enumerateOrigin :: ContentsClientMonad m
+                => Producer (Address, SourceDict) m ()
+enumerateOrigin = requestList
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
