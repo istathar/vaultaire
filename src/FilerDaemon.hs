@@ -29,12 +29,12 @@ import "mtl" Control.Monad.Error ()
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import Data.List (foldl')
 import Data.List.NonEmpty (fromList)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap
 import Data.Serialize (encode)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -53,11 +53,11 @@ import Text.Printf
 import Vaultaire.Conversion.Receiver
 import Vaultaire.Conversion.Writer
 import Vaultaire.Internal.CoreTypes
+import Vaultaire.JournalFile (BlockName, BlockSize)
+import qualified Vaultaire.JournalFile as Journal
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import Vaultaire.Persistence.Constants
 import qualified Vaultaire.Persistence.ContentsObject as Contents
-import Vaultaire.JournalFile (BlockName,BlockSize)
-import qualified Vaultaire.JournalFile as Journal
 
 #include "config.h"
 
@@ -178,7 +178,7 @@ requestWrite storage writes o new n0 = do
 
 
 chooseBlocks :: Int -> HashMap BlockName BlockSize -> (HashMap BlockName BlockSize, Int)
-chooseBlocks limit blocksm = 
+chooseBlocks limit blocksm =
     HashMap.foldlWithKey' f (HashMap.empty, 0) blocksm
   where
     f :: (HashMap BlockName BlockSize, Int) -> BlockName -> BlockSize -> (HashMap BlockName BlockSize, Int)
@@ -186,7 +186,7 @@ chooseBlocks limit blocksm =
         if accumulated + size < limit
             then (HashMap.insert block size m, accumulated + size)
             else (m, accumulated)
-                
+
 
 filer
     :: ByteString
@@ -292,7 +292,7 @@ filer pool' user' bytelimit simultaneous directory storage telemetry metrics =
 
             forM_ blocks $ \block -> do
                 Journal.deleteBlockObject block
-            
+
             Rados.withExclusiveLock journal_name "name" "desc" Nothing $ do
                 blockm <- Journal.readJournalObject journal_name
 
@@ -440,7 +440,7 @@ comms broker d telemetry metrics = do
 program :: Options -> MVar () -> IO ()
 program (Options d c s bytelimit pool user broker) quitV = do
     putStrLn $ "filerd starting (vaultaire v" ++ VERSION ++ ")"
- 
+
     dV <- newMVar Map.empty
     telC <- newTChanIO
     storeV <- newMVar (Storage Map.empty Map.empty 0)

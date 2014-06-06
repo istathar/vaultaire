@@ -189,7 +189,7 @@ contentsReader pool user Mutexes{..} = do
             d <- liftIO $ takeMVar directory
             let origin = Origin request
             --
-            -- Check if we need to return the demo source, otherwise 
+            -- Check if we need to return the demo source, otherwise
             -- return an actual contents list.
             --
             burst <- if origin == (Origin "BENHUR")

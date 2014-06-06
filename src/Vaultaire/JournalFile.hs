@@ -9,8 +9,8 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE PackageImports    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports    #-}
 
 module Vaultaire.JournalFile
 (
@@ -27,16 +27,16 @@ module Vaultaire.JournalFile
 import Blaze.ByteString.Builder
 import Blaze.ByteString.Builder.Char8
 import Codec.Compression.LZ4
-import Data.ByteString (ByteString)
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.ByteString.Char8 as S
-import Data.Monoid((<>), mempty)
-import Data.List(foldl')
-import System.Rados.Monadic
-import Data.Serialize
 import Control.Exception
 import "mtl" Control.Monad.Error ()
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
+import Data.List (foldl')
+import Data.Monoid (mempty, (<>))
+import Data.Serialize
+import System.Rados.Monadic
 
 
 --newtype BlockName = BlockName ByteString
@@ -53,7 +53,7 @@ parseInboundJournal = map f . S.lines
                 Nothing -> die l
             _ -> die l
     die l = error $ "Failed to parse size in journal file on line:\n\t" ++ S.unpack l
-            
+
 makeInboundJournal :: [(BlockName, BlockSize)] -> ByteString
 makeInboundJournal = toByteString . foldl' f mempty
   where
