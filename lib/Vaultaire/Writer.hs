@@ -60,6 +60,7 @@ data BatchState = BatchState
     , latestSimple   :: !Time
     , latestExtended :: !Time
     , dayMaps        :: !(DayMap, DayMap) -- Simple, extended
+    , bucketSize     :: !Word64
     , start          :: !UTCTime
     }
 
@@ -69,20 +70,22 @@ data Event = Msg Message | Tick
 startWriter :: String           -- ^ Broker
             -> Maybe ByteString -- ^ Username for Ceph
             -> ByteString       -- ^ Pool name for Ceph
+            -> Word64           -- ^ Maximum bytes in bucket before rollover
             -> NominalDiffTime
             -> IO ()
-startWriter broker user pool batch_period = runDaemon broker user pool $ do
+startWriter broker user pool bucket_size batch_period = runDaemon broker user pool $ do
     liftIO $ infoM "Writer.startWriter" "Writer daemon starting"
     runEffect $ lift nextMessage
-             >~ evalStateP emptyOriginMap (dispatch batch_period)
+             >~ evalStateP emptyOriginMap (dispatch bucket_size batch_period)
     fatal "Writer.startWriter" "impossible"
 
 -- If the incoming message currently has a processing thread running for that
 -- origin, feed the message into that thread. Otherwise create a new one and
 -- feed it in.
-dispatch :: NominalDiffTime
+dispatch :: Word64
+         -> NominalDiffTime
          -> Consumer Message (StateT DispatchMap Daemon) ()
-dispatch batch_period = do
+dispatch bucket_size batch_period = do
     m@(Message _ origin _) <- await
     let event = Msg m
     dispatch_map <- get
@@ -91,7 +94,7 @@ dispatch batch_period = do
             sent <- send' output event
             -- If it wasn't sent, the thread has shut itself down.
             if sent
-                then dispatch batch_period
+                then dispatch bucket_size batch_period
                 else startThread origin dispatch_map event
         Nothing   -> startThread origin dispatch_map event
   where
@@ -105,25 +108,25 @@ dispatch batch_period = do
         -- The entire origin has a shared lock taken at this point for the
         -- duration of this batch period. Any rollovers of this origin will
         -- have to synchronize.
-        lift . lift $ withLock (originLockOID origin') $
-            async (processBatch batch_period origin' seal input)
+        lift . lift . withLock (originLockOID origin') $
+            async (processBatch bucket_size batch_period origin' seal input)
             >>= liftIO . Async.link
 
         must_send <- send' output m
         unless must_send $
             fatal "Writer.dispatch" "thread died immediately, bailing"
         lift . put $ originInsert origin' output dispatch_map
-        dispatch batch_period
+        dispatch bucket_size batch_period
 
-batchStateNow :: (DayMap, DayMap) -> IO BatchState
-batchStateNow dms =
-    BatchState mempty mempty mempty mempty 0 0 dms <$> getCurrentTime
+batchStateNow :: Word64 -> (DayMap, DayMap) -> IO BatchState
+batchStateNow bucket_size dms =
+    BatchState mempty mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
 -- | The dispatcher has done the hard work for us and sorted incoming bursts by
 -- origin. Now we simply need to process these messages with local state,
 -- writing to ceph when our collection time has elapsed.
-processBatch :: NominalDiffTime -> Origin -> Input Event -> STM () -> Daemon ()
-processBatch period origin' input seal = do
+processBatch :: Word64 -> NominalDiffTime -> Origin -> Input Event -> STM () -> Daemon ()
+processBatch bucket_size period origin' input seal = do
     refreshOriginDays origin'
     simple_dm <- withSimpleDayMap origin' id
     extended_dm  <- withExtendedDayMap origin' id
@@ -135,7 +138,7 @@ processBatch period origin' input seal = do
             runEffect $ fromInput input >-> badOrigin
         Just dms -> do
             -- Process for a batch period
-            start_state <- liftIO $ batchStateNow dms
+            start_state <- liftIO $ batchStateNow bucket_size dms
             runEffect $ fromInput input
                       >-> evalStateP start_state (processEvents period)
                       >-> write origin' True
@@ -282,7 +285,7 @@ write origin do_rollovers = do
     (offsets, extended_rollover) <- writeExtendedBuckets s
 
     let simple_buckets = applyOffsets offsets (simple s) (pending s)
-    simple_rollover <- stepTwo simple_buckets
+    simple_rollover <- stepTwo simple_buckets (bucketSize s)
 
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
@@ -332,7 +335,7 @@ write origin do_rollovers = do
                             "extended bucket write: " ++ show e
                         Nothing -> return ()
 
-            return (offsets, findMax offsets > bucketSize)
+            return (offsets, findMax offsets > bucketSize s)
 
     -- Given two maps, one of offsets and one of closures, we walk through
     -- applying one to the other. We then append that to the map of simple
@@ -355,7 +358,7 @@ write origin do_rollovers = do
                     in HashMap.insert epoch simple_buckets' simple_map''
 
     -- Final write,
-    stepTwo simple_buckets = lift $ liftPool $ do
+    stepTwo simple_buckets bucket_size = lift $ liftPool $ do
         offsets <- forWithKey simple_buckets $ \epoch buckets -> do
             writes <- forWithKey buckets $ \bucket builder -> do
                 let payload = toStrict $ toLazyByteString builder
@@ -372,13 +375,10 @@ write origin do_rollovers = do
                             Left e   -> fatal "Writer.stepTwo" $
                                               "simple bucket read: " ++ show e
                             Right st -> return $ fileSize st
-        return $ findMax offsets > bucketSize
+        return $ findMax offsets > bucket_size
 
     forWithKey = flip HashMap.traverseWithKey
     findMax = HashMap.foldr max 0 . HashMap.map (HashMap.foldr max 0)
-
-bucketSize :: Word64
-bucketSize = 4194304
 
 extendedOffset :: Origin -> Epoch -> Bucket -> Pool (AsyncRead StatResult)
 extendedOffset o e b =
