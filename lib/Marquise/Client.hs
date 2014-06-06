@@ -72,13 +72,12 @@ makeSpoolName s
 withBroker :: Monad m => String -> ReaderT String m a -> m a
 withBroker broker action = runReaderT action broker
 
--- | For the case where you can track Addresses yourself, we provide a facility
--- to generate unique ones for you, guaranteed free of collision.
+-- | Generate an un-used Address. You will need to store this for later re-use.
 requestUnique :: ContentsClientMonad m => m (Either SomeException Address)
 requestUnique = requestUniqueAddress
 
--- | If you have deterministic or fixed known identifiers for your sources, you can
--- use this function to translate it as an Address.
+
+-- | Deterministically convert a ByteString to an Address, this uses siphash.
 hashIdentifier :: ByteString -> Address
 hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
   where
