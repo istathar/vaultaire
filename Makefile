@@ -1,4 +1,8 @@
-all: bufferd filerd readerd vault telemetry query
+all: exporter
+
+exporter: dist/build/exporter/exporter
+dist/build/exporter/exporter: $(CORE_SOURCES)
+	cabal build exporter
 
 #
 # The name of the binary(ies) you want to build if `make` is invoked without an
@@ -141,7 +145,7 @@ format: $(CORE_SOURCES) $(TEST_SOURCES)
 
 config: config.h
 
-config.h: vaultaire.cabal Setup.hs
+config.h: vaultaire1.cabal Setup.hs
 	@/bin/echo -e "CABAL\tconfigure"
 	cabal configure --enable-tests
 
