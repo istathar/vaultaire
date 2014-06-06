@@ -19,7 +19,7 @@ least seventeen bytes, as follows:
  - First byte is the opcode, as above;
  - Next word64 (eight bytes) is the source address;
  - Next word64 (eight bytes) is the length of the next segment, in
-   bytes;
+   bytes (little-endian);
  - The remainder of the message is a series of UTF8-coded tags, each tag
    consisting of a `key`, a colon (':'), a `value` and a comma (',').
    The `key` and `value` may contain any UTF8 character except the colon
