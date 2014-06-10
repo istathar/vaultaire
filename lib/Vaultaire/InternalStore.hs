@@ -62,10 +62,15 @@ readFrom origin addr =
                       >-> readExtended (namespace origin) makeRequest
                       >-> Pipes.map extractPayload
   where
-    extractPayload p = flip runUnpacking p $ do
+    extractPayload bs = attemptUnpacking bs $ do
         unpackSetPosition 16
         len <- getWord64LE
         getBytes (fromIntegral len)
+
+    attemptUnpacking bs a =
+        case tryUnpacking a bs of
+            Left e -> error $ "failed to unpack internal payload" ++ show e
+            Right v -> v
 
     makeRequest = Extended (ReadDetails addr 0 0)
 
