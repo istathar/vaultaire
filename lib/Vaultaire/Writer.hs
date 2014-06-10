@@ -290,8 +290,10 @@ write origin do_rollovers = do
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
     lift $ do
-        updateSimpleLatest origin (latestSimple s)
-        updateExtendedLatest origin (latestExtended s)
+        when do_rollovers $ do
+            updateSimpleLatest origin (latestSimple s)
+            updateExtendedLatest origin (latestExtended s)
+
         mapM_ ($ OnDisk) (replyFs s)
 
         -- 4. Do any rollovers
