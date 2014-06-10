@@ -46,6 +46,7 @@ module Marquise.Client
     -- * Types
     SpoolName,
     Address,
+    TimeStamp(..),
 ) where
 
 import Control.Exception (SomeException)
