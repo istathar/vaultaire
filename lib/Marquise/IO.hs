@@ -243,8 +243,8 @@ sendViaZMQ broker (Origin origin) bytes =
                                 error $ "sendViaZMQ: parse: " ++ show e
                             Right OnDisk ->
                                 return ()
-                            Right _        ->
-                                error "sendViaZMQ: Wrong response"
+                            Right InvalidWriteOrigin ->
+                                error "sendViaZMQ: Invalid origin"
                     _ ->
                         error "sendViaZMQ: Invalid response"
 
