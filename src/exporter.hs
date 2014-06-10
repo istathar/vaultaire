@@ -9,22 +9,13 @@
 -- the BSD licence.
 --
 
-{-# LANGUAGE CPP                #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE PackageImports     #-}
-{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports    #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
 module Main where
 
-import Codec.Compression.LZ4
-import Control.Applicative
-import qualified Control.Concurrent.Async as Async
-import Control.Concurrent.Chan
-import Control.Concurrent.MVar
-import Control.Exception (SomeException, throw)
+import Control.Exception (throw)
 import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
@@ -33,20 +24,14 @@ import qualified Data.ByteString.Char8 as S
 import Data.Foldable (forM_)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
-import Data.List.NonEmpty (fromList)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Time.Clock
 import System.Environment (getArgs)
 import qualified System.Rados.Monadic as Rados
-import Text.Printf
 
-import Data.Word
-import Vaultaire.Conversion.Receiver
-import Vaultaire.Conversion.Transmitter
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
@@ -54,27 +39,40 @@ import qualified Vaultaire.Persistence.ContentsObject as Contents
 import qualified "vaultaire" Marquise.Client as Marquise
 import qualified "vaultaire" Vaultaire.Types as Vaultaire
 
-hashSourceToAddress :: SourceDict -> Either String Vaultaire.Address
-hashSourceToAddress s = do
-    x <- (selectInclusions . runSourceDict) s
-    (Right . Marquise.hashIdentifier) x
+type InclusionF = Map ByteString ByteString -> ByteString
 
-
-selectInclusions :: Map ByteString ByteString -> Either String ByteString
-selectInclusions m = do
-    host   <- lookup m "host"
-    metric <- lookup m "metric"
-    server <- lookup m "server"
-    Right $ S.concat ["host:", host, ",metric:", metric, ",server:", server]
+hashSourceToAddress :: Origin -> SourceDict -> Vaultaire.Address
+hashSourceToAddress (Origin o') s = (Marquise.hashIdentifier . inclusions) s
   where
-    lookup :: Map ByteString ByteString -> ByteString -> Either String ByteString
-    lookup m k = case Map.lookup k m of
-                    Just v  -> Right v
-                    Nothing -> Left ("Lookup failed mandatory field " ++ (S.unpack k))
+    inclusions = case o' of
+                    "ABCDEF"    -> selectInclusionsIpTraf
+                    "4HXR1F"    -> selectInclusionsIpTraf
+                    "R82KX1"    -> selectInclusionsNagios
+                    "LMRH8C"    -> selectInclusionsNagios
+                    "YCX0H1"    -> error ("TODO which kind of origin is " ++ (S.unpack o'))
+                    _           -> error "Origin not configured yet"
 
 
-convertSourceDict :: SourceDict -> Either String Vaultaire.SourceDict
-convertSourceDict = Vaultaire.makeSourceDict . makeHashMapFromMap . filterUndesireables . runSourceDict
+selectInclusionsIpTraf :: SourceDict -> ByteString
+selectInclusionsIpTraf = S.pack . show
+
+selectInclusionsNagios :: SourceDict -> ByteString
+selectInclusionsNagios s =
+    S.concat ["host:", host, ",metric:", metric, ",server:", server]
+  where
+    m      = runSourceDict s
+    host   = lookfor "host"
+    metric = lookfor "metric"
+    server = lookfor "server"
+
+    lookfor :: ByteString -> ByteString
+    lookfor k = case Map.lookup k m of
+                    Just v  -> v
+                    Nothing -> error ("Lookup failed mandatory field \"" ++ (S.unpack k) ++ "\"")
+
+
+convertSourceDict :: SourceDict -> Vaultaire.SourceDict
+convertSourceDict = either error id . Vaultaire.makeSourceDict . makeHashMapFromMap . filterUndesireables . runSourceDict
 
 
 makeHashMapFromMap :: Map ByteString ByteString -> HashMap Text Text
@@ -87,16 +85,19 @@ filterUndesireables :: Map ByteString ByteString -> Map ByteString ByteString
 filterUndesireables = Map.delete "origin"
 
 
+debug :: (MonadIO m, Show s) => s -> m ()
+debug = liftIO . putStrLn . show
+
 main :: IO ()
 main = do
     -- just one
-    [origin] <- getArgs
+    [arg] <- getArgs
 
     let Right spool = Marquise.makeSpoolName "exporter"
 
     Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
         Rados.runPool "vaultaire" $ do
-            let o = Origin (S.pack origin)
+            let o = Origin (S.pack arg)
             let l = Contents.formObjectLabel o
             st <- Contents.readVaultObject l
             let t1 = 1393632000 --  1 March
@@ -104,14 +105,17 @@ main = do
             let is = Bucket.calculateTimemarks t1 t2
 
             forM_ st $ \s -> do
+                debug s
                 -- Work out address
-                let a = either error id $ hashSourceToAddress s
+                let a = hashSourceToAddress o s
+                debug a
 
                 -- All tags, less undesirables
-                let s' = either error id $ convertSourceDict s
+                let s' = convertSourceDict s
+                debug s'
 
                 -- Register that source at address
-                liftIO $ Marquise.withBroker "nebula" $
+                liftIO $ Marquise.withBroker "localhost" $
                     Marquise.updateSourceDict a s' >>= either throw return
 
                 -- Process all its data points
@@ -120,6 +124,7 @@ main = do
 
                     unless (Map.null m) $ do
                         let ps = Bucket.pointsInRange t1 t2 m
+                        debug $ length ps
 
                         liftIO $ forM_ ps (convertPointAndWrite spool a)
 
