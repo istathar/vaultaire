@@ -21,6 +21,8 @@ import Test.Hspec hiding (pending)
 
 import ArbitraryInstances ()
 import Control.Exception (throw)
+import Data.HashMap.Strict (fromList)
+import Data.Text
 import Marquise.Client
 import Pipes.Prelude (toListM)
 import Test.QuickCheck
@@ -61,9 +63,29 @@ suite = do
             decodeStringAsAddress "LygHa16AHYF" `shouldBe` (2^64-1)
             decodeStringAsAddress "LygHa16AHYG" `shouldBe` 0
 
-    describe "Full stack" $
+    describe "Full stack" $ do
+        it "unions two dicts" $ do
+            let dict_a = listToDict [("a", "1")]
+            let dict_b = listToDict [("b", "2")]
+            let addr = 1
+
+            cleanupTestEnvironment
+            xs <- withBroker "localhost" (Origin "PONY") $ do
+                updateSourceDict addr dict_a >>= either throw return
+                updateSourceDict addr dict_b >>= either throw return
+                toListM enumerateOrigin
+            case xs of
+                [(addr', dict)] -> do
+                    dict `shouldBe` unionSource dict_a dict_b
+                    addr' `shouldBe` addr
+                _ -> error "expected one"
+
         it "updates source dict for any address" $
             property propSourceDictUpdated
+
+
+listToDict :: [(Text, Text)] -> SourceDict
+listToDict elts = either error id . makeSourceDict $ fromList elts
 
 propSourceDictUpdated :: Address -> SourceDict -> Property
 propSourceDictUpdated addr dict = monadicIO $ do
