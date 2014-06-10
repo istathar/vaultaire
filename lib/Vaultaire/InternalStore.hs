@@ -17,7 +17,8 @@ module Vaultaire.InternalStore
 (
     writeTo,
     readFrom,
-    enumerateOrigin
+    enumerateOrigin,
+    internalStoreBuckets,
 ) where
 
 import Control.Monad.State.Strict
@@ -69,7 +70,7 @@ readFrom origin addr =
 
     attemptUnpacking bs a =
         case tryUnpacking a bs of
-            Left e -> error $ "failed to unpack internal payload" ++ show e
+            Left e -> error $ "failed to unpack internal payload: " ++ show e
             Right v -> v
 
     makeRequest = Extended (ReadDetails addr 0 0)

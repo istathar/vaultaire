@@ -5,12 +5,10 @@
 
 module Main where
 
-import Control.Applicative
+import ArbitraryInstances ()
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
-import Data.Locator
 import Pipes.Parse
 import Test.Hspec
 import Test.Hspec.QuickCheck
@@ -18,18 +16,12 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import TestHelpers
 import Vaultaire.Daemon
-import Vaultaire.InternalStore (enumerateOrigin, readFrom, writeTo)
+import Vaultaire.InternalStore (enumerateOrigin, internalStoreBuckets,
+                                readFrom, writeTo)
 import Vaultaire.Types
 
-instance Arbitrary ByteString where
-    arbitrary = BS.pack <$> arbitrary
-
-instance Arbitrary Origin where
-    -- suchThat condition should be removed once locators package is fixed
-    arbitrary = Origin . BS.pack . toLocator16a 6 <$> arbitrary `suchThat` (>0)
-
-instance Arbitrary Address where
-    arbitrary = Address <$> arbitrary
+rollOverAddress :: Address
+rollOverAddress = Address internalStoreBuckets
 
 main :: IO ()
 main = hspec suite
@@ -38,33 +30,39 @@ suite :: Spec
 suite = do
     describe "writing" $ do
         it "writes simple bucket correctly" $ do
-            runTestDaemon "tcp://localhost:1234" $ writeTo (Origin "PONY") (Address 4) "Hai"
+            runTestDaemon "tcp://localhost:1234" $ writeTo (Origin "PONY") 4 "Hai"
             readObject "02_PONY_INTERNAL_00000000000000000004_00000000000000000000_simple"
             >>= (`shouldBe` Right "\x04\x00\x00\x00\x00\x00\x00\x00\
                                   \\x00\x00\x00\x00\x00\x00\x00\x00\
                                   \\x00\x00\x00\x00\x00\x00\x00\x00")
 
         it "writes extended bucket correctly" $ do
-            runTestDaemon "tcp://localhost:1234" $ writeTo (Origin "PONY") (Address 4) "Hai"
+            runTestDaemon "tcp://localhost:1234" $ writeTo (Origin "PONY") 4 "Hai"
             readObject "02_PONY_INTERNAL_00000000000000000004_00000000000000000000_extended"
             >>= (`shouldBe` Right "\x03\x00\x00\x00\x00\x00\x00\x00\&Hai")
 
-    describe "reading" $
+    describe "reading" $ do
         it "reads a write" $ -- Use the same write, as we have already shown it correct
             runTestDaemon "tcp://localhost:1234"
-                (do writeTo (Origin "PONY") (Address 4) "Hai"
-                    readFrom (Origin "PONY") (Address 4))
+                (do writeTo (Origin "PONY") 4 "Hai"
+                    readFrom (Origin "PONY") 4)
             >>= (`shouldBe` Just "Hai")
+
+        it "disambiguates collision" $
+            runTestDaemon "tcp://localhost:1234"
+                (do writeTo (Origin "PONY") rollOverAddress "Hai1"
+                    readFrom (Origin "PONY") 0)
+            >>= (`shouldBe` Nothing)
 
     describe "enumeration" $
         it "enumerates two writes" $ do
             addrs <- runTestDaemon "tcp://localhost:1234" $ do
-                writeTo (Origin "PONY") (Address 128) "Hai1"
-                writeTo (Origin "PONY") (Address 0) "Hai2"
-                writeTo (Origin "PONY") (Address 128) "Hai3" -- overwrite
+                writeTo (Origin "PONY") rollOverAddress "Hai1"
+                writeTo (Origin "PONY") 0 "Hai2"
+                writeTo (Origin "PONY") rollOverAddress "Hai3" -- overwrite
 
                 evalStateT drawAll (enumerateOrigin "PONY")
-            addrs `shouldBe` [(Address 0, "Hai2"), (Address 128, "Hai3")]
+            addrs `shouldBe` [(0, "Hai2"), (rollOverAddress, "Hai3")]
 
     describe "identity QuickCheck" $
         it "writes then reads" $ property propWriteThenRead

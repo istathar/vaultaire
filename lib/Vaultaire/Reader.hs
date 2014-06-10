@@ -20,6 +20,7 @@ import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.ST
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import Data.Packer
 import Pipes
 import System.Log.Logger
@@ -59,6 +60,9 @@ handleRequest (Message reply_f origin' payload') = do
         SomeRequest r@Invalid{}  -> processInvalid r
     reply_f EndOfStream
 
+yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
+yieldNotNull bs = unless (S.null bs) (yield bs)
+
 processSimple :: Request Simple -> Origin -> ReplyF -> Daemon ()
 processSimple s@(Simple (ReadDetails _ start end)) origin' reply_f = do
     refreshOriginDays origin'
@@ -79,11 +83,11 @@ readSimple origin' (Simple (ReadDetails addr start end)) = forever $ do
     contents <- lift $ liftPool $ runObject bucket_oid readFull
     case contents of
         Left (NoEntity{}) -> return ()
-        Left e -> do
+        Left e ->
             liftIO $ errorM "Reader.readSimple" $
                             "Ceph error getting simple bucket: " ++ show e
-        Right unprocessed ->
-            yield $ runST $ processBucket unprocessed addr start end
+        Right unprocessed -> yieldNotNull $ runST $
+            processBucket unprocessed addr start end
 
 processExtended :: Request Extended -> Origin -> ReplyF -> Daemon ()
 processExtended e@(Extended (ReadDetails _ start end)) origin' reply_f = do
@@ -103,7 +107,8 @@ readExtended origin (Extended (ReadDetails addr start end)) = forever $ do
     buckets <- lift $ getBuckets origin epoch bucket
     case buckets of
         Nothing -> return ()
-        Just (s,e) -> yield $ runST $ mergeSimpleExtended s e addr start end
+        Just (s,e) -> yieldNotNull $ runST $
+            mergeSimpleExtended s e addr start end
 
 -- | Retrieve simple and extended buckets in parallel
 getBuckets :: Origin

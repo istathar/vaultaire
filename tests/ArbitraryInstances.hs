@@ -14,6 +14,8 @@ module ArbitraryInstances
 ) where
 
 import Control.Applicative ((<$>), (<*>))
+import qualified Data.ByteString.Char8 as S
+import Data.Locator
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
 import Test.QuickCheck.Instances ()
@@ -49,4 +51,6 @@ instance Arbitrary ReadStream where
                       , ExtendedBurst <$> arbitrary
                       , return EndOfStream ]
 
-
+instance Arbitrary Origin where
+    -- suchThat condition should be removed once locators package is fixed
+    arbitrary = Origin . S.pack . toLocator16a 6 <$> arbitrary `suchThat` (>0)

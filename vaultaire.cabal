@@ -268,6 +268,7 @@ test-suite           internal-store-test
                      rados-haskell,
                      semigroups,
                      locators >= 0.2.4,
+                     quickcheck-instances,
                      pipes-parse,
                      mtl,
                      bytestring,
