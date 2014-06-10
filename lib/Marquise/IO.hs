@@ -25,6 +25,7 @@ module Marquise.IO
     MarquiseServerMonad(..),
     BurstPath(..),
     ContentsClientMonad(..),
+    ContentsConfig(..),
     spoolDir,
     -- * Errors
     VaultaireTimeout
@@ -32,7 +33,7 @@ module Marquise.IO
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (race)
+import Control.Concurrent.Async (async, link, race)
 import Control.Exception (ErrorCall, Exception, SomeException (..), try)
 import Control.Monad (unless, when)
 import Control.Monad.Reader (MonadReader, ReaderT, ask)
@@ -50,6 +51,8 @@ import Data.Packer (getWord64LE, runUnpacking, unpackSkip)
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import Marquise.Types (SpoolName (..))
+import Pipes (Producer, liftIO, runEffect, yield, (>->))
+import Pipes.Concurrent (Buffer (..), atomically, fromInput, spawn', toOutput)
 import System.Directory (doesFileExist)
 import System.IO (hClose)
 import System.Posix.Files (removeLink, rename)
@@ -64,6 +67,8 @@ newtype BurstPath = BurstPath { unBurstPath :: FilePath }
 data VaultaireTimeout = VaultaireTimeout
     deriving (Typeable, Show)
 instance Exception VaultaireTimeout
+
+data ContentsConfig = ContentsConfig String Origin
 
 -- | This class is for convenience of testing. It encapsulates all IO
 -- interaction that the client and server will do.
@@ -90,14 +95,15 @@ class MarquiseClientMonad m => MarquiseServerMonad m bp | m -> bp where
                   -> m ()
 
 
-class MonadReader String m => ContentsClientMonad m where
+class MonadReader ContentsConfig m => ContentsClientMonad m where
     requestUniqueAddress :: m (Either SomeException Address)
     requestSourceDictUpdate :: Address -> SourceDict -> m (Either SomeException ())
     requestSourceDictRemoval :: Address -> SourceDict -> m (Either SomeException ())
+    requestList :: Producer (Address, SourceDict) m ()
 
-instance ContentsClientMonad (ReaderT String IO) where
+instance ContentsClientMonad (ReaderT ContentsConfig IO) where
     requestUniqueAddress = do
-        response <- contentsRequest GenerateNewAddress
+        response <- singleRequest GenerateNewAddress
         return $ case response of
             Right (RandomAddress addr) ->
                 Right addr
@@ -105,31 +111,56 @@ instance ContentsClientMonad (ReaderT String IO) where
             Left e -> Left e
 
     requestSourceDictUpdate addr source_dict = do
-        response <- contentsRequest $ UpdateSourceTag addr source_dict
+        response <- singleRequest $ UpdateSourceTag addr source_dict
         return $ case response of
             Right UpdateSuccess -> Right ()
             Right _ -> error "requestSourceDictUpdate: Invalid response"
             Left e -> Left e
 
     requestSourceDictRemoval addr source_dict = do
-        response <- contentsRequest $ RemoveSourceTag addr source_dict
+        response <- singleRequest $ RemoveSourceTag addr source_dict
         return $ case response of
             Right RemoveSuccess -> Right ()
             Right _ -> error "requestSourceDictRemoval: Invalid response"
             Left e -> Left e
 
+    requestList = do
+        ContentsConfig broker origin <- lift ask
+        (output, input, seal) <- liftIO $ spawn' Single
 
-contentsRequest :: ContentsOperation
-                -> ReaderT String IO (Either SomeException ContentsResponse)
-contentsRequest req = do
-    broker <- ask
-    resp <- lift $ withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
-                                       (awaitResponse req "")
-    return $ case resp of
-        Right InvalidContentsOrigin ->
-            Left $ SomeException $
-                userError "Invalid origin in contents request"
-        x -> x
+        thread <- liftIO . async . withContentsSocket broker $ \s -> do
+            sendRequest "" origin s ContentsListRequest
+            runEffect (loop s >-> toOutput output)
+            liftIO $ atomically seal
+
+        liftIO $ link thread
+        fromInput input
+      where
+        loop socket = do
+            resp <- liftIO $ waitResponse socket ""
+            case resp of
+                Left e -> error $ show e
+                Right (ContentsListEntry addr dict) -> do
+                    yield (addr, dict)
+                    loop socket
+                Right EndOfContentsList ->
+                    return ()
+                Right _ ->
+                    error "requestList loop: Invalid response"
+
+singleRequest :: (WireFormat response, WireFormat request)
+              => request
+              -> ReaderT ContentsConfig IO (Either SomeException response)
+singleRequest req = contentsRequest (requestResponse req "")
+
+contentsRequest :: (Origin -> Socket Dealer -> IO a)
+                -> ReaderT ContentsConfig IO a
+contentsRequest f = do
+    ContentsConfig broker origin <- ask
+    lift $ withContentsSocket broker (f origin)
+
+withContentsSocket :: String -> (Socket Dealer -> IO a) -> IO a
+withContentsSocket broker = withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
 
 -- Making MonadIO m an instance is impractical, as it would require
 -- undecidable instances.
@@ -156,24 +187,35 @@ instance MarquiseServerMonad IO BurstPath where
 -- This can be used on non-idempotent actions, as it will only request once.
 --
 -- This is not thread-safe and should be the sole user of the connection.
-awaitResponse :: (WireFormat request, WireFormat response)
+requestResponse :: (WireFormat request, WireFormat response)
               => request
               -> ByteString
+              -> Origin
               -> Socket Dealer
               -> IO (Either SomeException response)
-awaitResponse request identifier sock = do
-    let payload = fromList [identifier, toWire request]
-    sendMulti sock payload
-    either Left id <$> race waitTimeout waitResponse
+requestResponse request identifier origin sock = do
+    sendRequest identifier origin sock request
+    waitResponse sock identifier
+
+waitResponse :: WireFormat response
+              => Socket Dealer
+              -> ByteString
+              -> IO (Either SomeException response)
+waitResponse sock identifier = either Left id <$> race waitTimeout doWait
   where
-    waitResponse = do
+    doWait = do
         resp <- receiveMulti sock
         case resp of
             [identifier', msg] ->
                 if identifier' == identifier
                     then return $ fromWire msg
-                    else waitResponse
+                    else waitResponse sock identifier
             _ -> return $ Left $ SomeException $ userError "not two msg parts"
+
+sendRequest :: WireFormat request => ByteString -> Origin -> Socket Dealer -> request -> IO ()
+sendRequest identifier (Origin origin) sock request =
+    let payload = fromList [identifier, origin, toWire request]
+    in sendMulti sock payload
 
 sendViaZMQ :: String -> Origin -> ByteString -> IO ()
 sendViaZMQ broker (Origin origin) bytes =

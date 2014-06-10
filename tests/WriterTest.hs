@@ -143,7 +143,7 @@ suite now = do
 
             linkThread $ runZMQ $ startProxy
                 (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
-            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
+            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 0
             sendTestMsg >>= (`shouldBe` ["\x42", "\NUL"])
 
             let expected = sort [ "02_PONY_00000000000000000004_00000000000000000000_extended"
@@ -209,4 +209,4 @@ startDayMaps =
     in either error id $ (,) <$> norm <*> ext
 
 startState :: UTCTime -> BatchState
-startState = BatchState mempty mempty mempty mempty 0 0 startDayMaps
+startState = BatchState mempty mempty mempty mempty 0 0 startDayMaps 0

@@ -4,7 +4,7 @@ module Main where
 import Control.Monad
 import qualified Data.ByteString.Char8 as BS
 import Data.Maybe (fromJust)
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 import Marquise.Server (marquiseServer)
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
@@ -28,7 +28,7 @@ data Options = Options
 
 data Component = Broker
                | Reader
-               | Writer { batchPeriod :: Word32 }
+               | Writer { batchPeriod :: Word32, bucketSize :: Word64 }
                | Marquise { origin :: String, namespace :: String }
                | Contents
 
@@ -96,12 +96,21 @@ optionsParser Options{..} = Options <$> parsePool
         info (pure Contents) (progDesc "Start a contents daemon")
 
 writerOptionsParser :: O.Parser Component
-writerOptionsParser = Writer <$> O.option (
-       long "batch_period"
-    <> short 'p'
-    <> value 4
-    <> showDefault
-    <> help "Number of seconds to wait before flushing writes" )
+writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
+  where
+    parseBatchPeriod = O.option $
+        long "batch_period"
+        <> short 'p'
+        <> value 4
+        <> showDefault
+        <> help "Number of seconds to wait before flushing writes"
+
+    parseBucketSize = O.option $
+        long "roll_over_size"
+        <> short 'r'
+        <> value 4194304
+        <> showDefault
+        <> help "Maximum bytes in any given bucket before rollover"
 
 marquiseOptionsParser :: O.Parser Component
 marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
@@ -118,7 +127,6 @@ marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
         <> help "NameSpace to look for data in"
 
 -- | Config file parsing
-
 parseConfig :: FilePath -> IO Options
 parseConfig fp = do
     exists <- doesFileExist fp
@@ -165,7 +173,7 @@ main = do
     case component of
         Broker -> runBroker
         Reader -> runReader pool user broker
-        Writer batch_period -> runWriter pool user broker batch_period
+        Writer batch_period roll_over_size -> runWriter pool user broker batch_period roll_over_size
         Marquise origin namespace -> marquiseServer broker origin namespace
         Contents -> runContents pool user broker
 
@@ -192,11 +200,12 @@ runReader pool user broker =
                 (Just $ BS.pack user)
                 (BS.pack pool)
 
-runWriter :: String -> String -> String -> Word32 -> IO ()
-runWriter pool user broker poll_period =
+runWriter :: String -> String -> String -> Word32 -> Word64 -> IO ()
+runWriter pool user broker poll_period bucket_size =
     startWriter ("tcp://" ++ broker ++ ":5571")
                 (Just $ BS.pack user)
                 (BS.pack pool)
+                bucket_size
                 (fromIntegral poll_period)
 
 runContents :: String -> String -> String -> IO ()
@@ -204,4 +213,3 @@ runContents pool user broker =
     startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ BS.pack user)
                 (BS.pack pool)
-

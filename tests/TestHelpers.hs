@@ -120,7 +120,7 @@ startTestDaemons = do
         (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
     linkThread $ runZMQ $ startProxy
         (Router,"tcp://*:5570") (Dealer,"tcp://*:5571") "tcp://*:5001"
-    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
+    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 0
     linkThread $ startReader "tcp://localhost:5571" Nothing "test"
 
 readObject :: ByteString -> IO (Either RadosError ByteString)

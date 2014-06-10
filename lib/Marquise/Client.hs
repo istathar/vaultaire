@@ -49,6 +49,7 @@ module Marquise.Client
 ) where
 
 import Control.Exception (SomeException)
+import Control.Monad.Reader
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
@@ -57,11 +58,11 @@ import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
-import Marquise.IO (ContentsClientMonad (..), MarquiseClientMonad (..))
+import Marquise.IO (ContentsClientMonad (..), ContentsConfig (..),
+                    MarquiseClientMonad (..))
 import Marquise.Types (SpoolName (..), TimeStamp (..))
-import Vaultaire.Types (Address (..), SourceDict, makeSourceDict)
-
-import Control.Monad.Reader
+import Pipes (Producer)
+import Vaultaire.Types (Address (..), Origin, SourceDict, makeSourceDict)
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
 -- is 32 characters.
@@ -70,21 +71,19 @@ makeSpoolName s
     | any (not . isAlphaNum) s = Left "non-alphanumeric spool name"
     | otherwise = Right $ SpoolName s
 
-withBroker :: Monad m => String -> ReaderT String m a -> m a
-withBroker broker action = runReaderT action broker
+withBroker :: Monad m => String -> Origin -> ReaderT ContentsConfig m a -> m a
+withBroker broker origin action = runReaderT action (ContentsConfig broker origin)
 
--- | For the case where you can track Addresses yourself, we provide a facility
--- to generate unique ones for you, guaranteed free of collision.
+-- | Generate an un-used Address. You will need to store this for later re-use.
 requestUnique :: ContentsClientMonad m => m (Either SomeException Address)
 requestUnique = requestUniqueAddress
 
--- | If you have deterministic or fixed known identifiers for your sources, you can
--- use this function to translate it as an Address.
+-- | Deterministically convert a ByteString to an Address, this uses siphash.
 hashIdentifier :: ByteString -> Address
 hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
   where
     iv = SipKey 0 0
-    unSipHash (SipHash h) = h
+    unSipHash (SipHash h) = h :: Word64
 
 -- | Set the key,value tags as metadata on the given Address.
 updateSourceDict :: ContentsClientMonad m
@@ -99,6 +98,10 @@ removeSourceDict :: ContentsClientMonad m
                  -> SourceDict
                  -> m (Either SomeException ())
 removeSourceDict = requestSourceDictRemoval
+
+enumerateOrigin :: ContentsClientMonad m
+                => Producer (Address, SourceDict) m ()
+enumerateOrigin = requestList
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.

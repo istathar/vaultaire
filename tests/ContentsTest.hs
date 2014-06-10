@@ -25,19 +25,23 @@ import Vaultaire.Types
 import Vaultaire.Util
 
 
-startBroker :: IO ()
-startBroker = do
+startDaemons :: IO ()
+startDaemons = do
     linkThread $ runZMQ $
         startProxy (Router,"tcp://*:5580") (Dealer,"tcp://*:5581") "tcp://*:5008"
     linkThread $ startContents "tcp://localhost:5581" Nothing "test"
 
 main :: IO ()
 main = do
-    startBroker
+    startDaemons
     hspec suite
 
 suite :: Spec
 suite = do
+    -- TODO: This does not belong here, move to another test at the least.
+    -- The reason for encodeAddressToString and decodeStringAsAddress beyond
+    -- Show and IsString is questionable. Is this made use of anywhere? Perhaps
+    -- we can remove it before we have to maintain it.
     describe "Addresses" $ do
         it "encodes an address in base62" $ do
             encodeAddressToString 0 `shouldBe` "00000000000"
@@ -50,4 +54,3 @@ suite = do
             decodeStringAsAddress "00000000001" `shouldBe` 1
             decodeStringAsAddress "LygHa16AHYF" `shouldBe` (2^64-1)
             decodeStringAsAddress "LygHa16AHYG" `shouldBe` 0
-

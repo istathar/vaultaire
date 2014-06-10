@@ -40,7 +40,6 @@ instance Arbitrary ContentsOperation where
 
 instance Arbitrary ContentsResponse where
     arbitrary = oneof [ RandomAddress  <$> arbitrary
-                      , return InvalidContentsOrigin
                       , ContentsListEntry <$> arbitrary <*> arbitrary
                       , return EndOfContentsList
                       , return UpdateSuccess
