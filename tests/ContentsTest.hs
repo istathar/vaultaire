@@ -77,7 +77,7 @@ suite = do
                 toListM enumerateOrigin
             case xs of
                 [(addr', dict)] -> do
-                    dict `shouldBe` unionSource dict_b dict_a
+                    dict `shouldBe` dict_b
                     addr' `shouldBe` addr
                 _ -> error "expected one"
 
