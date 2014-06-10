@@ -49,9 +49,12 @@ hashSourceToAddress (Origin o') s = (Marquise.hashIdentifier . inclusions) s
                     "4HXR1F"    -> selectInclusionsIpTraf
                     "R82KX1"    -> selectInclusionsNagios
                     "LMRH8C"    -> selectInclusionsNagios
+                    "ZZZZZZ"    -> passThrough
                     "YCX0H1"    -> error ("TODO which kind of origin is " ++ (S.unpack o'))
                     _           -> error "Origin not configured yet"
 
+
+passThrough = selectInclusionsIpTraf
 
 selectInclusionsIpTraf :: SourceDict -> ByteString
 selectInclusionsIpTraf = S.pack . show
