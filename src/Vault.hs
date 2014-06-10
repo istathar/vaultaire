@@ -1,9 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
+import Control.Exception (throw)
 import Control.Monad
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as S
 import Data.Maybe (fromJust)
+import Data.Packer (putWord64LE, runPacking)
 import Data.Word (Word32, Word64)
 import Marquise.Server (marquiseServer)
 import Options.Applicative hiding (Parser, option)
@@ -11,11 +13,14 @@ import qualified Options.Applicative as O
 import System.Directory
 import System.Log.Handler.Syslog
 import System.Log.Logger
+import System.Rados.Monadic (RadosError (..), runObject, stat, writeFull)
 import System.ZMQ4.Monadic
 import Text.Trifecta
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
+import Vaultaire.Daemon (extendedDayOID, simpleDayOID, withPool)
 import Vaultaire.Reader (startReader)
+import Vaultaire.Types (Origin (..))
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 
@@ -31,6 +36,7 @@ data Component = Broker
                | Writer { batchPeriod :: Word32, bucketSize :: Word64 }
                | Marquise { origin :: String, namespace :: String }
                | Contents
+               | RegisterOrigin { origin :: String, buckets :: Word64 }
 
 -- | Command line option parsing
 
@@ -78,7 +84,8 @@ optionsParser Options{..} = Options <$> parsePool
        <> parseReaderComponent
        <> parseWriterComponent
        <> parseMarquiseComponent
-       <> parseContentsComponent )
+       <> parseContentsComponent
+       <> parseRegisterOriginComponent )
 
     parseBrokerComponent = command "broker" $
         info (pure Broker) (progDesc "Start a broker deamon")
@@ -94,6 +101,21 @@ optionsParser Options{..} = Options <$> parsePool
 
     parseContentsComponent = command "contents" $
         info (pure Contents) (progDesc "Start a contents daemon")
+
+    parseRegisterOriginComponent = command "register" $
+        info registerOriginParser (progDesc "Register a new origin")
+
+registerOriginParser :: O.Parser Component
+registerOriginParser = RegisterOrigin <$> parseOrigin <*> parseBuckets
+  where
+    parseOrigin = argument str (metavar "ORIGIN")
+
+    parseBuckets = O.option $
+        long "buckets"
+        <> short 'n'
+        <> value 128
+        <> showDefault
+        <> help "Number of buckets to distribute writes over"
 
 writerOptionsParser :: O.Parser Component
 writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
@@ -176,6 +198,7 @@ main = do
         Writer batch_period roll_over_size -> runWriter pool user broker batch_period roll_over_size
         Marquise origin namespace -> marquiseServer broker origin namespace
         Contents -> runContents pool user broker
+        RegisterOrigin origin buckets -> runRegisterOrigin pool user origin buckets
 
 runBroker :: IO ()
 runBroker = runZMQ $ do
@@ -197,19 +220,42 @@ runBroker = runZMQ $ do
 runReader :: String -> String -> String -> IO ()
 runReader pool user broker =
     startReader ("tcp://" ++ broker ++ ":5561")
-                (Just $ BS.pack user)
-                (BS.pack pool)
+                (Just $ S.pack user)
+                (S.pack pool)
 
 runWriter :: String -> String -> String -> Word32 -> Word64 -> IO ()
 runWriter pool user broker poll_period bucket_size =
     startWriter ("tcp://" ++ broker ++ ":5571")
-                (Just $ BS.pack user)
-                (BS.pack pool)
+                (Just $ S.pack user)
+                (S.pack pool)
                 bucket_size
                 (fromIntegral poll_period)
 
 runContents :: String -> String -> String -> IO ()
 runContents pool user broker =
     startContents ("tcp://" ++ broker ++ ":5581")
-                (Just $ BS.pack user)
-                (BS.pack pool)
+                (Just $ S.pack user)
+                (S.pack pool)
+
+runRegisterOrigin :: String -> String -> String -> Word64 -> IO ()
+runRegisterOrigin pool user origin buckets = do
+    let origin' = Origin (S.pack origin)
+    let targets = [simpleDayOID origin', extendedDayOID origin']
+    let user' = Just (S.pack user)
+    let pool' = S.pack pool
+
+    withPool user' pool' (forM_ targets initializeDayMap)
+  where
+    initializeDayMap target =
+        runObject target $ do
+            result <- stat
+            case result of
+                Left NoEntity{} -> return ()
+                Left e -> throw e
+                Right _ -> error "Origin already registered."
+
+            writeFull contents >>= maybe (return ()) throw
+
+    contents = runPacking 16 $ do
+        putWord64LE 0
+        putWord64LE buckets

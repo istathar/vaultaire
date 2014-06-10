@@ -12,6 +12,9 @@
 -- As it happens, these types are also the same ones used in the internals of
 -- Vaultaire as it persists measurements and metadata to disk.
 --
+
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Vaultaire.Types
 (
     -- * Identification of measurements
@@ -53,3 +56,10 @@ import Vaultaire.Types.ContentsResponse
 import Vaultaire.Types.ReadStream
 import Vaultaire.Types.SourceDict
 import Vaultaire.Types.WriteResult
+
+import Data.ByteString (ByteString)
+import Data.Hashable (Hashable)
+import Data.String (IsString)
+
+newtype Origin = Origin { unOrigin :: ByteString }
+    deriving (Eq, Ord, IsString, Hashable, Show)

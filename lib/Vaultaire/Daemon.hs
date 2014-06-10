@@ -34,7 +34,8 @@ module Vaultaire.Daemon
     -- * Helpers
     simpleDayOID,
     extendedDayOID,
-    bucketOID
+    bucketOID,
+    withPool,
 ) where
 
 import Control.Applicative
@@ -111,13 +112,17 @@ runDaemon broker ceph_user pool (Daemon a) = do
     -- Ensure that any exceptions are re-thrown in a third thread.
     monitor_a <- Async.async $ monitorMessenger messenger_a parent_tid
 
-    r <- runConnect ceph_user (parseConfig "/etc/ceph/ceph.conf") . runPool pool $
+    r <- withPool ceph_user pool $
         runReaderT (evalStateT a emptyOriginMap) (DaemonConfig msg_chan resp_chan)
 
     Async.cancel monitor_a
     Async.cancel messenger_a
 
     return r
+
+-- Connect to ceph and run your pool action
+withPool :: Maybe ByteString -> ByteString -> Pool a -> IO a
+withPool ceph_user pool = runConnect ceph_user (parseConfig "/etc/ceph/ceph.conf") . runPool pool
 
 -- | Handle messsenger thread shutting down or throwing an exception
 -- explicitly. On normal shutdown, this thread must be killed by the parent

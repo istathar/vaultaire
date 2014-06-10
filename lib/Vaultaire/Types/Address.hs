@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
@@ -9,17 +8,13 @@ module Vaultaire.Types.Address
     decodeStringAsAddress,
     calculateBucketNumber,
     isAddressExtended,
-    Origin(..)
 ) where
 
 import Data.Bits
-import Data.ByteString (ByteString)
-import Data.Hashable
 import Data.Locator
 import Data.Packer (getWord64LE, putWord64LE, runPacking, tryUnpacking)
 import Data.String
 import Data.Word (Word64)
-import GHC.Generics (Generic)
 
 import Vaultaire.Classes.WireFormat
 
@@ -54,6 +49,3 @@ calculateBucketNumber num_buckets (Address addr) = (addr `clearBit` 0) `mod` num
 isAddressExtended :: Address -> Bool
 isAddressExtended (Address addr) = addr `testBit` 0
 
-
-newtype Origin = Origin { unOrigin :: ByteString }
-    deriving (Eq, Ord, Generic, IsString, Hashable, Show)

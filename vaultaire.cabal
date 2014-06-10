@@ -98,6 +98,8 @@ executable vault
 
   build-depends:     base >=3 && <5,
                      bytestring,
+                     rados-haskell,
+                     packer,
                      zeromq4-haskell,
                      optparse-applicative,
                      trifecta,
