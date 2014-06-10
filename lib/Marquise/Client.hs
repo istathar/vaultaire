@@ -37,6 +37,7 @@ module Marquise.Client
     makeSourceDict,
     updateSourceDict,
     removeSourceDict,
+    enumerateOrigin,
 
     -- | * Sending data to Vaultaire
     sendSimple,

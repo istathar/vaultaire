@@ -326,6 +326,8 @@ test-suite           contents-test
                      mtl,
                      bytestring,
                      zeromq4-haskell,
+                     quickcheck-instances,
+                     pipes,
                      vaultaire
 
   ghc-options:       -O2

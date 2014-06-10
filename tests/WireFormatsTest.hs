@@ -10,49 +10,15 @@
 --
 
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
 
-import Control.Applicative ((<$>), (<*>))
+import ArbitraryInstances ()
 import Control.Exception (throw)
 import Data.HashMap.Strict (fromList)
 import Test.Hspec
 import Test.Hspec.QuickCheck
-import Test.QuickCheck.Arbitrary
-import Test.QuickCheck.Gen
-import Test.QuickCheck.Instances ()
 import Vaultaire.Types
-
-instance Arbitrary Address where
-    arbitrary = Address <$> arbitrary
-
-instance Arbitrary SourceDict where
-    arbitrary = do
-        attempt <- arbitrary
-        either (const arbitrary) return $ makeSourceDict attempt
-
-instance Arbitrary ContentsOperation where
-    arbitrary = oneof [ return ContentsListRequest
-                      , return GenerateNewAddress
-                      , UpdateSourceTag <$> arbitrary <*> arbitrary
-                      , RemoveSourceTag <$> arbitrary <*> arbitrary ]
-
-instance Arbitrary ContentsResponse where
-    arbitrary = oneof [ RandomAddress  <$> arbitrary
-                      , ContentsListEntry <$> arbitrary <*> arbitrary
-                      , return EndOfContentsList
-                      , return UpdateSuccess
-                      , return RemoveSuccess ]
-
-instance Arbitrary WriteResult where
-    arbitrary = oneof [ return InvalidWriteOrigin, return OnDisk ]
-
-instance Arbitrary ReadStream where
-    arbitrary = oneof [ return InvalidReadOrigin
-                      , SimpleBurst <$> arbitrary
-                      , ExtendedBurst <$> arbitrary
-                      , return EndOfStream ]
 
 main :: IO ()
 main = hspec suite

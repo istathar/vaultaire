@@ -160,7 +160,7 @@ contentsRequest f = do
     lift $ withContentsSocket broker (f origin)
 
 withContentsSocket :: String -> (Socket Dealer -> IO a) -> IO a
-withContentsSocket broker = withVaultaireSocket ("tcp://" ++ broker ++ ":5581")
+withContentsSocket broker = withVaultaireSocket ("tcp://" ++ broker ++ ":5580")
 
 -- Making MonadIO m an instance is impractical, as it would require
 -- undecidable instances.

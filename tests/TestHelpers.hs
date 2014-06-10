@@ -19,6 +19,7 @@ module TestHelpers
     extendedMessage,
     sendTestMsg,
     startTestDaemons,
+    cleanupTestEnvironment,
     readObject,
 )
 where
@@ -77,6 +78,9 @@ throwJust =
 runTestDaemon :: String -> Daemon a -> IO a
 runTestDaemon broker a =
     runDaemon broker Nothing "test" (cleanup >> loadState >> a)
+
+cleanupTestEnvironment :: IO ()
+cleanupTestEnvironment = runTestDaemon "tcp://localhost:1234" (return ())
 
 runTestPool :: Pool a -> IO a
 runTestPool = runConnect Nothing (parseConfig "/etc/ceph/ceph.conf")

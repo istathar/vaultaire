@@ -19,11 +19,17 @@ import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
+import ArbitraryInstances ()
+import Control.Exception (throw)
+import Marquise.Client
+import Pipes.Prelude (toListM)
+import Test.QuickCheck
+import Test.QuickCheck.Monadic (assert, monadicIO, run)
+import TestHelpers
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
 import Vaultaire.Types
 import Vaultaire.Util
-
 
 startDaemons :: IO ()
 startDaemons = do
@@ -54,3 +60,19 @@ suite = do
             decodeStringAsAddress "00000000001" `shouldBe` 1
             decodeStringAsAddress "LygHa16AHYF" `shouldBe` (2^64-1)
             decodeStringAsAddress "LygHa16AHYG" `shouldBe` 0
+
+    describe "Full stack" $
+        it "updates source dict for any address" $
+            property propSourceDictUpdated
+
+propSourceDictUpdated :: Address -> SourceDict -> Property
+propSourceDictUpdated addr dict = monadicIO $ do
+    xs <- run $ do
+        -- Clear out ceph
+        cleanupTestEnvironment
+        withBroker "localhost" (Origin "PONY") $ do
+            updateSourceDict addr dict >>= either throw return
+            toListM enumerateOrigin
+    case xs of
+        [(addr', dict')] -> assert (addr' == addr && dict' == dict)
+        _ -> error "expected one"
