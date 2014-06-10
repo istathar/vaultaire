@@ -9,7 +9,6 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-
 module ArbitraryInstances
 (
 ) where
