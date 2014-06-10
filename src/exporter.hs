@@ -101,9 +101,11 @@ main = do
     Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
         Rados.runPool "vaultaire" $ do
             let o = Origin (S.pack arg)
+            let o' = Vaultaire.Origin (S.pack arg)
             let l = Contents.formObjectLabel o
             st <- Contents.readVaultObject l
-            let t1 = 1393632000 --  1 March
+--          let t1 = 1393632000 --  1 March
+            let t1 = 1388534400 --  1 January
             let t2 = 1402790400 -- 15 June
             let is = Bucket.calculateTimemarks t1 t2
 
@@ -118,15 +120,19 @@ main = do
                 debug s'
 
                 -- Register that source at address
-                liftIO $ Marquise.withBroker "localhost" $
+                liftIO $ Marquise.withBroker "localhost" o' $
                     Marquise.updateSourceDict a s' >>= either throw return
+                debug "Source update complete"
 
                 -- Process all its data points
                 forM_ is $ \i -> do
                     m <- Bucket.readVaultObject o s i
+                    debug "Map received, size"
+                    debug $ Map.size m
 
                     unless (Map.null m) $ do
                         let ps = Bucket.pointsInRange t1 t2 m
+                        debug "Number of points to process "
                         debug $ length ps
 
                         liftIO $ forM_ ps (convertPointAndWrite spool a)

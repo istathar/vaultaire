@@ -42,7 +42,7 @@ executable           exporter
                      blaze-builder,
                      rados-haskell >= 3.0.0,
                      data-binary-ieee754,
-                     vaultaire >= 2.0.1
+                     vaultaire >= 2.0.2
 
   main-is:           exporter.hs
   hs-source-dirs:    src
