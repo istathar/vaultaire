@@ -219,13 +219,13 @@ runBroker = runZMQ $ do
 
 runReader :: String -> String -> String -> IO ()
 runReader pool user broker =
-    startReader ("tcp://" ++ broker ++ ":5561")
+    startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
 
 runWriter :: String -> String -> String -> Word32 -> Word64 -> IO ()
 runWriter pool user broker poll_period bucket_size =
-    startWriter ("tcp://" ++ broker ++ ":5571")
+    startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
