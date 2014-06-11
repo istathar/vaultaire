@@ -33,13 +33,13 @@ library
                      Vaultaire.ReaderAlgorithms,
                      Vaultaire.InternalStore,
                      Vaultaire.ContentsServer,
+                     Vaultaire.Types.Address,
                      Marquise.Client,
                      Marquise.Server,
                      Marquise.Types,
                      Marquise.IO
 
   other-modules:     Vaultaire.Classes.WireFormat,
-                     Vaultaire.Types.Address,
                      Vaultaire.Types.ContentsOperation,
                      Vaultaire.Types.ContentsResponse,
                      Vaultaire.Types.SourceDict,
