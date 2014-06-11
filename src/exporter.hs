@@ -16,7 +16,7 @@
 module Main where
 
 import Control.Exception (throw)
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
@@ -104,9 +104,9 @@ main = do
             let o' = Vaultaire.Origin (S.pack arg)
             let l = Contents.formObjectLabel o
             st <- Contents.readVaultObject l
---          let t1 = 1393632000 --  1 March
-            let t1 = 1388534400 --  1 January
-            let t2 = 1402790400 -- 15 June
+            let t1 = 1393632000000000000 --  1 March
+--          let t1 = 1388534400000000000 --  1 January
+            let t2 = 1402790400000000000 -- 15 June
             let is = Bucket.calculateTimemarks t1 t2
 
             forM_ st $ \s -> do
@@ -117,23 +117,17 @@ main = do
 
                 -- All tags, less undesirables
                 let s' = convertSourceDict s
-                debug s'
 
                 -- Register that source at address
                 liftIO $ Marquise.withBroker "localhost" o' $
                     Marquise.updateSourceDict a s' >>= either throw return
-                debug "Source update complete"
 
                 -- Process all its data points
                 forM_ is $ \i -> do
                     m <- Bucket.readVaultObject o s i
-                    debug "Map received, size"
-                    debug $ Map.size m
 
                     unless (Map.null m) $ do
                         let ps = Bucket.pointsInRange t1 t2 m
-                        debug "Number of points to process "
-                        debug $ length ps
 
                         liftIO $ forM_ ps (convertPointAndWrite spool a)
 
