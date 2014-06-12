@@ -61,10 +61,10 @@ selectInclusionsIpTraf = S.pack . show
 
 selectInclusionsNagios :: SourceDict -> ByteString
 selectInclusionsNagios s =
-    S.concat ["host:", host, ",metric:", metric, ",server:", server]
+    S.concat ["hostname:", hostname, ",metric:", metric, ",server:", server]
   where
     m      = runSourceDict s
-    host   = lookfor "host"
+    hostname   = lookfor "hostname"
     metric = lookfor "metric"
     server = lookfor "server"
 
