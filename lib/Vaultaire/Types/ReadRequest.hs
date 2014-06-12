@@ -20,6 +20,8 @@ import Data.Word (Word8)
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.Common
+import qualified Data.ByteString as S
+import Control.Exception
 
 data ReadRequest = SimpleReadRequest Address Time Time
                  | ExtendedReadRequest Address Time Time
@@ -31,16 +33,18 @@ instance WireFormat ReadRequest where
     toWire (ExtendedReadRequest addr start end) = 
         packWithHeaderByte 1 addr start end
 
-    fromWire bs = flip tryUnpacking bs $ do
-        header <- getWord8
-        addr_bytes <- getBytes 8
-        addr <- either (fail . show) return $ fromWire addr_bytes
-        start <- getWord64LE
-        end <- getWord64LE
-        case header of
-            0 -> return $ SimpleReadRequest addr start end
-            1 -> return $ ExtendedReadRequest addr start end
-            _ -> fail "invalid header byte"
+    fromWire bs
+        | S.length bs /= 25 = Left . SomeException $ userError "expected 25 bytes" 
+        | otherwise = flip tryUnpacking bs $ do
+            header <- getWord8
+            addr_bytes <- getBytes 8
+            addr <- either (fail . show) return $ fromWire addr_bytes
+            start <- getWord64LE
+            end <- getWord64LE
+            case header of
+                0 -> return $ SimpleReadRequest addr start end
+                1 -> return $ ExtendedReadRequest addr start end
+                _ -> fail "invalid header byte"
 
 packWithHeaderByte :: Word8 -> Address -> Time -> Time -> ByteString
 packWithHeaderByte header addr start end =

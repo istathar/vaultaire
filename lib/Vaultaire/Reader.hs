@@ -31,17 +31,18 @@ startReader broker user pool = runDaemon broker user pool $
     forever $ nextMessage >>= handleRequest
 
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply_f origin' payload') = do
+handleRequest (Message reply_f origin' payload') =
     case fromWire payload' of
-        Right req -> case req of
-            SimpleReadRequest addr start end ->
-                processSimple addr start end origin' reply_f
-            ExtendedReadRequest addr start end ->
-                processExtended addr start end origin' reply_f
+        Right req -> do
+            case req of
+                SimpleReadRequest addr start end ->
+                    processSimple addr start end origin' reply_f
+                ExtendedReadRequest addr start end ->
+                    processExtended addr start end origin' reply_f
+            reply_f EndOfStream
         Left e ->
             liftIO . errorM "Reader.handleRequest" $
                             "failed to decode request: " ++ show e
-    reply_f EndOfStream
 
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)
