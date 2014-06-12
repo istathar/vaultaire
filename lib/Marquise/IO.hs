@@ -326,7 +326,7 @@ verifySplit = fromMaybe (error "verifySplit: impossible due to many'")
 -- A burst should be, at maximum, very close to this side, unless the user
 -- decides to send a very long extended point.
 idealBurstSize :: Word64
-idealBurstSize = 1048576 -- 1MB
+idealBurstSize = maxBound -- 1048576 -- 1MB
 
 foreign import ccall "unistd.h sync" c_sync :: IO ()
 
