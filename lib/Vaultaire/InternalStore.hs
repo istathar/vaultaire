@@ -32,8 +32,7 @@ import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as Pipes
 import Vaultaire.Daemon (Daemon)
-import Vaultaire.Reader (ReadDetails (..), Request (..), getBuckets,
-                         readExtended)
+import Vaultaire.Reader (getBuckets, readExtended)
 import Vaultaire.ReaderAlgorithms (mergeNoFilter)
 import Vaultaire.Types
 import Vaultaire.Writer (BatchState (..), appendExtended, write)
@@ -60,7 +59,7 @@ internalStoreBuckets = 128
 readFrom :: Origin -> Address -> Daemon (Maybe ByteString)
 readFrom origin addr =
     evalStateT draw $ yield (0, internalStoreBuckets)
-                      >-> readExtended (namespace origin) makeRequest
+                      >-> readExtended (namespace origin) addr 0 0
                       >-> Pipes.map extractPayload
   where
     extractPayload bs = attemptUnpacking bs $ do
@@ -72,8 +71,6 @@ readFrom origin addr =
         case tryUnpacking a bs of
             Left e -> error $ "failed to unpack internal payload: " ++ show e
             Right v -> v
-
-    makeRequest = Extended (ReadDetails addr 0 0)
 
 -- | Provide a Producer of address and payload tuples.
 enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()

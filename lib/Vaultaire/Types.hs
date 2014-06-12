@@ -13,8 +13,6 @@
 -- Vaultaire as it persists measurements and metadata to disk.
 --
 
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module Vaultaire.Types
 (
     -- * Identification of measurements
@@ -39,13 +37,20 @@ module Vaultaire.Types
     ContentsListBypass(..),
 
     -- * Streaming reads
+    ReadRequest(..),
     ReadStream(..),
 
     -- * Writes
     WriteResult(..),
 
     -- * Conversion to and from wire format
-    WireFormat(fromWire, toWire)
+    WireFormat(fromWire, toWire),
+
+    -- * Convenience/clarity
+    Epoch,
+    NumBuckets,
+    DayMap,
+    Time,
 ) where
 
 import Vaultaire.Classes.WireFormat
@@ -56,10 +61,6 @@ import Vaultaire.Types.ContentsResponse
 import Vaultaire.Types.ReadStream
 import Vaultaire.Types.SourceDict
 import Vaultaire.Types.WriteResult
+import Vaultaire.Types.ReadRequest
+import Vaultaire.Types.Common
 
-import Data.ByteString (ByteString)
-import Data.Hashable (Hashable)
-import Data.String (IsString)
-
-newtype Origin = Origin { unOrigin :: ByteString }
-    deriving (Eq, Ord, IsString, Hashable, Show)

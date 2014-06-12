@@ -9,7 +9,6 @@ import Data.List.NonEmpty (fromList)
 import System.ZMQ4.Monadic hiding (Event)
 import Test.Hspec hiding (pending)
 import TestHelpers
-import Vaultaire.Reader
 
 main :: IO ()
 main = do
@@ -20,26 +19,7 @@ main = do
     hspec suite
 
 suite :: Spec
-suite = do
-    describe "message classification" $ do
-        it "correctly classifies simple message" $
-            case classifyPayload simpleRequest of
-                SomeRequest (Simple _) -> ()
-                _  -> error "not simple"
-            `shouldBe` ()
-
-        it "correctly classifies extended message" $
-            case classifyPayload extendedRequest of
-                SomeRequest (Extended _) -> ()
-                _  -> error "not extended"
-            `shouldBe` ()
-
-        it "correctly classifies invalid message" $
-            case classifyPayload "" of
-                SomeRequest (Invalid _) -> ()
-                _  -> error "not invalid"
-            `shouldBe` ()
-
+suite =
     describe "full stack" $ do
         it "reads one simple message written by writer daemon" $ do
             -- Response is the data followed by an end of stream message

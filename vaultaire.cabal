@@ -44,6 +44,8 @@ library
                      Vaultaire.Types.ContentsResponse,
                      Vaultaire.Types.SourceDict,
                      Vaultaire.Types.ReadStream,
+                     Vaultaire.Types.ReadRequest,
+                     Vaultaire.Types.Common,
                      Vaultaire.Types.WriteResult,
                      Vaultaire.Types.ContentsListBypass
 
@@ -326,6 +328,7 @@ test-suite           contents-test
                      vector,
                      rados-haskell,
                      semigroups,
+                     locators >= 0.2.4,
                      mtl,
                      bytestring,
                      zeromq4-haskell,
@@ -350,6 +353,7 @@ test-suite           wire-formats-test
                      containers,
                      unordered-containers,
                      text,
+                     locators >= 0.2.4,
                      QuickCheck,
                      mtl,
                      bytestring,

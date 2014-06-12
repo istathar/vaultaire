@@ -24,6 +24,9 @@
 -- or observing various underlying mechanisms that should ideally remain
 -- abstract.
 --
+
+{-# LANGUAGE GADTs #-}
+
 module Marquise.Client
 (
     -- | * Functions
@@ -61,8 +64,9 @@ import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
 import Marquise.IO (ContentsClientMonad (..), ContentsConfig (..),
                     MarquiseClientMonad (..))
-import Marquise.Types (SpoolName (..), TimeStamp (..))
-import Pipes (Producer)
+import Marquise.Types (ExtendedBurst, ExtendedPoint, SimpleBurst, SimplePoint,
+                       SpoolName (..), TimeStamp (..))
+import Pipes (Pipe, Producer, await, yield)
 import Vaultaire.Types (Address (..), Origin, SourceDict, makeSourceDict)
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
@@ -103,6 +107,19 @@ removeSourceDict = requestSourceDictRemoval
 enumerateOrigin :: ContentsClientMonad m
                 => Producer (Address, SourceDict) m ()
 enumerateOrigin = requestList
+
+readSimple :: Monad m => Address -> Word64 -> Word64 -> Producer SimpleBurst m ()
+readSimple = undefined
+
+readExtended :: Monad m => Address -> Word64 -> Word64 -> Producer ExtendedBurst m ()
+readExtended = undefined
+
+decodeSimpleBurst :: Monad m => Pipe SimpleBurst SimplePoint m ()
+decodeSimpleBurst = undefined
+
+decodeExtendedBurst :: Monad m => Pipe ExtendedBurst ExtendedPoint m ()
+decodeExtendedBurst = undefined
+
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.

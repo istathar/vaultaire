@@ -1,5 +1,3 @@
-{-# LANGUAGE EmptyDataDecls    #-}
-{-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 
@@ -7,12 +5,7 @@ module Vaultaire.Reader
 (
     startReader,
     readExtended,
-    ReadDetails(..),
     getBuckets,
-    -- Testing
-    classifyPayload,
-    SomeRequest(..),
-    Request(..),
 ) where
 
 import Control.Applicative
@@ -21,7 +14,6 @@ import Control.Monad.Cont
 import Control.Monad.ST
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
-import Data.Packer
 import Pipes
 import System.Log.Logger
 import System.Rados.Monadic
@@ -29,20 +21,6 @@ import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
 import Vaultaire.Types
-
-data Simple
-data Extended
-data Invalid
-
-data ReadDetails = ReadDetails Address Time Time
-
-data Request typ where
-    Simple   :: ReadDetails -> Request Simple
-    Extended :: ReadDetails -> Request Extended
-    Invalid  :: String -> Request Invalid
-
-data SomeRequest where
-    SomeRequest :: Request typ -> SomeRequest
 
 -- | Start a writer daemon, never returns.
 startReader :: String           -- ^ Broker
@@ -54,29 +32,34 @@ startReader broker user pool = runDaemon broker user pool $
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') = do
-    () <- case classifyPayload payload' of
-        SomeRequest r@Simple{}   -> processSimple r origin' reply_f
-        SomeRequest r@Extended{} -> processExtended r origin' reply_f
-        SomeRequest r@Invalid{}  -> processInvalid r
+    case fromWire payload' of
+        Right req -> case req of
+            SimpleReadRequest addr start end ->
+                processSimple addr start end origin' reply_f
+            ExtendedReadRequest addr start end ->
+                processExtended addr start end origin' reply_f
+        Left e ->
+            liftIO . errorM "Reader.handleRequest" $
+                            "failed to decode request: " ++ show e
     reply_f EndOfStream
 
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)
 
-processSimple :: Request Simple -> Origin -> ReplyF -> Daemon ()
-processSimple s@(Simple (ReadDetails _ start end)) origin' reply_f = do
+processSimple :: Address -> Time -> Time -> Origin -> ReplyF -> Daemon ()
+processSimple addr start end origin' reply_f = do
     refreshOriginDays origin'
     maybe_range <- withSimpleDayMap origin' (lookupRange start end)
 
     case maybe_range of
         Just range ->
-            runEffect $ for (each range >-> readSimple origin' s)
+            runEffect $ for (each range >-> readSimple origin' addr start end)
                             (lift . reply_f . SimpleBurst)
         Nothing -> reply_f InvalidReadOrigin
 
-readSimple :: Origin -> Request Simple
+readSimple :: Origin -> Address -> Time -> Time
            -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readSimple origin' (Simple (ReadDetails addr start end)) = forever $ do
+readSimple origin' addr start end = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
     let bucket_oid = bucketOID origin' epoch bucket "simple"
@@ -89,19 +72,19 @@ readSimple origin' (Simple (ReadDetails addr start end)) = forever $ do
         Right unprocessed -> yieldNotNull $ runST $
             processBucket unprocessed addr start end
 
-processExtended :: Request Extended -> Origin -> ReplyF -> Daemon ()
-processExtended e@(Extended (ReadDetails _ start end)) origin' reply_f = do
+processExtended :: Address -> Time -> Time -> Origin -> ReplyF -> Daemon ()
+processExtended addr start end origin' reply_f = do
     refreshOriginDays origin'
     maybe_range <- withExtendedDayMap origin' (lookupRange start end)
     case maybe_range of
         Just range ->
-            runEffect $ for (each range >-> readExtended origin' e)
+            runEffect $ for (each range >-> readExtended origin' addr start end)
                             (lift . reply_f . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
-readExtended :: Origin -> Request Extended
+readExtended :: Origin -> Address -> Time -> Time
              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtended origin (Extended (ReadDetails addr start end)) = forever $ do
+readExtended origin addr start end = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
     buckets <- lift $ getBuckets origin epoch bucket
@@ -142,23 +125,3 @@ getBuckets origin epoch bucket = do
         Right unprocessed -> return $ Just unprocessed)
 
     return $ (,) <$> maybe_simple <*> maybe_extended
-
-processInvalid :: Request Invalid -> Daemon ()
-processInvalid (Invalid err) =
-    liftIO $ putStrLn $ "Failed to parse read request: " ++ err
-
-classifyPayload :: ByteString -> SomeRequest
-classifyPayload payload' =
-    case tryUnpacking unpackReadDetails payload' of
-        Left e -> SomeRequest $ Invalid $ show e
-        Right d@(ReadDetails address _ _) ->
-            if isAddressExtended address
-                then SomeRequest $ Extended d
-                else SomeRequest $ Simple d
-
-unpackReadDetails :: Unpacking ReadDetails
-unpackReadDetails = do
-    request_type <- getWord64LE
-    if request_type == 0
-        then ReadDetails <$> (Address <$> getWord64LE) <*> getWord64LE <*> getWord64LE
-        else fail "Zero header is reserved for future use"

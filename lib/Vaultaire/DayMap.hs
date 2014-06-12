@@ -12,16 +12,9 @@ module Vaultaire.DayMap
 import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Packer
-import Data.Word (Word64)
-
-type Epoch = Word64
-type NumBuckets = Word64
-
-type Time = Word64
-type DayMap = Map Epoch NumBuckets
+import Vaultaire.Types
 
 -- | Simple corruption check of input is done by checking that it is a multiple
 -- of two Word64s

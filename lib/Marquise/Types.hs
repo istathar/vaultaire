@@ -10,15 +10,21 @@
 --
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GADTs #-}
 {-# OPTIONS_HADDOCK hide, prune #-}
 
 module Marquise.Types
 (
     SpoolName(..),
     TimeStamp(..),
+    SimpleBurst(..),
+    ExtendedBurst(..),
+    SimplePoint(..),
+    ExtendedPoint(..),
 ) where
 
 import Data.Word (Word64)
+import Data.ByteString(ByteString)
 
 -- | A NameSpace implies a certain amount of Marquise server-side state. This
 -- state being the Marquise server's authentication and origin configuration.
@@ -29,4 +35,8 @@ newtype SpoolName = SpoolName String
 newtype TimeStamp = TimeStamp Word64
   deriving (Show, Eq, Num, Bounded)
 
+data SimpleBurst = SimpleBurst ByteString
+data ExtendedBurst = ExtendedBurst ByteString
 
+data SimplePoint = SimplePoint
+data ExtendedPoint = ExtendedPoint

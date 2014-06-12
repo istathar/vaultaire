@@ -54,3 +54,9 @@ instance Arbitrary ReadStream where
 instance Arbitrary Origin where
     -- suchThat condition should be removed once locators package is fixed
     arbitrary = Origin . S.pack . toLocator16a 6 <$> arbitrary `suchThat` (>0)
+
+instance Arbitrary ReadRequest where
+    arbitrary =
+        oneof [ SimpleReadRequest <$> arbitrary <*> arbitrary <*> arbitrary
+              , ExtendedReadRequest <$> arbitrary <*> arbitrary <*> arbitrary ]
+
