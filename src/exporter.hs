@@ -129,6 +129,7 @@ main = do
 
                     unless (Map.null m) $ do
                         let ps = Bucket.pointsInRange t1 t2 m
+                        debug $ length ps
 
                         liftIO $ forM_ ps (convertPointAndWrite spool a)
 
