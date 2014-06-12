@@ -16,7 +16,7 @@
 module Main where
 
 import Control.Exception (throw)
-import Control.Monad (unless, when)
+import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
@@ -54,6 +54,7 @@ hashSourceToAddress (Origin o') s = (Marquise.hashIdentifier . inclusions) s
                     _           -> error "Origin not configured yet"
 
 
+passThrough :: SourceDict -> ByteString
 passThrough = selectInclusionsIpTraf
 
 selectInclusionsIpTraf :: SourceDict -> ByteString
@@ -61,12 +62,12 @@ selectInclusionsIpTraf = S.pack . show
 
 selectInclusionsNagios :: SourceDict -> ByteString
 selectInclusionsNagios s =
-    S.concat ["hostname:", hostname, ",metric:", metric, ",server:", server]
+    S.concat ["host:", host, ",metric:", metric, ",service:", service,","]
   where
     m      = runSourceDict s
-    hostname   = lookfor "hostname"
+    host   = lookfor "hostname"
     metric = lookfor "metric"
-    server = lookfor "server"
+    service = lookfor "service_name"
 
     lookfor :: ByteString -> ByteString
     lookfor k = case Map.lookup k m of
