@@ -16,7 +16,6 @@
 module Main where
 
 import Control.Exception (throw)
-import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
@@ -31,6 +30,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import System.Environment (getArgs)
 import qualified System.Rados.Monadic as Rados
+import Text.Printf
 
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
@@ -114,7 +114,6 @@ main = do
                 debug s
                 -- Work out address
                 let a = hashSourceToAddress o s
-                debug a
 
                 -- All tags, less undesirables
                 let s' = convertSourceDict s
@@ -125,12 +124,15 @@ main = do
 
                 -- Process all its data points
                 forM_ is $ \i -> do
+                    liftIO $ putStr $ (show o) ++ " " ++ (show a) ++ " " ++ (show i) ++ " "
                     m <- Bucket.readVaultObject o s i
 
-                    unless (Map.null m) $ do
+                    if (Map.null m)
+                      then do
+                        liftIO $ printf "%6s\n" ("-" :: String)
+                      else do
                         let ps = Bucket.pointsInRange t1 t2 m
-                        debug $ length ps
-
+                        liftIO $ printf "%6d\n" (length ps)
                         liftIO $ forM_ ps (convertPointAndWrite spool a)
 
 

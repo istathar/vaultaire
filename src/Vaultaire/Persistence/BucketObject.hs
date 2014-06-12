@@ -203,7 +203,6 @@ readVaultObject o s i =
     Label l' = l
 
   in do
-    liftIO $ S.putStrLn l'
     ey' <- runObject l' readFull    -- Pool (Either RadosError ByteString)
 
     case ey' of
