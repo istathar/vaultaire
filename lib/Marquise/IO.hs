@@ -307,7 +307,8 @@ verifySplit = fromMaybe (error "verifySplit: impossible due to many'")
                         put (current_size + fromIntegral len + 24)
                         return $ BS.append packet bytes
                     Right () ->
-                        error "verifySplit: corrupt data (extended burst)"
+                        error $ "verifySplit: corrupt data (extended burst) at: "
+                                ++ show current_size
             Nothing -> do
                 put (current_size + 24)
                 return packet
