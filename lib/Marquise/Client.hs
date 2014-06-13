@@ -25,6 +25,8 @@
 -- abstract.
 --
 
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Marquise.Client
 (
     -- | * Utility functions
@@ -58,13 +60,12 @@ module Marquise.Client
     TimeStamp(..),
 ) where
 
-import Control.Exception (SomeException)
+import Control.Exception (SomeException, throw)
 import Control.Monad.Reader
 import Control.Applicative
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
-import Control.Exception(throw)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
@@ -171,7 +172,7 @@ readSimple addr start end origin conn = do
         case response of
             Right (SimpleStream burst) ->
                 yield burst >> loop
-            Right (EndOfStream) ->
+            Right EndOfStream ->
                 return ()
             Right _ ->
                 error "readSimple loop: Invalid response"
@@ -194,7 +195,7 @@ readExtended addr start end origin conn = do
         case response of
             Right (ExtendedStream burst) ->
                 yield burst >> loop
-            Right (EndOfStream) ->
+            Right EndOfStream ->
                 return ()
             Right _ ->
                 error "readSimple loop: Invalid response"
@@ -223,7 +224,7 @@ decodeExtended = Pipes.map unExtendedBurst >-> loop
             let result = either throw id $ tryUnpacking (unpack os) chunk
             yield result
 
-            let size = (BS.length $ extendedPayload result) + 24
+            let size = BS.length (extendedPayload result) + 24
             emitFrom chunk (os + size)
 
     unpack os = do
@@ -232,8 +233,8 @@ decodeExtended = Pipes.map unExtendedBurst >-> loop
         time <- getWord64LE
         len <- fromIntegral <$> getWord64LE
         payload <- if len == 0
-                       then getBytes len
-                       else return BS.empty
+                       then return BS.empty
+                       else getBytes len
 
         return $ ExtendedPoint addr time payload
             
