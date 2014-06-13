@@ -26,14 +26,14 @@ main = hspec suite
 suite :: Spec
 suite = do
     describe "WireFormat identity tests" $ do
-        it "ContentsOperation" $ property (wireId :: ContentsOperation -> Bool)
-        it "ContentsResponse" $ property (wireId :: ContentsResponse -> Bool)
-        it "WriteResult" $ property (wireId :: WriteResult -> Bool)
-        it "ReadStream" $ property (wireId :: ReadStream -> Bool)
-        it "Address" $ property (wireId :: Address -> Bool)
-        it "SourceDict" $ property (wireId :: SourceDict -> Bool)
-        it "ReadRequest" $ property (wireId :: ReadRequest -> Bool)
-        it "PassThrough" $ property (wireId :: PassThrough -> Bool)
+        prop "ContentsOperation" (wireId :: ContentsOperation -> Bool)
+        prop "ContentsResponse" (wireId :: ContentsResponse -> Bool)
+        prop "WriteResult" (wireId :: WriteResult -> Bool)
+        prop "ReadStream" (wireId :: ReadStream -> Bool)
+        prop "Address" (wireId :: Address -> Bool)
+        prop "SourceDict" (wireId :: SourceDict -> Bool)
+        prop "ReadRequest" (wireId :: ReadRequest -> Bool)
+        prop "PassThrough" (wireId :: PassThrough -> Bool)
 
     describe "source dict wire format" $
         it "parses string to map" $ do
@@ -44,8 +44,7 @@ suite = do
             wire `shouldBe` expected
 
     describe "Contents list bypass" $ do
-        it "has same wire format for all" $
-            property contentsListBypassId
+        prop "has same wire format for all" contentsListBypassId
         it "has same wire format for known case" $ do
             let al = [("metric","cpu"), ("server","www.example.com")]
             let (Right source_dict) = makeSourceDict $ fromList al

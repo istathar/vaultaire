@@ -8,6 +8,7 @@
 --
 
 {-# LANGUAGE OverloadedStrings          #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Marquise.IO.Connection
 (

@@ -8,6 +8,7 @@
 --
 
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Marquise.IO.SpoolFile
 (
@@ -18,7 +19,6 @@ module Marquise.IO.SpoolFile
 import qualified Data.ByteString.Lazy as LB
 import Marquise.Classes
 import Marquise.Types
-import Data.Word(Word64)
 
 -- This could be more efficient if the handle were kept in a "global
 -- variable", using the noinline IORef hack.
@@ -33,9 +33,6 @@ dataFilePath (SpoolName ns) = spoolDir ++ ns
 spoolDir :: FilePath
 spoolDir = "/var/spool/marquise/"
 
-
-tmpTemplate :: SpoolName -> String
-tmpTemplate ns = dataFilePath ns ++ "_"
 
 foreign import ccall "unistd.h sync" c_sync :: IO ()
 
