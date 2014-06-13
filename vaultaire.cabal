@@ -36,7 +36,13 @@ library
                      Marquise.Client,
                      Marquise.Server,
                      Marquise.Types,
-                     Marquise.IO
+                     Marquise.Classes,
+                     Marquise.IO,
+                     Marquise.IO.Writer,
+                     Marquise.IO.Reader,
+                     Marquise.IO.Contents,
+                     Marquise.IO.SpoolFile,
+                     Marquise.IO.Connection
 
   other-modules:     Vaultaire.Classes.WireFormat,
                      Vaultaire.Types.Address,
@@ -48,6 +54,7 @@ library
                      Vaultaire.Types.Common,
                      Vaultaire.Types.WriteResult,
                      Vaultaire.Types.ContentsListBypass
+                     Vaultaire.Types.PassThrough
 
   build-depends:     base >=3 && <5,
                      bytestring,

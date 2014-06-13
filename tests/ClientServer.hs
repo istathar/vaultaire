@@ -8,7 +8,8 @@ import Control.Concurrent.Async
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Marquise.Client
-import Marquise.IO
+import Marquise.Classes
+import Marquise.IO ()
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
 import Vaultaire.Broker

@@ -22,14 +22,15 @@ import Control.Exception (throwIO)
 import Control.Monad (forever, unless)
 import qualified Data.ByteString.Char8 as BS
 import Marquise.Client (makeSpoolName)
-import Marquise.IO (MarquiseServerMonad (..), spoolDir)
+import Marquise.Classes
+import Marquise.IO.SpoolFile(spoolDir)
 import Marquise.Types (SpoolName (..))
 import System.Directory (doesDirectoryExist)
 import Vaultaire.Types (Origin (..))
 
 -- | Send the next burst, returns when the burst is acknowledged and thus in
 -- the vault.
-sendNextBurst :: MarquiseServerMonad m bp
+sendNextBurst :: MarquiseWriterMonad m bp
               => String -> Origin -> SpoolName -> m ()
 sendNextBurst broker origin ns = do
     maybe_burst <- nextBurst ns

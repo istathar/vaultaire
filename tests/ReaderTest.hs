@@ -15,7 +15,7 @@ main = do
     runTestDaemon "tcp://localhost:1234" (return ())
     startTestDaemons
     -- Prime vault by writing a test message to it
-    sendTestMsg >>= (`shouldBe` ["\x42", "\NUL"])
+    sendTestMsg >>= (`shouldBe` ["\NUL"])
     hspec suite
 
 suite :: Spec
@@ -23,11 +23,11 @@ suite =
     describe "full stack" $ do
         it "reads one simple message written by writer daemon" $ do
             -- Response is the data followed by an end of stream message
-            let resp = (["\x43", simpleResponse], ["\x43", "\x01"])
+            let resp = ([simpleResponse], ["\x01"])
             request simpleRequest >>= (`shouldBe` resp)
 
         it "reads one extended message written by writer daemon" $ do
-            let resp = (["\x43", extendedResponse], ["\x43", "\x01"])
+            let resp = ([extendedResponse], ["\x01"])
             request extendedRequest >>= (`shouldBe` resp)
 
 simpleResponse :: ByteString
@@ -54,7 +54,7 @@ request :: ByteString -> IO ([ByteString], [ByteString])
 request req = runZMQ $ do
     s <- socket Dealer
     connect s "tcp://localhost:5570"
-    sendMulti s $ fromList ["\x43", "PONY", req]
+    sendMulti s $ fromList ["PONY", req]
     rep <- receiveMulti s
     eof <- receiveMulti s
     return (rep, eof)

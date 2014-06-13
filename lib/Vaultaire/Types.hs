@@ -43,6 +43,9 @@ module Vaultaire.Types
     -- * Writes
     WriteResult(..),
 
+    -- * Hacks
+    PassThrough(..),
+
     -- * Conversion to and from wire format
     WireFormat(fromWire, toWire),
 
@@ -55,12 +58,13 @@ module Vaultaire.Types
 
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
+import Vaultaire.Types.Common
 import Vaultaire.Types.ContentsListBypass
 import Vaultaire.Types.ContentsOperation
 import Vaultaire.Types.ContentsResponse
+import Vaultaire.Types.PassThrough
+import Vaultaire.Types.ReadRequest
 import Vaultaire.Types.ReadStream
 import Vaultaire.Types.SourceDict
 import Vaultaire.Types.WriteResult
-import Vaultaire.Types.ReadRequest
-import Vaultaire.Types.Common
 

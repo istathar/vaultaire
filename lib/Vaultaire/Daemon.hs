@@ -94,7 +94,7 @@ data Message = Message
 type ReplyF  = WireFormat w => w -> Daemon ()
 type Payload = Word64
 type Bucket  = Word64
-type RawMsg  = (ByteString, ByteString, ByteString, ByteString, ByteString)
+type RawMsg  = (ByteString, ByteString, ByteString, ByteString)
 
 -- | This will go as far as to connect to Ceph and begin listening for
 -- messages.
@@ -147,11 +147,11 @@ liftPool = Daemon . lift . lift
 -- | Pop the next message off an internal FIFO queue of messages.
 nextMessage :: Daemon Message
 nextMessage = do
-    (env_a, env_b, env_c, origin, payload) <- getMsg
+    (env_a, env_b, origin, payload) <- getMsg
     -- This can be moved out of a lambda when I fully understand this:
     -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
     return $ Message (\r -> do resp_chan <- respChan <$> ask
-                               writeQueue resp_chan (fromList [env_a, env_b, env_c, toWire r]))
+                               writeQueue resp_chan (fromList [env_a, env_b, toWire r]))
                      (Origin origin)
                      payload
   where
@@ -302,8 +302,8 @@ listen router recv_chan resp_chan = forever $ do
         [[ZMQ.In]] -> do
             msg <- ZMQ.receiveMulti router
             case msg of
-                [env_a, env_b, message_id, origin', payload'] ->
-                    writeQueue recv_chan (env_a, env_b, message_id, origin', payload')
+                [env_a, env_b, origin', payload'] ->
+                    writeQueue recv_chan (env_a, env_b, origin', payload')
                 n -> liftIO $ putStrLn $
                     "bad message recieved, " ++ show (length n)
                     ++ " parts; ignoring"

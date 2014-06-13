@@ -39,8 +39,8 @@ suite = do
             msg <- async $ replyOne shutdown
 
             async sendBadMsg
-            rep <- async $ sendPonyMsg "\x42"
-            wait rep >>= (`shouldBe` ["\x42", "\NUL"])
+            rep <- async $ sendPonyMsg
+            wait rep >>= (`shouldBe` ["\NUL"])
 
             putMVar shutdown ()
             wait msg >>= (`shouldBe` ("PONY", "im in ur vaults"))
@@ -49,11 +49,11 @@ suite = do
             shutdown <- newEmptyMVar
             msg <- async $ replyTwo shutdown
 
-            rep_a <- async $ sendPonyMsg "\x43"
-            rep_b <- async $ sendPonyMsg "\x44"
+            rep_a <- async $ sendPonyMsg
+            rep_b <- async $ sendPonyMsg
 
-            wait rep_a >>= (`shouldBe` ["\x43", "\NUL"])
-            wait rep_b >>= (`shouldBe` ["\x44", "\NUL"])
+            wait rep_a >>= (`shouldBe` ["\NUL"])
+            wait rep_b >>= (`shouldBe` ["\NUL"])
 
             putMVar shutdown ()
             wait msg >>= (`shouldBe` (("PONY", "im in ur vaults")
@@ -151,12 +151,12 @@ replyTwo shutdown =
         liftIO $ takeMVar shutdown
         return r
 
-sendPonyMsg :: ByteString -> IO [ByteString]
-sendPonyMsg identifier = runZMQ $ do
+sendPonyMsg :: IO [ByteString]
+sendPonyMsg = runZMQ $ do
     s <- socket Dealer
     connect s "tcp://localhost:5560"
     -- Simulate a client sending a sequence number and message
-    sendMulti s $ fromList [identifier, "PONY", "im in ur vaults"]
+    sendMulti s $ fromList ["PONY", "im in ur vaults"]
     receiveMulti s
 
 sendBadMsg :: IO ()

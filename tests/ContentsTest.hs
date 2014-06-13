@@ -71,10 +71,11 @@ suite = do
 
             cleanupTestEnvironment
 
-            xs <- withBroker "localhost" (Origin "PONY") $ do
-                updateSourceDict addr dict_a >>= either throw return
-                updateSourceDict addr dict_b >>= either throw return
-                toListM enumerateOrigin
+            let o = Origin "PONY"
+            xs <- withContentsConnection "localhost" $ \c -> do
+                updateSourceDict addr dict_a o c >>= either throw return
+                updateSourceDict addr dict_b o c >>= either throw return
+                toListM (enumerateOrigin o c)
             case xs of
                 [(addr', dict)] -> do
                     dict `shouldBe` dict_b
@@ -93,9 +94,10 @@ propSourceDictUpdated addr dict = monadicIO $ do
     xs <- run $ do
         -- Clear out ceph
         cleanupTestEnvironment
-        withBroker "localhost" (Origin "PONY") $ do
-            updateSourceDict addr dict >>= either throw return
-            toListM enumerateOrigin
+        let o = Origin "PONY"
+        withContentsConnection "localhost" $ \c -> do
+            updateSourceDict addr dict o c >>= either throw return
+            toListM (enumerateOrigin o c)
     case xs of
         [(addr', dict')] -> assert (addr' == addr && dict' == dict)
         _ -> error "expected one"

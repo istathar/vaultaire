@@ -115,7 +115,7 @@ sendTestMsg = runZMQ $ do
     s <- socket Dealer
     connect s "tcp://localhost:5560"
     -- Simulate a client sending a sequence number and message
-    sendMulti s $ fromList ["\x42", "PONY", extendedCompound]
+    sendMulti s $ fromList ["PONY", extendedCompound]
     receiveMulti s
 
 startTestDaemons :: IO ()

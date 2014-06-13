@@ -29,14 +29,14 @@
 
 module Marquise.Client
 (
-    -- | * Functions
-    -- Note: You may read MarquiseClientMonad m as IO.
+    -- | * Utility functions
+    -- Note: You may read MarquiseSpoolFileMonad m as IO.
     makeSpoolName,
-    withBroker,
-
-    -- | * Request or assign Addresses
-    requestUnique,
     hashIdentifier,
+
+    -- | * Contents daemon requests
+    withContentsConnection,
+    requestUnique,
     makeSourceDict,
     updateSourceDict,
     removeSourceDict,
@@ -46,6 +46,7 @@ module Marquise.Client
     sendSimple,
     sendExtended,
     flush,
+
     -- * Types
     SpoolName,
     Address,
@@ -62,12 +63,11 @@ import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
-import Marquise.IO (ContentsClientMonad (..), ContentsConfig (..),
-                    MarquiseClientMonad (..))
-import Marquise.Types (ExtendedBurst, ExtendedPoint, SimpleBurst, SimplePoint,
-                       SpoolName (..), TimeStamp (..))
-import Pipes (Pipe, Producer, await, yield)
-import Vaultaire.Types (Address (..), Origin, SourceDict, makeSourceDict)
+import Marquise.Classes
+import Marquise.IO ()
+import Marquise.Types 
+import Pipes
+import Vaultaire.Types
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
 -- is 32 characters.
@@ -76,13 +76,6 @@ makeSpoolName s
     | any (not . isAlphaNum) s = Left "non-alphanumeric spool name"
     | otherwise = Right $ SpoolName s
 
-withBroker :: Monad m => String -> Origin -> ReaderT ContentsConfig m a -> m a
-withBroker broker origin action = runReaderT action (ContentsConfig broker origin)
-
--- | Generate an un-used Address. You will need to store this for later re-use.
-requestUnique :: ContentsClientMonad m => m (Either SomeException Address)
-requestUnique = requestUniqueAddress
-
 -- | Deterministically convert a ByteString to an Address, this uses siphash.
 hashIdentifier :: ByteString -> Address
 hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
@@ -90,23 +83,69 @@ hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
     iv = SipKey 0 0
     unSipHash (SipHash h) = h :: Word64
 
+-- | Generate an un-used Address. You will need to store this for later re-use.
+requestUnique :: MarquiseContentsMonad m connection
+               => Origin
+               -> connection
+               -> m (Either SomeException Address)
+requestUnique origin connection =  do
+    sendContentsRequest GenerateNewAddress origin connection
+    response <- recvContentsResponse connection
+    return $ case response of
+        Right (RandomAddress addr) ->
+            Right addr
+        Right _ -> error "requestUnique: Invalid response"
+        Left e -> Left e
+
 -- | Set the key,value tags as metadata on the given Address.
-updateSourceDict :: ContentsClientMonad m
+updateSourceDict :: MarquiseContentsMonad m connection
                  => Address
                  -> SourceDict
+                 -> Origin
+                 -> connection
                  -> m (Either SomeException ())
-updateSourceDict = requestSourceDictUpdate
+updateSourceDict addr source_dict origin connection =  do
+    sendContentsRequest (UpdateSourceTag addr source_dict) origin connection
+    response <- recvContentsResponse connection
+    return $ case response of
+        Right UpdateSuccess -> Right ()
+        Right _ -> error "requestSourceDictUpdate: Invalid response"
+        Left e -> Left e
 
 -- | Remove the supplied key,value tags from metadata on the Address, if present.
-removeSourceDict :: ContentsClientMonad m
+removeSourceDict :: MarquiseContentsMonad m connection
                  => Address
                  -> SourceDict
+                 -> Origin
+                 -> connection
                  -> m (Either SomeException ())
-removeSourceDict = requestSourceDictRemoval
+removeSourceDict addr source_dict origin connection = do
+    sendContentsRequest (RemoveSourceTag addr source_dict) origin connection
+    response <- recvContentsResponse connection
+    return $ case response of
+        Right RemoveSuccess -> Right ()
+        Right _ -> error "requestSourceDictRemoval: Invalid response"
+        Left e -> Left e
 
-enumerateOrigin :: ContentsClientMonad m
-                => Producer (Address, SourceDict) m ()
-enumerateOrigin = requestList
+enumerateOrigin :: MarquiseContentsMonad m connection
+                => Origin
+                -> connection
+                -> Producer (Address, SourceDict) m ()
+enumerateOrigin origin connection = do
+    lift $ sendContentsRequest ContentsListRequest origin connection
+    loop
+  where
+    loop = do
+        resp <- lift $ recvContentsResponse connection
+        case resp of
+            Left e -> error $ show e
+            Right (ContentsListEntry addr dict) ->
+                yield (addr, dict) >> loop
+            Right EndOfContentsList ->
+                return ()
+            Right _ ->
+                error "enumerateOrigin loop: Invalid response"
+
 
 readSimple :: Monad m => Address -> Word64 -> Word64 -> Producer SimpleBurst m ()
 readSimple = undefined
@@ -124,7 +163,7 @@ decodeExtendedBurst = undefined
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
 sendSimple
-    :: MarquiseClientMonad m
+    :: MarquiseSpoolFileMonad m
     => SpoolName
     -> Address
     -> TimeStamp
@@ -139,7 +178,7 @@ sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
 
 -- | Send an "extended" data point. Again, representation is up to you.
 sendExtended
-    :: MarquiseClientMonad m
+    :: MarquiseSpoolFileMonad m
     => SpoolName
     -> Address
     -> TimeStamp
@@ -156,7 +195,8 @@ sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
 
 -- | Ensure that all sent points have hit the local disk.
 flush
-    :: MarquiseClientMonad m
+    :: MarquiseSpoolFileMonad m
     => SpoolName
     -> m ()
 flush = close
+
