@@ -46,6 +46,7 @@ module Marquise.Client
     flush,
 
     -- | Reading from Vaultaire
+    withReaderConnection,
     readExtended,
     readSimple,
     decodeExtended,
