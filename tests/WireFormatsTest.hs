@@ -33,6 +33,7 @@ suite = do
         it "Address" $ property (wireId :: Address -> Bool)
         it "SourceDict" $ property (wireId :: SourceDict -> Bool)
         it "ReadRequest" $ property (wireId :: ReadRequest -> Bool)
+        it "PassThrough" $ property (wireId :: PassThrough -> Bool)
 
     describe "source dict wire format" $
         it "parses string to map" $ do

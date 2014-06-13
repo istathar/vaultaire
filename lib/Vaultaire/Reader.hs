@@ -55,7 +55,7 @@ processSimple addr start end origin' reply_f = do
     case maybe_range of
         Just range ->
             runEffect $ for (each range >-> readSimple origin' addr start end)
-                            (lift . reply_f . SimpleBurst)
+                            (lift . reply_f . SimpleStream . SimpleBurst)
         Nothing -> reply_f InvalidReadOrigin
 
 readSimple :: Origin -> Address -> Time -> Time
@@ -80,7 +80,7 @@ processExtended addr start end origin' reply_f = do
     case maybe_range of
         Just range ->
             runEffect $ for (each range >-> readExtended origin' addr start end)
-                            (lift . reply_f . ExtendedBurst)
+                            (lift . reply_f . ExtendedStream . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
 readExtended :: Origin -> Address -> Time -> Time

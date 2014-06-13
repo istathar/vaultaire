@@ -39,6 +39,8 @@ module Vaultaire.Types
     -- * Streaming reads
     ReadRequest(..),
     ReadStream(..),
+    SimpleBurst(..),
+    ExtendedBurst(..),
 
     -- * Writes
     WriteResult(..),

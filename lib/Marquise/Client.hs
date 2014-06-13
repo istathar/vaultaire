@@ -25,8 +25,6 @@
 -- abstract.
 --
 
-{-# LANGUAGE GADTs #-}
-
 module Marquise.Client
 (
     -- | * Utility functions
@@ -47,6 +45,12 @@ module Marquise.Client
     sendExtended,
     flush,
 
+    -- | Reading from Vaultaire
+    readExtended,
+    readSimple,
+    decodeExtended,
+    decodeSimple,
+    
     -- * Types
     SpoolName,
     Address,
@@ -55,18 +59,22 @@ module Marquise.Client
 
 import Control.Exception (SomeException)
 import Control.Monad.Reader
+import Control.Applicative
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
+import Control.Exception(throw)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
-import Data.Packer (putBytes, putWord64LE, runPacking)
 import Data.Word (Word64)
 import Marquise.Classes
 import Marquise.IO ()
 import Marquise.Types 
 import Pipes
+import Data.Packer
+import qualified Pipes.ByteString
+import qualified Pipes.Prelude as Pipes
 import Vaultaire.Types
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
@@ -84,13 +92,13 @@ hashIdentifier = Address . (`clearBit` 0) . unSipHash . hash iv
     unSipHash (SipHash h) = h :: Word64
 
 -- | Generate an un-used Address. You will need to store this for later re-use.
-requestUnique :: MarquiseContentsMonad m connection
+requestUnique :: MarquiseContentsMonad m conn
                => Origin
-               -> connection
+               -> conn
                -> m (Either SomeException Address)
-requestUnique origin connection =  do
-    sendContentsRequest GenerateNewAddress origin connection
-    response <- recvContentsResponse connection
+requestUnique origin conn =  do
+    sendContentsRequest GenerateNewAddress origin conn
+    response <- recvContentsResponse conn
     return $ case response of
         Right (RandomAddress addr) ->
             Right addr
@@ -98,45 +106,45 @@ requestUnique origin connection =  do
         Left e -> Left e
 
 -- | Set the key,value tags as metadata on the given Address.
-updateSourceDict :: MarquiseContentsMonad m connection
+updateSourceDict :: MarquiseContentsMonad m conn
                  => Address
                  -> SourceDict
                  -> Origin
-                 -> connection
+                 -> conn
                  -> m (Either SomeException ())
-updateSourceDict addr source_dict origin connection =  do
-    sendContentsRequest (UpdateSourceTag addr source_dict) origin connection
-    response <- recvContentsResponse connection
+updateSourceDict addr source_dict origin conn =  do
+    sendContentsRequest (UpdateSourceTag addr source_dict) origin conn
+    response <- recvContentsResponse conn
     return $ case response of
         Right UpdateSuccess -> Right ()
         Right _ -> error "requestSourceDictUpdate: Invalid response"
         Left e -> Left e
 
 -- | Remove the supplied key,value tags from metadata on the Address, if present.
-removeSourceDict :: MarquiseContentsMonad m connection
+removeSourceDict :: MarquiseContentsMonad m conn
                  => Address
                  -> SourceDict
                  -> Origin
-                 -> connection
+                 -> conn
                  -> m (Either SomeException ())
-removeSourceDict addr source_dict origin connection = do
-    sendContentsRequest (RemoveSourceTag addr source_dict) origin connection
-    response <- recvContentsResponse connection
+removeSourceDict addr source_dict origin conn = do
+    sendContentsRequest (RemoveSourceTag addr source_dict) origin conn
+    response <- recvContentsResponse conn
     return $ case response of
         Right RemoveSuccess -> Right ()
         Right _ -> error "requestSourceDictRemoval: Invalid response"
         Left e -> Left e
 
-enumerateOrigin :: MarquiseContentsMonad m connection
+enumerateOrigin :: MarquiseContentsMonad m conn
                 => Origin
-                -> connection
+                -> conn
                 -> Producer (Address, SourceDict) m ()
-enumerateOrigin origin connection = do
-    lift $ sendContentsRequest ContentsListRequest origin connection
+enumerateOrigin origin conn = do
+    lift $ sendContentsRequest ContentsListRequest origin conn
     loop
   where
     loop = do
-        resp <- lift $ recvContentsResponse connection
+        resp <- lift $ recvContentsResponse conn
         case resp of
             Left e -> error $ show e
             Right (ContentsListEntry addr dict) ->
@@ -146,20 +154,88 @@ enumerateOrigin origin connection = do
             Right _ ->
                 error "enumerateOrigin loop: Invalid response"
 
+readSimple :: MarquiseReaderMonad m conn
+           => Address
+           -> Word64
+           -> Word64
+           -> Origin
+           -> conn
+           -> Producer SimpleBurst m ()
+readSimple addr start end origin conn = do
+    lift $ sendReaderRequest (SimpleReadRequest addr start end) origin conn
+    loop
+  where
+    loop = do
+        response <- lift $ recvReaderResponse conn
+        case response of
+            Right (SimpleStream burst) ->
+                yield burst >> loop
+            Right (EndOfStream) ->
+                return ()
+            Right _ ->
+                error "readSimple loop: Invalid response"
+            Left e ->
+                throw e
 
-readSimple :: Monad m => Address -> Word64 -> Word64 -> Producer SimpleBurst m ()
-readSimple = undefined
+readExtended :: MarquiseReaderMonad m conn
+             => Address
+             -> Word64
+             -> Word64
+             -> Origin
+             -> conn
+             -> Producer ExtendedBurst m ()
+readExtended addr start end origin conn = do
+    lift $ sendReaderRequest (ExtendedReadRequest addr start end) origin conn
+    loop
+  where
+    loop = do
+        response <- lift $ recvReaderResponse conn
+        case response of
+            Right (ExtendedStream burst) ->
+                yield burst >> loop
+            Right (EndOfStream) ->
+                return ()
+            Right _ ->
+                error "readSimple loop: Invalid response"
+            Left e ->
+                throw e
 
-readExtended :: Monad m => Address -> Word64 -> Word64 -> Producer ExtendedBurst m ()
-readExtended = undefined
+decodeSimple :: Monad m => Pipe SimpleBurst SimplePoint m ()
+decodeSimple = Pipes.map unSimpleBurst
+                    >-> Pipes.ByteString.take (24 :: Int)
+                    >-> Pipes.map buildPoint
+  where
+    buildPoint bs = flip runUnpacking bs $ do
+        addr <- Address <$> getWord64LE
+        SimplePoint addr <$> getWord64LE <*> getWord64LE
 
-decodeSimpleBurst :: Monad m => Pipe SimpleBurst SimplePoint m ()
-decodeSimpleBurst = undefined
+decodeExtended :: Monad m => Pipe ExtendedBurst ExtendedPoint m ()
+decodeExtended = Pipes.map unExtendedBurst >-> loop
+  where
+    loop = forever $ do
+        chunk <- await
+        emitFrom chunk 0 
 
-decodeExtendedBurst :: Monad m => Pipe ExtendedBurst ExtendedPoint m ()
-decodeExtendedBurst = undefined
+    emitFrom chunk os
+        | os >= BS.length chunk = return ()
+        | otherwise = do
+            let result = either throw id $ tryUnpacking (unpack os) chunk
+            yield result
 
+            let size = (BS.length $ extendedPayload result) + 24
+            emitFrom chunk (os + size)
 
+    unpack os = do
+        unpackSetPosition os
+        addr <- Address <$> getWord64LE
+        time <- getWord64LE
+        len <- fromIntegral <$> getWord64LE
+        payload <- if len == 0
+                       then getBytes len
+                       else return BS.empty
+
+        return $ ExtendedPoint addr time payload
+            
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
 sendSimple

@@ -47,9 +47,12 @@ instance Arbitrary WriteResult where
 
 instance Arbitrary ReadStream where
     arbitrary = oneof [ return InvalidReadOrigin
-                      , SimpleBurst <$> arbitrary
-                      , ExtendedBurst <$> arbitrary
+                      , SimpleStream . SimpleBurst <$> arbitrary
+                      , ExtendedStream . ExtendedBurst <$> arbitrary
                       , return EndOfStream ]
+
+instance Arbitrary PassThrough where
+    arbitrary = PassThrough <$> arbitrary
 
 instance Arbitrary Origin where
     -- suchThat condition should be removed once locators package is fixed
