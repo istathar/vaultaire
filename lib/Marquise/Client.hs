@@ -248,7 +248,7 @@ sendSimple
 sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
   where
     bytes = LB.fromStrict $ runPacking 24 $ do
-        putWord64LE ad
+        putWord64LE (ad `clearBit` 0)
         putWord64LE ts
         putWord64LE w
 
@@ -264,7 +264,7 @@ sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
   where
     len = BS.length bs
     bytes = LB.fromStrict $ runPacking (24 + len) $ do
-        putWord64LE ad
+        putWord64LE (ad `setBit` 0)
         putWord64LE ts
         putWord64LE $ fromIntegral len
         putBytes bs
