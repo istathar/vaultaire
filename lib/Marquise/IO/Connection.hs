@@ -7,7 +7,7 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Marquise.IO.Connection
@@ -17,12 +17,12 @@ module Marquise.IO.Connection
     recv,
 ) where
 
-import System.ZMQ4 hiding (send)
-import Data.List.NonEmpty (fromList)
-import Vaultaire.Types
-import Control.Exception
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
-import Control.Concurrent(threadDelay)
+import Control.Exception
+import Data.List.NonEmpty (fromList)
+import System.ZMQ4 hiding (send)
+import Vaultaire.Types
 
 withConnection :: String -> (Socket Dealer -> IO a) -> IO a
 withConnection broker f =

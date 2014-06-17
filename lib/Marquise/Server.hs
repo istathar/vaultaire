@@ -19,36 +19,33 @@ module Marquise.Server
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
-import Control.Monad (forever, unless)
+import Control.Monad (forever)
 import qualified Data.ByteString.Char8 as BS
-import Marquise.Client (makeSpoolName)
 import Marquise.Classes
-import Marquise.IO.SpoolFile(spoolDir)
+import Marquise.Client (makeSpoolName)
+import Marquise.IO.SpoolFile (spoolDir)
 import Marquise.Types (SpoolName (..))
-import System.Directory (doesDirectoryExist)
+import System.Directory (createDirectoryIfMissing)
 import Vaultaire.Types (Origin (..))
 
 -- | Send the next burst, returns when the burst is acknowledged and thus in
 -- the vault.
-sendNextBurst :: MarquiseWriterMonad m bp
+sendNextBurst :: MarquiseWriterMonad m
               => String -> Origin -> SpoolName -> m ()
 sendNextBurst broker origin ns = do
-    maybe_burst <- nextBurst ns
-    case maybe_burst of
-        Nothing ->
-            return ()
-        Just (bp, bytes) -> do
-            transmitBytes broker origin bytes
-            flagSent bp
+    (bytes, seal) <- nextBurst ns
+    transmitBytes broker origin (undefined bytes)
+    seal
 
 marquiseServer :: String -> String -> String -> IO ()
 marquiseServer broker origin user_sn = do
-    spool_exists <- doesDirectoryExist spoolDir
-    unless spool_exists $ throwIO $ userError $
-        "spool directory does not exist: " ++ spoolDir
     case makeSpoolName user_sn of
         Left e -> throwIO $ userError e
-        Right sn -> forever $ do
+        Right sn -> do
+            createDirectoryIfMissing True (spoolDir sn)
+            loop sn
+  where
+    loop sn = forever $ do
             sendNextBurst broker (Origin $ BS.pack origin) sn
             threadDelay idleTime
 

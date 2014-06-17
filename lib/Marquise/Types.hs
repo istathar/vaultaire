@@ -1,6 +1,4 @@
 --
--- Data vault for metrics
---
 -- Copyright © 2013-2014 Anchor Systems, Pty Ltd and Others
 --
 -- The code in this file, and the program it is a part of, is
@@ -15,6 +13,7 @@
 module Marquise.Types
 (
     SpoolName(..),
+    SpoolFile(..),
     TimeStamp(..),
     SimplePoint(..),
     ExtendedPoint(..),
@@ -26,7 +25,10 @@ import Vaultaire.Types
 
 -- | A NameSpace implies a certain amount of Marquise server-side state. This
 -- state being the Marquise server's authentication and origin configuration.
-newtype SpoolName = SpoolName String
+newtype SpoolName = SpoolName { unSpoolName :: String }
+  deriving (Eq, Show)
+
+newtype SpoolFile = SpoolFile { unSpoolFile :: FilePath }
   deriving (Eq, Show)
 
 -- | Time since epoch in nanoseconds. Internally a 'Word64'.

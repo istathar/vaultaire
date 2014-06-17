@@ -7,32 +7,38 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Marquise.IO.SpoolFile
 (
-    dataFilePath,
     spoolDir,
 ) where
 
 import qualified Data.ByteString.Lazy as LB
 import Marquise.Classes
+import Marquise.IO.FFI
 import Marquise.Types
+import System.Directory
+import System.FilePath.Posix
+import System.IO
+import System.Posix.Temp
 
 -- This could be more efficient if the handle were kept in a "global
 -- variable", using the noinline IORef hack.
 instance MarquiseSpoolFileMonad IO where
-    append ns = LB.appendFile (dataFilePath ns)
+    createSpoolFile sn = do
+        createDirectoryIfMissing True (spoolDir sn)
+        (tmp_path, tmp_handle) <- mkstemp (spoolFileTemplate sn)
+        hClose tmp_handle
+        return $ SpoolFile tmp_path
+
+    append = LB.appendFile . unSpoolFile
+
     close _ = c_sync
 
-dataFilePath :: SpoolName -> String
-dataFilePath (SpoolName ns) = spoolDir ++ ns
+spoolFileTemplate :: SpoolName -> String
+spoolFileTemplate ns = joinPath [spoolDir ns, "data_"]
 
--- Trailing slash is important
-spoolDir :: FilePath
-spoolDir = "/var/spool/marquise/"
-
-
-foreign import ccall "unistd.h sync" c_sync :: IO ()
+spoolDir :: SpoolName -> String
+spoolDir (SpoolName sn) = joinPath ["/var/spool/marquise/current/", sn]
 

@@ -7,49 +7,63 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TupleSections         #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Marquise.IO.Writer
 (
+    tryWorkDir
 ) where
 
-import Marquise.Classes
-import System.Directory
-import Marquise.IO.SpoolFile(dataFilePath)
-import System.Posix.Files
-import Vaultaire.Types
-import Marquise.IO.Connection
-import System.Posix.Temp
-import Data.ByteString(ByteString)
-import qualified Data.ByteString.Lazy as LB
-import Data.Word(Word64)
-import Control.Exception
-import Data.Maybe
 import Control.Applicative
-import qualified Data.Attoparsec as Parser
+import Control.Concurrent (threadDelay)
+import Control.Exception
+import Control.Monad.State
 import Data.Attoparsec (Parser)
+import qualified Data.Attoparsec as Parser
 import Data.Attoparsec.ByteString.Lazy (maybeResult, parse)
 import Data.Attoparsec.Combinator (eitherP, many')
-import Control.Monad.State
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import System.IO
-import Data.Packer 
+import qualified Data.ByteString.Lazy as LB
+import Data.Maybe
+import Data.Packer
+import Data.Word (Word64)
+import Marquise.Classes
+import Marquise.IO.Connection
+import Marquise.IO.FFI
+import Marquise.IO.SpoolFile (spoolDir)
 import Marquise.Types
+import System.Directory
+import System.FilePath.Posix
+import System.IO
+import System.IO.Unsafe
+import System.Posix.Files
+import System.Posix.IO (closeFd)
+import System.Posix.Temp
+import System.Posix.Types (Fd)
+import Vaultaire.Types
 
-newtype BurstPath = BurstPath { unBurstPath :: FilePath }
-    deriving (Show, Eq)
+instance MarquiseWriterMonad IO where
+    nextBurst sn = do
+        createDirectoryIfMissing True (spoolDir sn)
+        createDirectoryIfMissing True (workDir sn)
+        -- First check for any work already in the work spool dir.
+        work <- tryWorkDir sn
+        case work of
+            Nothing ->
+                -- No existing work, get some new work out of the spool
+                -- directory then.
+                rotateSpoolDir sn >> nextBurst sn
+            Just (fp, lock_fd) -> do
+                contents <- LB.readFile fp
+                let close_f = do { removeLink fp;
+                                   closeFd lock_fd }
+                return (contents, close_f)
 
-instance MarquiseWriterMonad IO BurstPath where
-    nextBurst ns = do
-        exists <- doesFileExist (dataFilePath ns)
-        if exists
-            then doSwap ns
-            else return Nothing
-
-    flagSent = removeLink . unBurstPath
 
     transmitBytes broker origin bytes =
         withConnection ("tcp://" ++ broker ++ ":5560") $ \c -> do
@@ -59,6 +73,49 @@ instance MarquiseWriterMonad IO BurstPath where
                 Left e -> throw e
                 Right OnDisk -> return ()
                 Right InvalidWriteOrigin -> error "send: Invalid origin"
+
+-- | Check the work directory for any outstanding work, if there is a potential
+-- candidate, lock it. If that fails, try the next.
+tryWorkDir :: SpoolName -> IO (Maybe (FilePath, Fd))
+tryWorkDir sn =
+    listToMaybe . catMaybes <$> (getAbsoluteDirectoryFiles (workDir sn)
+                                 >>= mapM lazyLock)
+  where
+    lazyLock :: FilePath -> IO (Maybe (FilePath, Fd))
+    lazyLock fp = unsafeInterleaveIO $ do
+        lock <- tryLock fp
+        case lock of
+            Nothing -> return Nothing
+            Just lock_fd -> return . Just $ (fp, lock_fd)
+
+getAbsoluteDirectoryFiles :: FilePath -> IO [FilePath]
+getAbsoluteDirectoryFiles =
+    getAbsoluteDirectoryContents >=> filterM doesFileExist
+
+getAbsoluteDirectoryContents :: FilePath -> IO [FilePath]
+getAbsoluteDirectoryContents fp =
+    map (\rel -> joinPath [fp, rel]) <$> getDirectoryContents fp
+
+workDir :: SpoolName -> FilePath
+workDir (SpoolName sn) = joinPath ["/var/spool/marquise/work", sn]
+
+workTemplate :: SpoolName -> FilePath
+workTemplate sn = joinPath [workDir sn, "data_"]
+
+rotateSpoolDir :: SpoolName -> IO ()
+rotateSpoolDir sn = do
+    works <- getAbsoluteDirectoryFiles (spoolDir sn)
+    case works of
+        [] -> wait >> rotateSpoolDir sn
+        x:_ -> do
+            (tmp_path, tmp_handle) <- mkstemp (workTemplate sn)
+            hClose tmp_handle
+            renameFile x tmp_path
+            wait
+  where
+    wait = threadDelay 1000000
+
+
 
 -- | Verify that the data is valid, we have to do this verification to split at
 -- a valid boundary anyway.
@@ -105,30 +162,8 @@ verifySplit = fromMaybe (error "verifySplit: impossible due to many'")
                 return Nothing
 
 
-doSwap :: SpoolName -> IO (Maybe (BurstPath, ByteString))
-doSwap ns =  do
-    -- Create a temp file to atomically move our data into.
-    (tmp_path, tmp_handle) <- mkstemp (tmpTemplate ns)
-    hClose tmp_handle
-    rename (dataFilePath ns) tmp_path
-
-    -- Read the whole file lazily
-    parsed <- try $ verifySplit <$> LB.readFile tmp_path
-    case parsed of
-        Right (burst_data, remainder) -> do
-            -- If the file is huge, we want to put the remainder back, this
-            -- happens lazily. Larger than memory files should not be an
-            -- issue.
-            unless (LB.null remainder) $ append ns remainder
-            return $ Just (BurstPath tmp_path, burst_data)
-        Left (_ :: ErrorCall) ->
-            error $ "nextBurst: panic: corrupt data:" ++ tmp_path
-
 
 -- A burst should be, at maximum, very close to this side, unless the user
 -- decides to send a very long extended point.
 idealBurstSize :: Word64
 idealBurstSize = maxBound -- 1048576 -- 1MB
-
-tmpTemplate :: SpoolName -> String
-tmpTemplate ns = dataFilePath ns ++ "_"

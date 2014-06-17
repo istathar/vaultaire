@@ -1,6 +1,4 @@
 --
--- Data vault for metrics
---
 -- Copyright © 2013-2014 Anchor Systems, Pty Ltd and Others
 --
 -- The code in this file, and the program it is a part of, is
@@ -53,28 +51,28 @@ module Marquise.Client
     readSimple,
     decodeExtended,
     decodeSimple,
-    
+
     -- * Types
     SpoolName,
     Address,
     TimeStamp(..),
 ) where
 
+import Control.Applicative
 import Control.Exception (SomeException, throw)
 import Control.Monad.Reader
-import Control.Applicative
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
+import Data.Packer
 import Data.Word (Word64)
 import Marquise.Classes
 import Marquise.IO ()
-import Marquise.Types 
+import Marquise.Types
 import Pipes
-import Data.Packer
 import qualified Pipes.ByteString
 import qualified Pipes.Prelude as Pipes
 import Vaultaire.Types
@@ -216,7 +214,7 @@ decodeExtended = Pipes.map unExtendedBurst >-> loop
   where
     loop = forever $ do
         chunk <- await
-        emitFrom chunk 0 
+        emitFrom chunk 0
 
     emitFrom chunk os
         | os >= BS.length chunk = return ()
@@ -237,12 +235,12 @@ decodeExtended = Pipes.map unExtendedBurst >-> loop
                        else getBytes len
 
         return $ ExtendedPoint addr time payload
-            
+
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
 sendSimple
     :: MarquiseSpoolFileMonad m
-    => SpoolName
+    => SpoolFile
     -> Address
     -> TimeStamp
     -> Word64
@@ -257,7 +255,7 @@ sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
 -- | Send an "extended" data point. Again, representation is up to you.
 sendExtended
     :: MarquiseSpoolFileMonad m
-    => SpoolName
+    => SpoolFile
     -> Address
     -> TimeStamp
     -> ByteString
@@ -274,7 +272,7 @@ sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
 -- | Ensure that all sent points have hit the local disk.
 flush
     :: MarquiseSpoolFileMonad m
-    => SpoolName
+    => SpoolFile
     -> m ()
 flush = close
 

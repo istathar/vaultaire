@@ -12,8 +12,8 @@ module Vaultaire.Types.PassThrough
     PassThrough(..)
 ) where
 
+import Data.ByteString (ByteString)
 import Vaultaire.Classes.WireFormat
-import Data.ByteString(ByteString)
 
 newtype PassThrough = PassThrough { unPassThrough :: ByteString }
   deriving (Eq, Show)

@@ -20,9 +20,9 @@ module Vaultaire.Types.Common
 
 import Data.ByteString (ByteString)
 import Data.Hashable (Hashable)
+import Data.Map (Map)
 import Data.String (IsString)
 import Data.Word (Word64)
-import Data.Map(Map)
 
 newtype Origin = Origin { unOrigin :: ByteString }
     deriving (Eq, Ord, IsString, Hashable, Show)

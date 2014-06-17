@@ -14,14 +14,15 @@ module Vaultaire.Types.ReadRequest
     ReadRequest(..),
 ) where
 
+import Control.Exception
 import Data.ByteString (ByteString)
-import Data.Packer (getBytes, getWord64LE, getWord8, tryUnpacking, putBytes, putWord64LE, putWord8, runPacking)
+import qualified Data.ByteString as S
+import Data.Packer (getBytes, getWord64LE, getWord8, putBytes, putWord64LE,
+                    putWord8, runPacking, tryUnpacking)
 import Data.Word (Word8)
 import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.Common
-import qualified Data.ByteString as S
-import Control.Exception
 
 data ReadRequest = SimpleReadRequest Address Time Time
                  | ExtendedReadRequest Address Time Time
@@ -30,11 +31,11 @@ data ReadRequest = SimpleReadRequest Address Time Time
 instance WireFormat ReadRequest where
     toWire (SimpleReadRequest addr start end) =
         packWithHeaderByte 0 addr start end
-    toWire (ExtendedReadRequest addr start end) = 
+    toWire (ExtendedReadRequest addr start end) =
         packWithHeaderByte 1 addr start end
 
     fromWire bs
-        | S.length bs /= 25 = Left . SomeException $ userError "expected 25 bytes" 
+        | S.length bs /= 25 = Left . SomeException $ userError "expected 25 bytes"
         | otherwise = flip tryUnpacking bs $ do
             header <- getWord8
             addr_bytes <- getBytes 8

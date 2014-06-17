@@ -7,8 +7,8 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Marquise.IO.Reader
@@ -17,7 +17,7 @@ module Marquise.IO.Reader
 
 import Marquise.Classes
 import Marquise.IO.Connection
-import System.ZMQ4(Socket, Dealer)
+import System.ZMQ4 (Dealer, Socket)
 
 instance MarquiseReaderMonad IO (Socket Dealer) where
     withReaderConnection broker =

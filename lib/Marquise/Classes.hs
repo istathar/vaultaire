@@ -7,8 +7,8 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
 
 module Marquise.Classes
 (
@@ -18,29 +18,29 @@ module Marquise.Classes
     MarquiseContentsMonad(..),
 ) where
 
+import Control.Exception (SomeException)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LB
 import Marquise.Types
 import Vaultaire.Types
-import Data.ByteString(ByteString)
-import Control.Exception(SomeException)
 
 -- | This class is for convenience of testing. It encapsulates all IO
 -- interaction that the client and server will do.
 class Monad m => MarquiseSpoolFileMonad m where
+    createSpoolFile :: SpoolName -> m SpoolFile
     -- | This append does not imply that the given data is synced to disk, just
     -- that it is queued to do so. This assumes no state, so any file handles
     -- must be stashed globally or re-opened and closed.
-    append :: SpoolName -> LB.ByteString -> m ()
+    append :: SpoolFile -> LB.ByteString -> m ()
     -- | Close any open handles and flush all previously appended datum to disk
-    close :: SpoolName -> m ()
+    close :: SpoolFile -> m ()
 
-class MarquiseSpoolFileMonad m => MarquiseWriterMonad m bp | m -> bp where
-    -- | Atomically empty the underlying store and retrieve the next "burst" of
-    -- appended datums. Appended datums are *not* separated. They're all
-    -- concatenated together into the same ByteString.
-    nextBurst :: SpoolName -> m (Maybe (bp, ByteString))
-    -- | Clean up a sent burst. This should be called on a successfull ack.
-    flagSent :: bp -> m ()
+class Monad m => MarquiseWriterMonad m where
+    -- | Return an lazy bytestring and an IO action to signify that the burst
+    -- has been completely sent.
+    --
+    -- May block until something is actually spooled up.
+    nextBurst :: SpoolName -> m (LB.ByteString, m ())
 
     -- | Send bytes upstream, returns when ack recieved.
     transmitBytes :: String      -- ^ Broker address

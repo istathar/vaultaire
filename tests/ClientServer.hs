@@ -6,9 +6,8 @@ module Main where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
-import Marquise.Client
 import Marquise.Classes
+import Marquise.Client
 import Marquise.IO ()
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
@@ -17,10 +16,9 @@ import Vaultaire.Daemon hiding (async)
 import Vaultaire.Types
 import Vaultaire.Util
 
-ns1, ns2, ns3 :: SpoolName
+ns1, ns2 :: SpoolName
 ns1 = either error id $ makeSpoolName "ns1"
 ns2 = either error id $ makeSpoolName "ns2"
-ns3 = either error id $ makeSpoolName "ns3"
 
 main :: IO ()
 main = do
@@ -31,38 +29,24 @@ main = do
 suite :: Spec
 suite =
     describe "IO MarquiseClientMonad and MarquiseServerMonad" $ do
-        it "returns nothing on empty file" $
-            nextBurst ns3 >>= (`shouldBe` Nothing)
-
         it "reads two appends, then cleans up when nextBurst is called" $ do
-            append ns1 "BBBBBBBBAAAAAAAACCCCCCCC"
-            append ns1 "DBBBBBBBAAAAAAAACCCCCCCC"
-            append ns2 "FBBBBBBBAAAAAAAACCCCCCCC"
+            sf1 <- createSpoolFile ns1
+            sf2 <- createSpoolFile ns2
 
-            Just (bp1,bytes1) <- nextBurst ns1
-            Just (bp2,bytes2) <- nextBurst ns2
+            append sf1 "BBBBBBBBAAAAAAAACCCCCCCC"
+            append sf1 "DBBBBBBBAAAAAAAACCCCCCCC"
+            append sf2 "FBBBBBBBAAAAAAAACCCCCCCC"
+
+            (bytes1,close_f1) <- nextBurst ns1
+            (bytes2,close_f2) <- nextBurst ns2
 
             bytes1 `shouldBe` "BBBBBBBBAAAAAAAACCCCCCCC\
                               \DBBBBBBBAAAAAAAACCCCCCCC"
             bytes2 `shouldBe` "FBBBBBBBAAAAAAAACCCCCCCC"
 
-            flagSent bp1
-            flagSent bp2
+            close_f1
+            close_f2
 
-            nextBurst ns1 >>= (`shouldBe` Nothing)
-            nextBurst ns2 >>= (`shouldBe` Nothing)
-
-        it "splits up after 1MB" $ do
-            let large_burst = BS.replicate 1048584 'B'
-            append ns1 large_burst
-            append ns1 "DDDDDDDDDDDDDDDDDDDDDDDD"
-            Just (bp1,bytes1) <- nextBurst ns1
-            Just (bp2,bytes2) <- nextBurst ns1
-            nextBurst ns1 >>= (`shouldBe` Nothing)
-
-            (bp1 == bp2) `shouldBe` False
-            bytes1 `shouldBe` BS.toStrict large_burst
-            bytes2 `shouldBe` "DDDDDDDDDDDDDDDDDDDDDDDD"
 
         it "talks to a vaultaire daemon" $ do
             shutdown <- newEmptyMVar
