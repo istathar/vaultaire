@@ -55,6 +55,7 @@ module Marquise.Client
     -- * Types
     SpoolName,
     Address,
+    Origin(..),
     TimeStamp(..),
 ) where
 
