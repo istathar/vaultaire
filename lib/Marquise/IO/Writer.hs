@@ -60,10 +60,8 @@ instance MarquiseWriterMonad IO where
                 rotateSpoolDir sn >> nextBurst sn
             Just (fp, lock_fd) -> do
                 contents <- LB.readFile fp
-                let close_f = do { removeLink fp;
-                                   closeFd lock_fd }
+                let close_f = removeLink fp >> closeFd lock_fd
                 return (contents, close_f)
-
 
     transmitBytes broker origin bytes =
         withConnection ("tcp://" ++ broker ++ ":5560") $ \c -> do
