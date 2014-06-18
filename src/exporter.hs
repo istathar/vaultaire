@@ -97,7 +97,8 @@ main = do
     -- just one
     [arg] <- getArgs
 
-    let Right spool = Marquise.makeSpoolName "exporter"
+    let Right name = Marquise.makeSpoolName "exporter"
+    spool <- Marquise.createSpoolFile name
 
     Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
         Rados.runPool "vaultaire" $ do
@@ -119,8 +120,8 @@ main = do
                 let s' = convertSourceDict s
 
                 -- Register that source at address
-                liftIO $ Marquise.withBroker "localhost" o' $
-                    Marquise.updateSourceDict a s' >>= either throw return
+                liftIO $ Marquise.withContentsConnection "localhost" $ \c ->
+                    Marquise.updateSourceDict a s' o' c >>= either throw return
 
                 -- Process all its data points
                 forM_ is $ \i -> do
@@ -136,7 +137,7 @@ main = do
                         liftIO $ forM_ ps (convertPointAndWrite spool a)
 
 
-convertPointAndWrite :: Marquise.SpoolName -> Marquise.Address -> Point -> IO ()
+convertPointAndWrite :: Marquise.SpoolFile -> Marquise.Address -> Point -> IO ()
 convertPointAndWrite spool a p =
   let
     t = Marquise.TimeStamp (timestamp p)
