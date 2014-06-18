@@ -29,7 +29,6 @@ module Marquise.Client
 (
     -- | * Utility functions
     -- Note: You may read MarquiseSpoolFileMonad m as IO.
-    makeSpoolName,
     hashIdentifier,
 
     -- | * Contents daemon requests
@@ -41,6 +40,8 @@ module Marquise.Client
     enumerateOrigin,
 
     -- | * Sending data to Vaultaire
+    makeSpoolName,
+    createSpoolFile,
     sendSimple,
     sendExtended,
     flush,
@@ -54,6 +55,7 @@ module Marquise.Client
 
     -- * Types
     SpoolName,
+    SpoolFile,
     Address,
     Origin(..),
     TimeStamp(..),

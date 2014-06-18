@@ -20,7 +20,8 @@ module Marquise.Server
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
 import Control.Monad (forever)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as S
+import qualified Data.ByteString.Lazy as L
 import Marquise.Classes
 import Marquise.Client (makeSpoolName)
 import Marquise.IO.SpoolFile (spoolDir)
@@ -34,7 +35,7 @@ sendNextBurst :: MarquiseWriterMonad m
               => String -> Origin -> SpoolName -> m ()
 sendNextBurst broker origin ns = do
     (bytes, seal) <- nextBurst ns
-    transmitBytes broker origin (undefined bytes)
+    transmitBytes broker origin (L.toStrict bytes)  -- TODO replace toStrict
     seal
 
 marquiseServer :: String -> String -> String -> IO ()
@@ -46,7 +47,7 @@ marquiseServer broker origin user_sn = do
             loop sn
   where
     loop sn = forever $ do
-            sendNextBurst broker (Origin $ BS.pack origin) sn
+            sendNextBurst broker (Origin $ S.pack origin) sn
             threadDelay idleTime
 
 idleTime :: Int
