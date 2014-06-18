@@ -57,6 +57,8 @@ module Marquise.Client
     Address,
     Origin(..),
     TimeStamp(..),
+    SimpleBurst(..),
+    SimplePoint(..),
 ) where
 
 import Control.Applicative
