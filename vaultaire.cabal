@@ -127,6 +127,32 @@ executable vault
 
   ghc-prof-options:  -fprof-auto
 
+test-suite           kitchen-sink
+  hs-source-dirs:    tests
+  main-is:           KitchenSink.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     bytestring,
+                     rados-haskell,
+                     packer,
+                     async,
+                     zeromq4-haskell,
+                     optparse-applicative,
+                     trifecta,
+                     directory,
+                     hslogger,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
+  ghc-prof-options:  -fprof-auto
+
 
 test-suite           daemon-test
   hs-source-dirs:    tests
