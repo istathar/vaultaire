@@ -110,7 +110,7 @@ suite = do
         it "correctly rolls over day" $ do
             new <- runTestDaemon "tcp://localhost:1234" $ do
                 updateSimpleLatest "PONY" 0x42
-                rollOverSimpleDay "PONY"
+                rollOverSimpleDay "PONY" 8
                 liftPool $ runObject "02_PONY_simple_days" readFull
             new `shouldBe` Right dayFileD
 
@@ -119,7 +119,7 @@ suite = do
                 writePonyDayMap "02_PONY_simple_days" dayFileC
 
                 updateSimpleLatest "PONY" 0x48
-                rollOverSimpleDay "PONY"
+                rollOverSimpleDay "PONY" 8
 
                 liftPool $ runObject "02_PONY_simple_days" readFull
             new `shouldBe` Right dayFileC
@@ -128,7 +128,7 @@ suite = do
             runTestDaemon "tcp://localhost:1234"
                 (do liftPool $ runObject "02_PONY_simple_latest" $
                         append "garbage"
-                    rollOverSimpleDay "PONY")
+                    rollOverSimpleDay "PONY" 8)
                 `shouldThrow` anyErrorCall
 
 replyOne :: MVar () -> IO (ByteString, ByteString)
