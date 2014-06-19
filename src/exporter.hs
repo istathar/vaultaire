@@ -94,38 +94,34 @@ debug = liftIO . putStrLn . show
 
 main :: IO ()
 main = do
-    -- just one
-    [arg] <- getArgs
+    [arg1, arg2, arg3] <- getArgs
+    
+    let t1 = read (arg2 ++ "000000000")
+    let t2 = read (arg3 ++ "000000000")
 
     let Right name = Marquise.makeSpoolName "exporter"
     spool <- Marquise.createSpoolFile name
 
     Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
         Rados.runPool "vaultaire" $ do
-            let o = Origin (S.pack arg)
-            let o' = Vaultaire.Origin (S.pack arg)
+            let o = Origin (S.pack arg1)
+            let o' = Vaultaire.Origin (S.pack arg1)
             let l = Contents.formObjectLabel o
             st <- Contents.readVaultObject l
-            let t1 = 1393632000000000000 --  1 March
+--          let t1 = 1393632000000000000 --  1 March
 --          let t1 = 1388534400000000000 --  1 January
-            let t2 = 1402790400000000000 -- 15 June
+--          let t2 = 1402790400000000000 -- 15 June
             let is = Bucket.calculateTimemarks t1 t2
 
-            forM_ st $ \s -> do
-                debug s
-                -- Work out address
-                let a = hashSourceToAddress o s
 
-                -- All tags, less undesirables
-                let s' = convertSourceDict s
+            liftIO $ putStrLn "-- data points"
 
-                -- Register that source at address
-                liftIO $ Marquise.withContentsConnection "localhost" $ \c ->
-                    Marquise.updateSourceDict a s' o' c >>= either throw return
+            forM_ is $ \i -> do
+                forM_ st $ \s -> do
+                    -- Work out address
+                    let a' = hashSourceToAddress o s
 
-                -- Process all its data points
-                forM_ is $ \i -> do
-                    liftIO $ putStr $ (show o) ++ " " ++ (show a) ++ " " ++ (show i) ++ " "
+                    liftIO $ putStr $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " "
                     m <- Bucket.readVaultObject o s i
 
                     if (Map.null m)
@@ -133,8 +129,22 @@ main = do
                         liftIO $ printf "%6s\n" ("-" :: String)
                       else do
                         let ps = Bucket.pointsInRange t1 t2 m
-                        liftIO $ printf "%6d\n" (length ps)
-                        liftIO $ forM_ ps (convertPointAndWrite spool a)
+                        liftIO $ printf "%6d\n" (length ps) >> return ()
+                        liftIO $ forM_ ps (convertPointAndWrite spool a')
+
+            liftIO $ putStrLn "-- contents"
+
+            forM_ st $ \s -> do
+                debug s
+                -- Work out address
+                let a' = hashSourceToAddress o s
+
+                -- All tags, less undesirables
+                let s' = convertSourceDict s
+
+                -- Register that source at address
+                liftIO $ Marquise.withContentsConnection "localhost" $ \c ->
+                    Marquise.updateSourceDict a' s' o' c >>= either throw return
 
 
 convertPointAndWrite :: Marquise.SpoolFile -> Marquise.Address -> Point -> IO ()

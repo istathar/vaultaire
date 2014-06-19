@@ -19,6 +19,7 @@ convert
 snippet
 roundtrip
 bench
+exporter
 
 # other detruitus
 junk/
