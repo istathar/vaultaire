@@ -27,8 +27,10 @@ startReader :: String           -- ^ Broker
             -> Maybe ByteString -- ^ Username for Ceph
             -> ByteString       -- ^ Pool name for Ceph
             -> IO ()
-startReader broker user pool = runDaemon broker user pool $
-    forever $ nextMessage >>= handleRequest
+startReader broker user pool = do
+    liftIO $ infoM "Reader.startReader" "Reader daemon starting"
+    runDaemon broker user pool $
+        forever $ nextMessage >>= handleRequest
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =

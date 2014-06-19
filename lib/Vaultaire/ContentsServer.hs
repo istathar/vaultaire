@@ -38,14 +38,15 @@ startContents
     -> Maybe ByteString -- ^ Username for Ceph
     -> ByteString       -- ^ Pool name for Ceph
     -> IO ()
-startContents broker user pool =
+startContents broker user pool = do
+    liftIO $ infoM "Contents.startContents" "Contents daemon starting"
     runDaemon broker user pool . forever $ nextMessage >>= handleRequest
 
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply origin payload) =
     case fromWire payload of
-        Left err -> liftIO $ errorM "ContentsServer.handleRequest" $
+        Left err -> liftIO $ errorM "Contents.handleRequest" $
                                     "bad request: " ++ show err
         Right op -> case op of
             ContentsListRequest   -> performListRequest reply origin
