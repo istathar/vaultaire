@@ -19,6 +19,7 @@ import Vaultaire.ContentsServer
 import Vaultaire.Daemon (extendedDayOID, simpleDayOID, withPool)
 import Vaultaire.Reader (startReader)
 import Vaultaire.Types (Origin (..))
+import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 
 data Options = Options
@@ -126,33 +127,43 @@ main = do
     runContents pool user broker
     runWriter pool user broker batchPeriod bucketSize
     runReader pool user broker
-    marquiseServer broker origin namespace
+    runMarquise broker origin namespace
+
+    debugM "Main.main" "All threads backgrounded"
+    waitForever
+
+runMarquise :: String -> String -> String -> IO ()
+runMarquise broker origin namespace = do
+    debugM "Main.main" "Marquise daemon starting"
+    fork $ marquiseServer broker origin namespace
 
 runBroker :: IO ()
 runBroker = runZMQ $ do
-    void $ async $ startProxy (Router,"tcp://*:5560")
+    forkZ $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
                               "tcp://*:5000"
 
-    void $ async $ startProxy (Router,"tcp://*:5570")
+    forkZ $ startProxy (Router,"tcp://*:5570")
                               (Dealer,"tcp://*:5571")
                               "tcp://*:5001"
 
-    void $ async $ startProxy (Router,"tcp://*:5580")
+    forkZ $ startProxy (Router,"tcp://*:5580")
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
     liftIO $ debugM "Main.runBroker" "Proxies started."
+  where
+    forkZ a = (liftIO . A.link) =<< async a
 
 runReader :: String -> String -> String -> IO ()
 runReader pool user broker =
-    void $ A.async $ startReader ("tcp://" ++ broker ++ ":5571")
+    fork $ startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
 
 runWriter :: String -> String -> String -> Word32 -> Word64 -> IO ()
 runWriter pool user broker poll_period bucket_size =
-    void $ A.async $ startWriter ("tcp://" ++ broker ++ ":5561")
+    fork $ startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
@@ -160,9 +171,12 @@ runWriter pool user broker poll_period bucket_size =
 
 runContents :: String -> String -> String -> IO ()
 runContents pool user broker =
-    void $ A.async $ startContents ("tcp://" ++ broker ++ ":5581")
+    fork $ startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)
                 (S.pack pool)
+
+fork :: IO a -> IO ()
+fork a = A.link =<< A.async a
 
 runRegisterOrigin :: String -> String -> String -> Word64 -> IO ()
 runRegisterOrigin pool user origin buckets = do
