@@ -22,16 +22,8 @@ import Control.Applicative
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad.State
-import Data.Attoparsec (Parser)
-import qualified Data.Attoparsec as Parser
-import Data.Attoparsec.ByteString.Lazy (maybeResult, parse)
-import Data.Attoparsec.Combinator (eitherP, many')
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as LB
 import Data.Maybe
-import Data.Packer
-import Data.Word (Word64)
 import Marquise.Classes
 import Marquise.IO.Connection
 import Marquise.IO.FFI
@@ -112,56 +104,3 @@ rotateSpoolDir sn = do
             wait
   where
     wait = threadDelay 1000000
-
-
-
--- | Verify that the data is valid, we have to do this verification to split at
--- a valid boundary anyway.
-verifySplit :: LB.ByteString -> (ByteString, LB.ByteString)
-verifySplit = fromMaybe (error "verifySplit: impossible due to many'")
-                        . maybeResult . parse verify
-  where
-    verify = (,) <$> (LB.toStrict . LB.fromChunks <$> chunks)
-                 <*> Parser.takeLazyByteString
-    -- Yes, a linked list of bytestrings isn't the most efficient structure.
-    -- It's more than fast enough.
-    chunks :: Parser [ByteString]
-    chunks = flip evalStateT 0 $ many' $ do
-        current_size <- get
-        when (current_size > idealBurstSize) (lift $ fail "I am full now.")
-
-        packet <- lift $ Parser.take 24
-
-        case extendedSize packet of
-            Just len -> do
-                -- Mast ensure that we get this many bytes now, or attoparsec
-                -- will just backtrack on us. We do this with a dummy parser
-                -- inside an eitherP
-                extended <- lift $ eitherP (Parser.take len) (return ())
-                case extended of
-                    Left bytes -> do
-                        put (current_size + fromIntegral len + 24)
-                        return $ BS.append packet bytes
-                    Right () ->
-                        error $ "verifySplit: corrupt data (extended burst) at: "
-                                ++ show current_size
-            Nothing -> do
-                put (current_size + 24)
-                return packet
-
-    extendedSize :: ByteString -> Maybe Int
-    extendedSize packet = flip runUnpacking packet $ do
-        addr <- Address <$> getWord64LE
-        if isAddressExtended addr
-            then do
-                unpackSkip 8
-                Just . fromIntegral <$> getWord64LE -- length
-            else
-                return Nothing
-
-
-
--- A burst should be, at maximum, very close to this side, unless the user
--- decides to send a very long extended point.
-idealBurstSize :: Word64
-idealBurstSize = maxBound -- 1048576 -- 1MB
