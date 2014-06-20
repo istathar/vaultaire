@@ -24,6 +24,7 @@ import Vaultaire.Types
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 import Marquise.Client
+import Data.String
 import Pipes
 
 data Options = Options
@@ -137,7 +138,7 @@ readOptionsParser = Read <$> parseOrigin
                          <*> parseStart
                          <*> parseEnd
   where
-    parseAddress = argument (fmap Address . auto) (metavar "ADDRESS")
+    parseAddress = argument (fmap fromString . str) (metavar "ADDRESS")
     parseStart = O.option $
         long "start"
         <> short 's'
