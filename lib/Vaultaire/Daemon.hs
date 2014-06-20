@@ -32,6 +32,7 @@ module Vaultaire.Daemon
     withExLock,
     cacheExpired,
     -- * Helpers
+    dayMapsFromCeph,
     simpleDayOID,
     extendedDayOID,
     bucketOID,
@@ -263,6 +264,7 @@ dayMapsFromCeph origin' = do
                                 " (" ++ show e ++ ")"
             Right contents ->
                 tryLoad file contents
+
     tryLoad day_file contents = case loadDayMap contents of
         Left e ->
             return $ Left $ "Failed to load day file: " ++

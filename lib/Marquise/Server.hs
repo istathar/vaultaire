@@ -48,7 +48,7 @@ sendNextBurst broker origin ns = do
                     (lift . transmitBytes broker origin)
     seal
 
-marquiseServer :: String -> String -> String -> IO ()
+marquiseServer :: String -> Origin -> String -> IO ()
 marquiseServer broker origin user_sn =
     case makeSpoolName user_sn of
         Left e -> throwIO $ userError e
@@ -57,7 +57,7 @@ marquiseServer broker origin user_sn =
             loop sn
   where
     loop sn = forever $ do
-            sendNextBurst broker (Origin $ S.pack origin) sn
+            sendNextBurst broker origin sn
             threadDelay idleTime
 
 idleTime :: Int

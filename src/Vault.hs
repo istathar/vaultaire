@@ -18,11 +18,13 @@ import System.ZMQ4.Monadic
 import Text.Trifecta
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
-import Vaultaire.Daemon (extendedDayOID, simpleDayOID, withPool)
+import Vaultaire.Daemon (extendedDayOID, simpleDayOID, withPool, dayMapsFromCeph)
 import Vaultaire.Reader (startReader)
-import Vaultaire.Types (Origin (..))
+import Vaultaire.Types
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
+import Marquise.Client
+import Pipes
 
 data Options = Options
   { pool      :: String
@@ -34,9 +36,15 @@ data Options = Options
 data Component = Broker
                | Reader
                | Writer { batchPeriod :: Word32, bucketSize :: Word64 }
-               | Marquise { origin :: String, namespace :: String }
+               | Marquise { origin :: Origin, namespace :: String }
                | Contents
-               | RegisterOrigin { origin :: String, buckets :: Word64 }
+               | RegisterOrigin { origin :: Origin, buckets :: Word64 }
+               | Read { origin  :: Origin
+                      , address :: Address
+                      , start   :: Word64
+                      , end     :: Word64 }
+               | List { origin :: Origin }
+               | DumpDays { origin :: Origin }
 
 -- | Command line option parsing
 
@@ -85,7 +93,10 @@ optionsParser Options{..} = Options <$> parsePool
        <> parseWriterComponent
        <> parseMarquiseComponent
        <> parseContentsComponent
-       <> parseRegisterOriginComponent )
+       <> parseRegisterOriginComponent
+       <> parseReadComponent
+       <> parseListComponent
+       <> parseDumpDaysComponent )
 
     parseBrokerComponent = command "broker" $
         info (pure Broker) (progDesc "Start a broker deamon")
@@ -105,17 +116,57 @@ optionsParser Options{..} = Options <$> parsePool
     parseRegisterOriginComponent = command "register" $
         info registerOriginParser (progDesc "Register a new origin")
 
+    parseReadComponent = command "read" $
+        info readOptionsParser (progDesc "Read points")
+
+    parseListComponent = command "list" $
+        info listOptionsParser (progDesc "List addresses and metadata in origin")
+
+    parseDumpDaysComponent = command "days" $
+        info dumpDaysParser (progDesc "Display the current day map contents")
+
+
+parseOrigin :: O.Parser Origin
+parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
+  where
+    mkOrigin = Origin . S.pack
+
+readOptionsParser :: O.Parser Component
+readOptionsParser = Read <$> parseOrigin
+                         <*> parseAddress
+                         <*> parseStart
+                         <*> parseEnd
+  where
+    parseAddress = argument (fmap Address . auto) (metavar "ADDRESS")
+    parseStart = O.option $
+        long "start"
+        <> short 's'
+        <> value 0
+        <> showDefault
+        <> help "Start time in nanoseconds since epoch"
+    parseEnd = O.option $
+        long "end"
+        <> short 'e'
+        <> value maxBound
+        <> showDefault
+        <> help "End time in nanoseconds since epoch"
+
+listOptionsParser :: O.Parser Component
+listOptionsParser = List <$> parseOrigin
+
+dumpDaysParser :: O.Parser Component
+dumpDaysParser = DumpDays <$> parseOrigin
+
 registerOriginParser :: O.Parser Component
 registerOriginParser = RegisterOrigin <$> parseOrigin <*> parseBuckets
   where
-    parseOrigin = argument str (metavar "ORIGIN")
-
     parseBuckets = O.option $
         long "buckets"
         <> short 'n'
         <> value 128
         <> showDefault
         <> help "Number of buckets to distribute writes over"
+
 
 writerOptionsParser :: O.Parser Component
 writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
@@ -137,11 +188,6 @@ writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
 marquiseOptionsParser :: O.Parser Component
 marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
   where
-    parseOrigin = strOption $
-        long "origin"
-        <> short 'o'
-        <> metavar "ORIGIN"
-        <> help "Origin to write to"
     parseNameSpace = strOption $
         long "namespace"
         <> short 'n'
@@ -199,6 +245,35 @@ main = do
         Marquise origin namespace -> marquiseServer broker origin namespace
         Contents -> runContents pool user broker
         RegisterOrigin origin buckets -> runRegisterOrigin pool user origin buckets
+        Read origin addr start end -> runRead broker origin addr start end
+        List origin -> runList broker origin
+        DumpDays origin -> runDumpDays pool user origin
+
+runRead :: String -> Origin -> Address -> Word64 -> Word64 -> IO ()
+runRead broker origin addr start end =
+    withReaderConnection broker $ \c ->
+        runEffect $ for (readSimple addr start end origin c >-> decodeSimple)
+                        (lift . print)
+
+runList :: String -> Origin -> IO ()
+runList broker origin =
+    withContentsConnection broker $ \c ->
+        runEffect $ for (enumerateOrigin origin c) (lift . print)
+
+runDumpDays :: String -> String -> Origin -> IO ()
+runDumpDays pool user origin =  do
+    let user' = Just (S.pack user)
+    let pool' = S.pack pool
+
+    maps <- withPool user' pool' (dayMapsFromCeph origin)
+    case maps of
+        Left e -> error e
+        Right ((_, simple), (_, extended)) -> do
+            putStrLn "Simple day map:"
+            print simple
+            putStrLn "Extended day map:"
+            print extended
+
 
 runBroker :: IO ()
 runBroker = runZMQ $ do
@@ -237,10 +312,9 @@ runContents pool user broker =
                 (Just $ S.pack user)
                 (S.pack pool)
 
-runRegisterOrigin :: String -> String -> String -> Word64 -> IO ()
+runRegisterOrigin :: String -> String -> Origin -> Word64 -> IO ()
 runRegisterOrigin pool user origin buckets = do
-    let origin' = Origin (S.pack origin)
-    let targets = [simpleDayOID origin', extendedDayOID origin']
+    let targets = [simpleDayOID origin, extendedDayOID origin]
     let user' = Just (S.pack user)
     let pool' = S.pack pool
 

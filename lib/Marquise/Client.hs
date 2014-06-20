@@ -177,6 +177,8 @@ readSimple addr start end origin conn = do
                 yield burst >> loop
             Right EndOfStream ->
                 return ()
+            Right InvalidReadOrigin ->
+                error "readSimple loop: Invalid origin"
             Right _ ->
                 error "readSimple loop: Invalid response"
             Left e ->

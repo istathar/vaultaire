@@ -27,7 +27,6 @@ import Data.Word (Word64)
 newtype Origin = Origin { unOrigin :: ByteString }
     deriving (Eq, Ord, IsString, Hashable, Show)
 
-
 -- These can all be newtype wrapped as make work, perhaps excluding DayMap.
 -- They have no reason to be inter-mixed.
 

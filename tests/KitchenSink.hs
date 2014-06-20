@@ -135,7 +135,8 @@ main = do
 runMarquise :: String -> String -> String -> IO ()
 runMarquise broker origin namespace = do
     debugM "Main.main" "Marquise daemon starting"
-    fork $ marquiseServer broker origin namespace
+    let origin' = Origin (S.pack origin)
+    fork $ marquiseServer broker origin' namespace
 
 runBroker :: IO ()
 runBroker = runZMQ $ do

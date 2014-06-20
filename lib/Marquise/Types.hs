@@ -38,7 +38,9 @@ newtype TimeStamp = TimeStamp Word64
 data SimplePoint = SimplePoint { simpleAddress :: Address
                                , simpleTime    :: Time
                                , simplePayload :: Word64 }
+  deriving Show
 
 data ExtendedPoint = ExtendedPoint { extendedAddress :: Address
                                    , extendedTime    :: Time
                                    , extendedPayload :: ByteString }
+  deriving Show

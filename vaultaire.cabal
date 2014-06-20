@@ -116,6 +116,7 @@ executable vault
                      optparse-applicative,
                      trifecta,
                      directory,
+                     pipes,
                      hslogger,
                      vaultaire
 
