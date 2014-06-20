@@ -24,20 +24,13 @@ import Vaultaire.Types
 --
 -- All day maps will be invalidated on roll over, it is up to you to ensure
 -- that they are reloaded before next use.
-rollOverSimpleDay :: Origin -> Daemon ()
-rollOverSimpleDay origin' = do
-    (_, buckets) <- withSimpleDayMap origin' (lookupFirst maxBound)
-                    >>= mustBucket
-    rollOver origin' (simpleDayOID origin') (simpleLatestOID origin') buckets
+rollOverSimpleDay :: Origin -> NumBuckets -> Daemon ()
+rollOverSimpleDay origin' =
+    rollOver origin' (simpleDayOID origin') (simpleLatestOID origin')
 
-rollOverExtendedDay :: Origin -> Daemon ()
-rollOverExtendedDay origin' = do
-    (_, buckets) <- withExtendedDayMap origin' (lookupFirst maxBound)
-                    >>= mustBucket
-    rollOver origin' (extendedDayOID origin') (extendedLatestOID origin') buckets
-
-mustBucket :: Monad m => Maybe a -> m a
-mustBucket = maybe (error "could not find n_buckets for roll over") return
+rollOverExtendedDay :: Origin -> NumBuckets -> Daemon ()
+rollOverExtendedDay origin' =
+    rollOver origin' (extendedDayOID origin') (extendedLatestOID origin')
 
 -- | This compares the given time against the latest one in ceph, and updates
 -- if larger.
@@ -69,7 +62,7 @@ updateLatest oid time = withExLock oid . liftPool $ do
 
 rollOver :: Origin -> ByteString -> ByteString -> NumBuckets -> Daemon ()
 rollOver origin day_file latest_file buckets =
-    withExLock (simpleLatestOID origin) $ do
+    withExLock (originLockOID origin) $ do
         om <- get
         expired <- cacheExpired om origin
         unless expired $ do

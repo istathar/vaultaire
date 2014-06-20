@@ -282,10 +282,10 @@ appendExtended epoch bucket (Address address) time len string = do
 write :: Origin -> Bool -> Consumer BatchState Daemon ()
 write origin do_rollovers = do
     s <- await
-    (offsets, extended_rollover) <- writeExtendedBuckets s
+    extended_offsets <- writeExtendedBuckets s
 
-    let simple_buckets = applyOffsets offsets (simple s) (pending s)
-    simple_rollover <- stepTwo simple_buckets (bucketSize s)
+    let simple_buckets = applyOffsets extended_offsets (simple s) (pending s)
+    simple_offsets <- stepTwo simple_buckets
 
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
@@ -298,9 +298,32 @@ write origin do_rollovers = do
 
         -- 4. Do any rollovers
         when do_rollovers $ do
-            when simple_rollover (rollOverSimpleDay origin)
-            when extended_rollover (rollOverExtendedDay origin)
+            let limit = bucketSize s
+            -- We want to ensure that the rollover only happens if an offset is
+            -- exceeded for the latest epoch, otherwise we get duplicate
+            -- rollovers.
+            (simple_epoch, n_simple_buckets) <- getLatestEpoch withSimpleDayMap
+            (extended_epoch, n_extended_buckets) <- getLatestEpoch withExtendedDayMap
+
+            when (offsetExceeded simple_offsets simple_epoch limit)
+                 (rollOverSimpleDay origin n_simple_buckets)
+            when (offsetExceeded extended_offsets extended_epoch limit)
+                 (rollOverExtendedDay origin n_extended_buckets)
   where
+    getLatestEpoch f =
+        f origin (lookupFirst maxBound) >>= mustBucket
+
+    mustBucket = maybe (error "could not find n_buckets for roll over") return
+
+    offsetExceeded offsetss epoch limit =
+        case HashMap.lookup epoch offsetss of
+            Nothing ->
+                -- The latest epoch wasn't written to this time, so we don't
+                -- need to rollover.
+                False
+            Just offsets ->
+                HashMap.foldr max 0 offsets > limit
+
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.
     writeExtendedBuckets s =
@@ -337,7 +360,7 @@ write origin do_rollovers = do
                             "extended bucket write: " ++ show e
                         Nothing -> return ()
 
-            return (offsets, findMax offsets > bucketSize s)
+            return offsets
 
     -- Given two maps, one of offsets and one of closures, we walk through
     -- applying one to the other. We then append that to the map of simple
@@ -360,8 +383,8 @@ write origin do_rollovers = do
                     in HashMap.insert epoch simple_buckets' simple_map''
 
     -- Final write,
-    stepTwo simple_buckets bucket_size = lift $ liftPool $ do
-        offsets <- forWithKey simple_buckets $ \epoch buckets -> do
+    stepTwo simple_buckets = lift $ liftPool $
+        forWithKey simple_buckets $ \epoch buckets -> do
             writes <- forWithKey buckets $ \bucket builder -> do
                 let payload = toStrict $ toLazyByteString builder
                 writeSimple origin epoch bucket payload
@@ -377,10 +400,8 @@ write origin do_rollovers = do
                             Left e   -> fatal "Writer.stepTwo" $
                                               "simple bucket read: " ++ show e
                             Right st -> return $ fileSize st
-        return $ findMax offsets > bucket_size
 
     forWithKey = flip HashMap.traverseWithKey
-    findMax = HashMap.foldr max 0 . HashMap.map (HashMap.foldr max 0)
 
 extendedOffset :: Origin -> Epoch -> Bucket -> Pool (AsyncRead StatResult)
 extendedOffset o e b =
