@@ -208,29 +208,30 @@ readExtended addr start end origin conn = do
                 throw e
 
 decodeSimple :: Monad m => Pipe SimpleBurst SimplePoint m ()
-decodeSimple = Pipes.map unSimpleBurst
-                    >-> Pipes.ByteString.take (24 :: Int)
-                    >-> Pipes.map buildPoint
+decodeSimple = forever (unSimpleBurst <$> await >>= emitFrom 0)
   where
-    buildPoint bs = flip runUnpacking bs $ do
-        addr <- Address <$> getWord64LE
-        SimplePoint addr <$> getWord64LE <*> getWord64LE
-
-decodeExtended :: Monad m => Pipe ExtendedBurst ExtendedPoint m ()
-decodeExtended = Pipes.map unExtendedBurst >-> loop
-  where
-    loop = forever $ do
-        chunk <- await
-        emitFrom chunk 0
-
-    emitFrom chunk os
+    emitFrom os chunk
         | os >= BS.length chunk = return ()
         | otherwise = do
-            let result = either throw id $ tryUnpacking (unpack os) chunk
+            yield $ flip runUnpacking chunk $ do
+                unpackSetPosition os
+                addr <- Address <$> getWord64LE
+                SimplePoint addr <$> getWord64LE <*> getWord64LE
+
+            emitFrom (os + 24) chunk
+
+
+decodeExtended :: Monad m => Pipe ExtendedBurst ExtendedPoint m ()
+decodeExtended = forever (unExtendedBurst <$> await >>= emitFrom 0)
+  where
+    emitFrom os chunk
+        | os >= BS.length chunk = return ()
+        | otherwise = do
+            let result = runUnpacking (unpack os) chunk
             yield result
 
             let size = BS.length (extendedPayload result) + 24
-            emitFrom chunk (os + size)
+            emitFrom (os + size) chunk
 
     unpack os = do
         unpackSetPosition os
