@@ -14,7 +14,7 @@ module Marquise.IO.SpoolFile
     spoolDir,
 ) where
 
-import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString as S
 import Marquise.Classes
 import Marquise.IO.FFI
 import Marquise.Types
@@ -32,7 +32,7 @@ instance MarquiseSpoolFileMonad IO where
         hClose tmp_handle
         return $ SpoolFile tmp_path
 
-    append = LB.appendFile . unSpoolFile
+    append = S.appendFile . unSpoolFile
 
     close _ = c_sync
 

@@ -31,7 +31,7 @@ class Monad m => MarquiseSpoolFileMonad m where
     -- | This append does not imply that the given data is synced to disk, just
     -- that it is queued to do so. This assumes no state, so any file handles
     -- must be stashed globally or re-opened and closed.
-    append :: SpoolFile -> LB.ByteString -> m ()
+    append :: SpoolFile -> ByteString -> m ()
     -- | Close any open handles and flush all previously appended datum to disk
     close :: SpoolFile -> m ()
 

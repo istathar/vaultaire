@@ -70,7 +70,6 @@ import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as LB
 import Data.Char (isAlphaNum)
 import Data.Packer
 import Data.Word (Word64)
@@ -78,8 +77,6 @@ import Marquise.Classes
 import Marquise.IO ()
 import Marquise.Types
 import Pipes
-import qualified Pipes.ByteString
-import qualified Pipes.Prelude as Pipes
 import Vaultaire.Types
 
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
@@ -140,7 +137,7 @@ removeSourceDict addr source_dict origin conn = do
         Right _ -> error "requestSourceDictRemoval: Invalid response"
         Left e -> Left e
 
-enumerateOrigin :: MarquiseContentsMonad m conn
+enumerateOrigin :: MonadIO m => MarquiseContentsMonad m conn
                 => Origin
                 -> conn
                 -> Producer (Address, SourceDict) m ()
@@ -150,6 +147,8 @@ enumerateOrigin origin conn = do
   where
     loop = do
         resp <- lift $ recvContentsResponse conn
+        liftIO $ print "got resp"
+        liftIO $ print resp
         case resp of
             Left e -> error $ show e
             Right (ContentsListEntry addr dict) ->
@@ -255,7 +254,7 @@ sendSimple
     -> m ()
 sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
   where
-    bytes = LB.fromStrict $ runPacking 24 $ do
+    bytes = runPacking 24 $ do
         putWord64LE (ad `clearBit` 0)
         putWord64LE ts
         putWord64LE w
@@ -271,7 +270,7 @@ sendExtended
 sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
   where
     len = BS.length bs
-    bytes = LB.fromStrict $ runPacking (24 + len) $ do
+    bytes = runPacking (24 + len) $ do
         putWord64LE (ad `setBit` 0)
         putWord64LE ts
         putWord64LE $ fromIntegral len
