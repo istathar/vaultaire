@@ -16,7 +16,8 @@
 module Main where
 
 import Control.Exception (throw)
-import Control.Monad (replicateM_, forM)
+import Control.Concurrent.STM
+import Control.Monad (replicateM_, forM, forever)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Control.Concurrent.Async as A
 import Data.Binary.IEEE754 (doubleToWord)
@@ -103,6 +104,7 @@ forkThread a = A.async a >>= A.link
 main :: IO ()
 main = do
     [arg1, arg2, arg3] <- getArgs
+    queue <- newTBQueueIO 64
     
     let t1 = read (arg2 ++ "000000000")
     let t2 = read (arg3 ++ "000000000")
@@ -120,26 +122,35 @@ main = do
             let l = Contents.formObjectLabel o
             Contents.readVaultObject l
 
+
     putStrLn "-- convert data points"
 
-    withPool $ do
-        forM_ is $ \i -> do
-            as <- forM (elems st) $ \s -> Rados.async $ do
-                -- Work out address
-                let a' = hashSourceToAddress o s
+    replicateM_ 16 $ forkThread $ withPool $ forever $ do
+        (i,s) <- liftIO $ atomically $ readTBQueue queue
+        --
+        -- Work out address
+        let a' = hashSourceToAddress o s
 
-                m <- Bucket.readVaultObject o s i
+        m <- Bucket.readVaultObject o s i
 
-                if (Map.null m)
-                  then do
-                    liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" ("-" :: String)
-                  else do
-                    let ps = Bucket.pointsInRange t1 t2 m
-                    liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" (length ps) 
-                    liftIO $ forM_ ps (convertPointAndWrite spool a')
+        if (Map.null m)
+          then do
+            liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" ("-" :: String)
+          else do
+            let ps = Bucket.pointsInRange t1 t2 m
+            liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" (length ps) 
+            liftIO $ forM_ ps (convertPointAndWrite spool a')
 
 
-            liftIO $ mapM A.wait as
+    forM_ is $ \i -> do
+        forM_ st $ \s -> do
+            atomically $ writeTBQueue queue (i,s)
+            
+
+
+
+
+
 
 
     putStrLn "-- convert contents"
