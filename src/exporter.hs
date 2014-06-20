@@ -16,7 +16,9 @@
 module Main where
 
 import Control.Exception (throw)
+import Control.Monad (replicateM_, forM)
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import qualified Control.Concurrent.Async as A
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
@@ -31,6 +33,7 @@ import qualified Data.Text.Encoding as T
 import System.Environment (getArgs)
 import qualified System.Rados.Monadic as Rados
 import Text.Printf
+import Data.Set(elems)
 
 import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
@@ -92,6 +95,11 @@ filterUndesireables = Map.delete "origin"
 debug :: (MonadIO m, Show s) => s -> m ()
 debug = liftIO . putStrLn . show
 
+withPool action = Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf")  
+                    (Rados.runPool "vaultaire" action)
+
+forkThread a = A.async a >>= A.link
+
 main :: IO ()
 main = do
     [arg1, arg2, arg3] <- getArgs
@@ -102,38 +110,41 @@ main = do
     let Right name = Marquise.makeSpoolName "exporter"
     spool <- Marquise.createSpoolFile name
 
-    Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf") $ do
-        Rados.runPool "vaultaire" $ do
-            let o = Origin (S.pack arg1)
-            let o' = Vaultaire.Origin (S.pack arg1)
+    let is = Bucket.calculateTimemarks t1 t2
+    let o  = Origin (S.pack arg1)
+    let o' = Vaultaire.Origin (S.pack arg1)
+   
+    putStrLn "-- load contents list"
+
+    st <- withPool $ do
             let l = Contents.formObjectLabel o
-            st <- Contents.readVaultObject l
---          let t1 = 1393632000000000000 --  1 March
---          let t1 = 1388534400000000000 --  1 January
---          let t2 = 1402790400000000000 -- 15 June
-            let is = Bucket.calculateTimemarks t1 t2
+            Contents.readVaultObject l
+
+    putStrLn "-- convert data points"
+
+    withPool $ do
+        forM_ is $ \i -> do
+            as <- forM (elems st) $ \s -> Rados.async $ do
+                -- Work out address
+                let a' = hashSourceToAddress o s
+
+                m <- Bucket.readVaultObject o s i
+
+                if (Map.null m)
+                  then do
+                    liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" ("-" :: String)
+                  else do
+                    let ps = Bucket.pointsInRange t1 t2 m
+                    liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" (length ps) 
+                    liftIO $ forM_ ps (convertPointAndWrite spool a')
 
 
-            liftIO $ putStrLn "-- data points"
+            liftIO $ mapM A.wait as
 
-            forM_ is $ \i -> do
-                forM_ st $ \s -> do
-                    -- Work out address
-                    let a' = hashSourceToAddress o s
 
-                    liftIO $ putStr $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " "
-                    m <- Bucket.readVaultObject o s i
+    putStrLn "-- convert contents"
 
-                    if (Map.null m)
-                      then do
-                        liftIO $ printf "%6s\n" ("-" :: String)
-                      else do
-                        let ps = Bucket.pointsInRange t1 t2 m
-                        liftIO $ printf "%6d\n" (length ps) >> return ()
-                        liftIO $ forM_ ps (convertPointAndWrite spool a')
-
-            liftIO $ putStrLn "-- contents"
-
+    withPool $ do
             forM_ st $ \s -> do
                 debug s
                 -- Work out address
