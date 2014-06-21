@@ -11,6 +11,7 @@
 
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DoAndIfThenElse            #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -37,7 +38,6 @@ import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.TypeLevel (D1, D2, D3, D4, D5, D6, D7)
 import Data.Word
 import GHC.Generics (Generic)
 import Prelude hiding (and, or)
@@ -162,7 +162,7 @@ instance Serialize VaultPrefix where
 
 
 data VaultContent = VaultContent {
-    source :: Repeated D1 (Message SourceTag)
+    source :: Repeated 1 (Message SourceTag)
 } deriving (Generic, Eq)
 
 instance Encode VaultContent
@@ -185,12 +185,12 @@ instance Show VaultContent where
 
 
 data VaultPoint = VaultPoint {
-    timestamp        :: Required D2 (Value (Fixed Word64)),
-    payload          :: Required D3 (Enumeration ValueType),
-    valueNumeric     :: Optional D4 (Value Int64),
-    valueMeasurement :: Optional D5 (Value Double),
-    valueTextual     :: Optional D6 (Value Text),
-    valueBlob        :: Optional D7 (Value ByteString)
+    timestamp        :: Required 2 (Value (Fixed Word64)),
+    payload          :: Required 3 (Enumeration ValueType),
+    valueNumeric     :: Optional 4 (Value Int64),
+    valueMeasurement :: Optional 5 (Value Double),
+    valueTextual     :: Optional 6 (Value Text),
+    valueBlob        :: Optional 7 (Value ByteString)
 } deriving (Generic, Eq)
 
 instance Encode VaultPoint

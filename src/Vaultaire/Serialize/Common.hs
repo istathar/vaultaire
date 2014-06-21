@@ -11,6 +11,7 @@
 
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
 module Vaultaire.Serialize.Common
@@ -19,17 +20,15 @@ module Vaultaire.Serialize.Common
     ValueType(..)
 ) where
 
-
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.ProtocolBuffers hiding (field)
-import Data.TypeLevel (D1, D2)
 import GHC.Generics (Generic)
 
 
 data SourceTag = SourceTag {
-    field :: Required D1 (Value ByteString),
-    value :: Required D2 (Value ByteString)
+    field :: Required 1 (Value ByteString),
+    value :: Required 2 (Value ByteString)
 } deriving (Generic, Eq)
 
 instance Encode SourceTag
