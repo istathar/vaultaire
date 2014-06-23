@@ -17,7 +17,7 @@ module Main where
 
 import Control.Exception (throw)
 import Control.Concurrent.STM
-import Control.Monad (forever)
+import Control.Monad (forever, replicateM)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Control.Concurrent.Async as A
 import Data.Binary.IEEE754 (doubleToWord)
@@ -110,8 +110,7 @@ main = do
     let t1 = read (arg2 ++ "000000000")
     let t2 = read (arg3 ++ "000000000")
 
-    let Right name = Marquise.makeSpoolName "exporter"
-    sfs <- mapM Marquise.createSpoolFile (replicate 16 name)
+    sfs <- replicateM 16 (Marquise.createSpoolFile "exporter")
 
     let is = Bucket.calculateTimemarks t1 t2
     let o  = Origin (S.pack arg1)
@@ -122,6 +121,20 @@ main = do
     st <- withPool $ do
             let l = Contents.formObjectLabel o
             Contents.readVaultObject l
+
+    putStrLn "-- convert contents"
+
+    withPool $ do
+            forM_ st $ \s -> do
+                debug s
+                -- Work out address
+                let a' = hashSourceToAddress o s
+
+                -- All tags, less undesirables
+                let s' = convertSourceDict s
+
+                -- Register that source at address
+                liftIO $ Marquise.queueSourceDictUpdate (head sfs) a' s'
 
 
     putStrLn "-- convert data points"
@@ -154,21 +167,6 @@ main = do
 
 
 
-
-    putStrLn "-- convert contents"
-
-    withPool $ do
-            forM_ st $ \s -> do
-                debug s
-                -- Work out address
-                let a' = hashSourceToAddress o s
-
-                -- All tags, less undesirables
-                let s' = convertSourceDict s
-
-                -- Register that source at address
-                liftIO $ Marquise.withContentsConnection "localhost" $ \c ->
-                    Marquise.updateSourceDict a' s' o' c >>= either throw return
 
 
 convertPointAndWrite :: Marquise.SpoolFile -> Marquise.Address -> Point -> IO ()
