@@ -8,10 +8,12 @@
 --
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Vaultaire.Types.Common
 (
     Origin(..),
+    makeOrigin,
     Epoch,
     NumBuckets,
     Time,
@@ -19,13 +21,28 @@ module Vaultaire.Types.Common
 ) where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.Hashable (Hashable)
 import Data.Map (Map)
 import Data.String (IsString)
+import Control.Exception (SomeException(..), Exception)
+import Data.Typeable (Typeable)
 import Data.Word (Word64)
+import Data.Char
 
 newtype Origin = Origin { unOrigin :: ByteString }
     deriving (Eq, Ord, IsString, Hashable, Show)
+
+data BadOrigin = BadOrigin
+    deriving (Show, Typeable)
+
+instance Exception BadOrigin
+
+makeOrigin :: ByteString -> Either SomeException Origin
+makeOrigin bs
+    | BS.null bs = Left (SomeException BadOrigin)
+    | BS.any (not . isAlphaNum . chr . fromIntegral) bs = Left (SomeException BadOrigin)
+    | otherwise = Right (Origin bs)
 
 -- These can all be newtype wrapped as make work, perhaps excluding DayMap.
 -- They have no reason to be inter-mixed.

@@ -24,6 +24,7 @@ module Vaultaire.Types
 
     -- * Namespacing and authentication
     Origin(..),
+    makeOrigin,
 
     -- * Metadata about sources
     SourceDict,
