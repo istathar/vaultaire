@@ -5,6 +5,7 @@ module Main where
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Exception (throw)
 import Data.ByteString (ByteString)
 import Marquise.Classes
 import Marquise.Client
@@ -15,7 +16,6 @@ import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.Types
 import Vaultaire.Util
-import Control.Exception(throw)
 
 ns1, ns2 :: SpoolName
 ns1 = either throw id $ makeSpoolName "ns1"

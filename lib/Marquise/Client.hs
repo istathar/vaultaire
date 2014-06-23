@@ -65,13 +65,13 @@ module Marquise.Client
 ) where
 
 import Control.Applicative
+import Control.Exception (SomeException (..), throw)
 import Control.Monad.Reader
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Char (isAlphaNum)
-import Control.Exception(SomeException(..), throw)
 import Data.Packer
 import Data.Word (Word64)
 import Marquise.Classes
@@ -148,7 +148,7 @@ removeSourceDict addr source_dict origin conn = do
         Right _ -> error "requestSourceDictRemoval: Invalid response"
         Left e -> Left e
 
-enumerateOrigin :: MonadIO m => MarquiseContentsMonad m conn
+enumerateOrigin :: MarquiseContentsMonad m conn
                 => Origin
                 -> conn
                 -> Producer (Address, SourceDict) m ()
@@ -158,8 +158,6 @@ enumerateOrigin origin conn = do
   where
     loop = do
         resp <- lift $ recvContentsResponse conn
-        liftIO $ print "got resp"
-        liftIO $ print resp
         case resp of
             Left e -> error $ show e
             Right (ContentsListEntry addr dict) ->

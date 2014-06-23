@@ -7,8 +7,8 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# OPTIONS_HADDOCK hide, prune #-}
 
 module Marquise.Types
@@ -21,18 +21,18 @@ module Marquise.Types
     InvalidSpoolName(..),
 ) where
 
+import Control.Exception
 import Data.ByteString (ByteString)
+import Data.Typeable
 import Data.Word (Word64)
 import Vaultaire.Types
-import Control.Exception
-import Data.Typeable
 
 -- | A NameSpace implies a certain amount of Marquise server-side state. This
 -- state being the Marquise server's authentication and origin configuration.
 newtype SpoolName = SpoolName { unSpoolName :: String }
   deriving (Eq, Show)
 
-data SpoolFiles = SpoolFiles { pointsSpoolFile :: FilePath
+data SpoolFiles = SpoolFiles { pointsSpoolFile   :: FilePath
                              , contentsSpoolFile :: FilePath }
   deriving (Eq, Show)
 

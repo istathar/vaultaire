@@ -19,7 +19,8 @@ module Marquise.Server
 
 import Control.Applicative
 import Control.Concurrent (threadDelay)
-import Control.Exception (throwIO, throw)
+import Control.Concurrent.Async
+import Control.Exception (throw, throwIO)
 import Control.Monad.State
 import Data.Attoparsec (Parser)
 import qualified Data.Attoparsec as Parser
@@ -35,7 +36,6 @@ import Marquise.Client (makeSpoolName, updateSourceDict)
 import Marquise.Types (SpoolName (..))
 import Pipes
 import Vaultaire.Types
-import Control.Concurrent.Async
 
 data ContentsRequest = ContentsRequest Address SourceDict
   deriving Show

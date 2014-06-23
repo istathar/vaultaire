@@ -6,10 +6,13 @@ import Control.Monad
 import qualified Data.ByteString.Char8 as S
 import Data.Maybe (fromJust)
 import Data.Packer (putWord64LE, runPacking)
+import Data.String
 import Data.Word (Word32, Word64)
+import Marquise.Client
 import Marquise.Server (marquiseServer)
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
+import Pipes
 import System.Directory
 import System.Log.Handler.Syslog
 import System.Log.Logger
@@ -18,14 +21,12 @@ import System.ZMQ4.Monadic
 import Text.Trifecta
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
-import Vaultaire.Daemon (extendedDayOID, simpleDayOID, withPool, dayMapsFromCeph)
+import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
+                         withPool)
 import Vaultaire.Reader (startReader)
 import Vaultaire.Types
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
-import Marquise.Client
-import Data.String
-import Pipes
 
 data Options = Options
   { pool      :: String

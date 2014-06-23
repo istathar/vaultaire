@@ -13,24 +13,24 @@ module Marquise.IO.SpoolFile
 (
 ) where
 
+import Control.Applicative
+import Control.Concurrent (threadDelay)
+import Control.Monad.State
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy as LB
+import Data.Maybe
 import Marquise.Classes
 import Marquise.IO.FFI
 import Marquise.Types
 import System.Directory
 import System.FilePath.Posix
 import System.IO
-import Control.Concurrent (threadDelay)
-import Control.Applicative
-import System.Posix.Temp
-import qualified Data.ByteString.Lazy as L
-import Data.ByteString(ByteString)
-import Control.Monad.State
-import qualified Data.ByteString.Lazy as LB
-import Data.Maybe
 import System.IO.Unsafe
 import System.Posix.Files
 import System.Posix.IO (closeFd)
+import System.Posix.Temp
 import System.Posix.Types (Fd)
 
 instance MarquiseSpoolFileMonad IO where

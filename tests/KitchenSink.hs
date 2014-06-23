@@ -23,15 +23,15 @@ import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 
 data Options = Options
-  { pool      :: String
-  , user      :: String
-  , broker    :: String
-  , debug     :: Bool
+  { pool        :: String
+  , user        :: String
+  , broker      :: String
+  , debug       :: Bool
   , batchPeriod :: Word32
-  , bucketSize :: Word64
-  , origin :: String
-  , namespace :: String
-  , numBuckets :: Word64 }
+  , bucketSize  :: Word64
+  , origin      :: String
+  , namespace   :: String
+  , numBuckets  :: Word64 }
 
 -- | Command line option parsing
 
