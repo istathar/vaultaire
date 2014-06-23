@@ -11,7 +11,6 @@
 
 module Marquise.IO.SpoolFile
 (
-    spoolDir,
 ) where
 
 import qualified Data.ByteString as S
@@ -21,24 +20,119 @@ import Marquise.Types
 import System.Directory
 import System.FilePath.Posix
 import System.IO
+import Control.Concurrent (threadDelay)
+import Control.Applicative
 import System.Posix.Temp
+import qualified Data.ByteString.Lazy as L
+import Data.ByteString(ByteString)
+import Control.Monad.State
+import qualified Data.ByteString.Lazy as LB
+import Data.Maybe
+import System.IO.Unsafe
+import System.Posix.Files
+import System.Posix.IO (closeFd)
+import System.Posix.Types (Fd)
 
--- This could be more efficient if the handle were kept in a "global
--- variable", using the noinline IORef hack.
 instance MarquiseSpoolFileMonad IO where
-    createSpoolFile sn = do
-        createDirectoryIfMissing True (spoolDir sn)
-        (tmp_path, tmp_handle) <- mkstemp (spoolFileTemplate sn)
-        hClose tmp_handle
-        return $ SpoolFile tmp_path
+    randomSpoolFiles sn =
+        SpoolFiles <$> newRandomSpoolFile (newPointsDir sn)
+                   <*> newRandomSpoolFile (newContentsDir sn)
 
-    append = S.appendFile . unSpoolFile
+    createDirectories sn =
+        mapM_ (createDirectoryIfMissing True . ($sn))
+              [ newPointsDir
+              , newContentsDir
+              , curPointsDir
+              , curContentsDir]
+
+    appendPoints = doAppend . pointsSpoolFile
+    appendContents = doAppend . contentsSpoolFile
+
+    nextPoints sn = nextSpoolContents (newPointsDir sn) (curPointsDir sn)
+    nextContents sn = nextSpoolContents (newContentsDir sn) (curPointsDir sn)
 
     close _ = c_sync
 
-spoolFileTemplate :: SpoolName -> String
-spoolFileTemplate ns = joinPath [spoolDir ns, "data_"]
+newRandomSpoolFile :: FilePath -> IO FilePath
+newRandomSpoolFile path = do
+    (spool_file, handle) <- mkstemp path
+    hClose handle
+    return spool_file
 
-spoolDir :: SpoolName -> String
-spoolDir (SpoolName sn) = joinPath ["/var/spool/marquise/current/", sn]
+-- | Grab the next avaliable spool file, providing that file as a lazy
+-- bytestring and an action to close it, wiping the file.
+nextSpoolContents :: FilePath -> FilePath -> IO (L.ByteString, IO ())
+nextSpoolContents new_dir cur_dir = do
+    -- First check for any work already in the work spool dir.
+    work <- tryCurDir cur_dir
+    case work of
+        Nothing ->
+            -- No existing work, get some new work out of the spool
+            -- directory then.
+            rotate new_dir cur_dir >> nextSpoolContents new_dir cur_dir
+        Just (fp, lock_fd) -> do
+            threadDelay 100000 -- Ensure that any slow writes are done
+            contents <- LB.readFile fp
+            let close_f = removeLink fp >> closeFd lock_fd
+            return (contents, close_f)
+
+-- | Check the work directory for any outstanding work, if there is a potential
+-- candidate, lock it. If that fails, try the next.
+tryCurDir :: FilePath -> IO (Maybe (FilePath, Fd))
+tryCurDir cur_dir =
+    listToMaybe . catMaybes <$> (getAbsoluteDirectoryFiles cur_dir
+                                 >>= mapM lazyLock)
+  where
+    lazyLock :: FilePath -> IO (Maybe (FilePath, Fd))
+    lazyLock fp = unsafeInterleaveIO $ do
+        lock <- tryLock fp
+        case lock of
+            Nothing -> return Nothing
+            Just lock_fd -> return . Just $ (fp, lock_fd)
+
+-- Attempt to rotate a file from src folder to dst folder. If nothing is ready,
+-- wait for a second and retry.
+rotate :: FilePath -> FilePath -> IO ()
+rotate src dst = do
+    candidates <- getAbsoluteDirectoryFiles src
+    case candidates of
+        [] -> wait >> rotate src dst
+        x:_ -> do
+            (new_path, h) <- mkstemp dst
+            hClose h
+            renameFile x new_path
+  where
+    wait = threadDelay 1000000
+
+
+getAbsoluteDirectoryFiles :: FilePath -> IO [FilePath]
+getAbsoluteDirectoryFiles =
+    getAbsoluteDirectoryContents >=> filterM doesFileExist
+
+getAbsoluteDirectoryContents :: FilePath -> IO [FilePath]
+getAbsoluteDirectoryContents fp =
+    map (\rel -> joinPath [fp, rel]) <$> getDirectoryContents fp
+
+doAppend :: FilePath -> ByteString -> IO ()
+doAppend = S.appendFile
+
+newPointsDir :: SpoolName -> FilePath
+newPointsDir = specificSpoolDir ["points", "new"]
+
+newContentsDir :: SpoolName -> FilePath
+newContentsDir = specificSpoolDir ["contents", "new"]
+
+curPointsDir :: SpoolName -> FilePath
+curPointsDir = specificSpoolDir ["points", "cur"]
+
+curContentsDir :: SpoolName -> FilePath
+curContentsDir = specificSpoolDir ["contents", "cur"]
+
+specificSpoolDir :: [String] -> SpoolName -> FilePath
+specificSpoolDir subdirs sn =
+    addTrailingPathSeparator (joinPath (baseSpoolDir sn:subdirs))
+
+baseSpoolDir :: SpoolName -> FilePath
+baseSpoolDir (SpoolName sn) = joinPath ["/var/spool/marquise/", sn]
+
 

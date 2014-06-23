@@ -15,10 +15,11 @@ import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.Types
 import Vaultaire.Util
+import Control.Exception(throw)
 
 ns1, ns2 :: SpoolName
-ns1 = either error id $ makeSpoolName "ns1"
-ns2 = either error id $ makeSpoolName "ns2"
+ns1 = either throw id $ makeSpoolName "ns1"
+ns2 = either throw id $ makeSpoolName "ns2"
 
 main :: IO ()
 main = do
@@ -29,23 +30,27 @@ main = do
 suite :: Spec
 suite =
     describe "IO MarquiseClientMonad and MarquiseServerMonad" $ do
-        it "reads two appends, then cleans up when nextBurst is called" $ do
-            sf1 <- createSpoolFile ns1
-            sf2 <- createSpoolFile ns2
+        it "reads appends, then cleans up when nextBurst is called" $ do
+            sf1 <- createSpoolFiles "ns1"
+            sf2 <- createSpoolFiles "ns2"
 
-            append sf1 "BBBBBBBBAAAAAAAACCCCCCCC"
-            append sf1 "DBBBBBBBAAAAAAAACCCCCCCC"
-            append sf2 "FBBBBBBBAAAAAAAACCCCCCCC"
+            appendPoints sf1 "BBBBBBBBAAAAAAAACCCCCCCC"
+            appendPoints sf1 "DBBBBBBBAAAAAAAACCCCCCCC"
+            appendPoints sf2 "FBBBBBBBAAAAAAAACCCCCCCC"
+            appendContents sf1 "contents"
 
-            (bytes1,close_f1) <- nextBurst ns1
-            (bytes2,close_f2) <- nextBurst ns2
+            (bytes1,close_f1) <- nextPoints ns1
+            (bytes2,close_f2) <- nextPoints ns2
+            (contents,close_f3) <- nextContents ns1
 
             bytes1 `shouldBe` "BBBBBBBBAAAAAAAACCCCCCCC\
                               \DBBBBBBBAAAAAAAACCCCCCCC"
             bytes2 `shouldBe` "FBBBBBBBAAAAAAAACCCCCCCC"
-
             close_f1
             close_f2
+
+            contents `shouldBe` "contents"
+            close_f3
 
 
         it "talks to a vaultaire daemon" $ do

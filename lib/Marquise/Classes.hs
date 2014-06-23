@@ -27,21 +27,31 @@ import Vaultaire.Types
 -- | This class is for convenience of testing. It encapsulates all IO
 -- interaction that the client and server will do.
 class Monad m => MarquiseSpoolFileMonad m where
-    createSpoolFile :: SpoolName -> m SpoolFile
-    -- | This append does not imply that the given data is synced to disk, just
+    randomSpoolFiles :: SpoolName -> m SpoolFiles
+
+    createDirectories :: SpoolName -> m ()
+
+    -- | Append to the spool file for points, i.e. data.
+    --
+    -- This append does not imply that the given data is synced to disk, just
     -- that it is queued to do so. This assumes no state, so any file handles
     -- must be stashed globally or re-opened and closed.
-    append :: SpoolFile -> ByteString -> m ()
-    -- | Close any open handles and flush all previously appended datum to disk
-    close :: SpoolFile -> m ()
+    appendPoints :: SpoolFiles -> ByteString -> m ()
 
-class Monad m => MarquiseWriterMonad m where
+    -- | Append  to the spool file for contents updates, i.e. metadata.
+    appendContents :: SpoolFiles -> ByteString -> m ()
+
     -- | Return an lazy bytestring and an IO action to signify that the burst
     -- has been completely sent.
     --
     -- May block until something is actually spooled up.
-    nextBurst :: SpoolName -> m (LB.ByteString, m ())
+    nextPoints :: SpoolName -> m (LB.ByteString, m ())
+    nextContents :: SpoolName -> m (LB.ByteString, m ())
 
+    -- | Close any open handles and flush all previously appended datum to disk
+    close :: SpoolFiles -> m ()
+
+class Monad m => MarquiseWriterMonad m where
     -- | Send bytes upstream, returns when ack recieved.
     transmitBytes :: String      -- ^ Broker address
                   -> Origin      -- ^ Origin

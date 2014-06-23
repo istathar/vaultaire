@@ -13,17 +13,17 @@
 -- | Marquise server library, for transmission of queued data to the vault.
 module Marquise.Server
 (
-    sendNextBurst,
-    marquiseServer
+    marquiseServer,
+    parseContentsRequests,
 ) where
 
 import Control.Applicative
 import Control.Concurrent (threadDelay)
-import Control.Exception (throwIO)
+import Control.Exception (throwIO, throw)
 import Control.Monad.State
 import Data.Attoparsec (Parser)
 import qualified Data.Attoparsec as Parser
-import Data.Attoparsec.ByteString.Lazy (maybeResult, parse)
+import Data.Attoparsec.ByteString.Lazy (eitherResult, maybeResult, parse)
 import Data.Attoparsec.Combinator (eitherP, many')
 import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy as L
@@ -31,34 +31,67 @@ import Data.Maybe
 import Data.Packer
 import Data.Word (Word64)
 import Marquise.Classes
-import Marquise.Client (makeSpoolName)
-import Marquise.IO.SpoolFile (spoolDir)
+import Marquise.Client (makeSpoolName, updateSourceDict)
 import Marquise.Types (SpoolName (..))
 import Pipes
-import System.Directory (createDirectoryIfMissing)
 import Vaultaire.Types
+import Control.Concurrent.Async
 
--- | Send the next burst, returns when the burst is acknowledged and thus in
--- the vault.
-sendNextBurst :: MarquiseWriterMonad m
-              => String -> Origin -> SpoolName -> m ()
-sendNextBurst broker origin ns = do
-    (bytes, seal) <- nextBurst ns
-    runEffect $ for (breakInToChunks bytes)
-                    (lift . transmitBytes broker origin)
-    seal
+data ContentsRequest = ContentsRequest Address SourceDict
+  deriving Show
 
 marquiseServer :: String -> Origin -> String -> IO ()
 marquiseServer broker origin user_sn =
     case makeSpoolName user_sn of
-        Left e -> throwIO $ userError e
+        Left e -> throwIO e
         Right sn -> do
-            createDirectoryIfMissing True (spoolDir sn)
-            loop sn
+            createDirectories sn
+            linkThread (sendPoints broker origin sn)
+            linkThread (sendContents broker origin sn)
   where
-    loop sn = forever $ do
-            sendNextBurst broker origin sn
-            threadDelay idleTime
+    linkThread = async >=> link
+
+sendPoints :: String -> Origin -> SpoolName -> IO ()
+sendPoints broker origin sn = forever $ do
+    (bytes, seal) <- nextPoints sn
+    runEffect $ for (breakInToChunks bytes)
+                    (lift . transmitBytes broker origin)
+    seal
+
+    threadDelay idleTime
+
+sendContents :: (MarquiseContentsMonad m conn, MarquiseSpoolFileMonad m)
+             => String
+             -> Origin
+             -> SpoolName
+             -> m ()
+sendContents broker origin sn = forever $ do
+    (bytes, seal) <- nextContents sn
+    withContentsConnection broker $ \c ->
+        runEffect $ for (parseContentsRequests bytes)
+                        (lift . sendSourceDictUpdate c)
+    seal
+  where
+    sendSourceDictUpdate conn (ContentsRequest addr source_dict) =
+        updateSourceDict addr source_dict origin conn >>= either throw return
+
+parseContentsRequests :: Monad m => L.ByteString -> Producer ContentsRequest m ()
+parseContentsRequests bytes
+    | L.null bytes = return ()
+    | otherwise =
+        case eitherResult (parse oneRequest bytes) of
+            Left e -> error ("parseContentsRequests: " ++ e)
+            Right (one, rest) -> yield one >> parseContentsRequests rest
+
+oneRequest :: Parser (ContentsRequest, L.ByteString)
+oneRequest = do
+    addr <- fromWire <$> Parser.take 8
+    len <- runUnpacking getWord64LE <$> Parser.take 8
+    source_dict <- fromWire <$> Parser.take (fromIntegral len)
+    remainder <- Parser.takeLazyByteString
+    case ContentsRequest <$> addr <*> source_dict of
+        Left e -> fail (show e)
+        Right request -> return (request, remainder)
 
 idleTime :: Int
 idleTime = 1000000 -- 1 second

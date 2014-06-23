@@ -30,6 +30,7 @@ module Marquise.Client
     -- | * Utility functions
     -- Note: You may read MarquiseSpoolFileMonad m as IO.
     hashIdentifier,
+    makeSpoolName,
 
     -- | * Contents daemon requests
     withContentsConnection,
@@ -39,11 +40,11 @@ module Marquise.Client
     removeSourceDict,
     enumerateOrigin,
 
-    -- | * Sending data to Vaultaire
-    makeSpoolName,
-    createSpoolFile,
-    sendSimple,
-    sendExtended,
+    -- | * Queuing data to be sent to vaultaire
+    createSpoolFiles,
+    queueSimple,
+    queueExtended,
+    queueSourceDictUpdate,
     flush,
 
     -- | Reading from Vaultaire
@@ -55,7 +56,7 @@ module Marquise.Client
 
     -- * Types
     SpoolName,
-    SpoolFile,
+    SpoolFiles,
     Address,
     Origin(..),
     TimeStamp(..),
@@ -64,13 +65,13 @@ module Marquise.Client
 ) where
 
 import Control.Applicative
-import Control.Exception (SomeException, throw)
 import Control.Monad.Reader
 import Crypto.MAC.SipHash
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Char (isAlphaNum)
+import Control.Exception(SomeException(..), throw)
 import Data.Packer
 import Data.Word (Word64)
 import Marquise.Classes
@@ -79,12 +80,22 @@ import Marquise.Types
 import Pipes
 import Vaultaire.Types
 
+-- | Create a SpoolName. Only alphanumeric characters are allowed, max length
+-- is 32 characters.
+makeSpoolName :: String -> Either SomeException SpoolName
+makeSpoolName s
+    | any (not . isAlphaNum) s = Left (SomeException InvalidSpoolName)
+    | otherwise = Right (SpoolName s)
+
 -- | Create a name in the spool. Only alphanumeric characters are allowed, max length
 -- is 32 characters.
-makeSpoolName :: String -> Either String SpoolName
-makeSpoolName s
-    | any (not . isAlphaNum) s = Left "non-alphanumeric spool name"
-    | otherwise = Right $ SpoolName s
+createSpoolFiles :: MarquiseSpoolFileMonad m
+                 => String
+                 -> m SpoolFiles
+createSpoolFiles s =
+    case makeSpoolName s of
+        Left e -> throw e
+        Right sn -> createDirectories sn >> randomSpoolFiles sn
 
 -- | Deterministically convert a ByteString to an Address, this uses siphash.
 hashIdentifier :: ByteString -> Address
@@ -245,14 +256,14 @@ decodeExtended = forever (unExtendedBurst <$> await >>= emitFrom 0)
 
 -- | Send a "simple" data point. Interpretation of this point, e.g.
 -- float/signed is up to you, but it must be sent in the form of a Word64.
-sendSimple
+queueSimple
     :: MarquiseSpoolFileMonad m
-    => SpoolFile
+    => SpoolFiles
     -> Address
     -> TimeStamp
     -> Word64
     -> m ()
-sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
+queueSimple sfs (Address ad) (TimeStamp ts) w = appendPoints sfs bytes
   where
     bytes = runPacking 24 $ do
         putWord64LE (ad `clearBit` 0)
@@ -260,14 +271,14 @@ sendSimple ns (Address ad) (TimeStamp ts) w = append ns bytes
         putWord64LE w
 
 -- | Send an "extended" data point. Again, representation is up to you.
-sendExtended
+queueExtended
     :: MarquiseSpoolFileMonad m
-    => SpoolFile
+    => SpoolFiles
     -> Address
     -> TimeStamp
     -> ByteString
     -> m ()
-sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
+queueExtended sfs (Address ad) (TimeStamp ts) bs = appendPoints sfs bytes
   where
     len = BS.length bs
     bytes = runPacking (24 + len) $ do
@@ -276,10 +287,25 @@ sendExtended ns (Address ad) (TimeStamp ts) bs = append ns bytes
         putWord64LE $ fromIntegral len
         putBytes bs
 
+queueSourceDictUpdate
+    :: MarquiseSpoolFileMonad m
+    => SpoolFiles
+    -> Address
+    -> SourceDict
+    -> m ()
+queueSourceDictUpdate sfs (Address addr) source_dict = appendContents sfs bytes
+  where
+    source_dict_bytes = toWire source_dict
+    source_dict_len = BS.length source_dict_bytes
+    bytes = runPacking (source_dict_len + 16) $ do
+        putWord64LE addr
+        putWord64LE (fromIntegral source_dict_len)
+        putBytes source_dict_bytes
+
 -- | Ensure that all sent points have hit the local disk.
 flush
     :: MarquiseSpoolFileMonad m
-    => SpoolFile
+    => SpoolFiles
     -> m ()
 flush = close
 
