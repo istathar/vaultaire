@@ -90,18 +90,20 @@ tryCurDir cur_dir =
             Nothing -> return Nothing
             Just lock_fd -> return . Just $ (fp, lock_fd)
 
--- Attempt to rotate a file from src folder to dst folder. If nothing is ready,
+-- Attempt to rotate all files from src folder to dst folder. If nothing is ready,
 -- wait for a second and retry.
 rotate :: FilePath -> FilePath -> IO ()
 rotate src dst = do
     candidates <- getAbsoluteDirectoryFiles src
-    case candidates of
-        [] -> wait >> rotate src dst
-        x:_ -> do
-            (new_path, h) <- mkstemp dst
-            hClose h
-            renameFile x new_path
+    if null candidates
+        then wait >> rotate src dst
+        else mapM_ doMove candidates
   where
+    doMove src_file = do
+        (new_path, h) <- mkstemp dst
+        hClose h
+        renameFile src_file new_path
+
     wait = threadDelay 1000000
 
 
