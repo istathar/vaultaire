@@ -110,7 +110,7 @@ main = do
     let t1 = read (arg2 ++ "000000000")
     let t2 = read (arg3 ++ "000000000")
 
-    sfs <- replicateM 16 (Marquise.createSpoolFile "exporter")
+    sfs <- replicateM 16 (Marquise.createSpoolFiles "exporter")
 
     let is = Bucket.calculateTimemarks t1 t2
     let o  = Origin (S.pack arg1)
@@ -169,7 +169,7 @@ main = do
 
 
 
-convertPointAndWrite :: Marquise.SpoolFile -> Marquise.Address -> Point -> IO ()
+convertPointAndWrite :: Marquise.SpoolFiles -> Marquise.Address -> Point -> IO ()
 convertPointAndWrite spool a p =
   let
     t = Marquise.TimeStamp (timestamp p)
