@@ -175,9 +175,9 @@ convertPointAndWrite spool a p =
     t = Marquise.TimeStamp (timestamp p)
   in
     case payload p of
-        Empty           -> Marquise.sendSimple   spool a t 0
-        Numeric n       -> Marquise.sendSimple   spool a t (fromIntegral n)
-        Measurement r   -> Marquise.sendSimple   spool a t (doubleToWord r)
-        Textual s       -> Marquise.sendExtended spool a t (T.encodeUtf8 s)     -- DANGER partial
-        Blob b          -> Marquise.sendExtended spool a t b
+        Empty           -> Marquise.queueSimple   spool a t 0
+        Numeric n       -> Marquise.queueSimple   spool a t (fromIntegral n)
+        Measurement r   -> Marquise.queueSimple   spool a t (doubleToWord r)
+        Textual s       -> Marquise.queueExtended spool a t (T.encodeUtf8 s)     -- DANGER partial
+        Blob b          -> Marquise.queueExtended spool a t b
 
