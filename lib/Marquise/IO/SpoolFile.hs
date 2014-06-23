@@ -49,7 +49,7 @@ instance MarquiseSpoolFileMonad IO where
     appendContents = doAppend . contentsSpoolFile
 
     nextPoints sn = nextSpoolContents (newPointsDir sn) (curPointsDir sn)
-    nextContents sn = nextSpoolContents (newContentsDir sn) (newContentsDir sn)
+    nextContents sn = nextSpoolContents (newContentsDir sn) (curContentsDir sn)
 
     close _ = c_sync
 
