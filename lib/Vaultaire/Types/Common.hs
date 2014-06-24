@@ -7,8 +7,8 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 
 module Vaultaire.Types.Common
 (
@@ -20,15 +20,15 @@ module Vaultaire.Types.Common
     DayMap
 ) where
 
+import Control.Exception (Exception, SomeException (..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Char
 import Data.Hashable (Hashable)
 import Data.Map (Map)
 import Data.String (IsString)
-import Control.Exception (SomeException(..), Exception)
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
-import Data.Char
 
 newtype Origin = Origin { unOrigin :: ByteString }
     deriving (Eq, Ord, IsString, Hashable, Show)

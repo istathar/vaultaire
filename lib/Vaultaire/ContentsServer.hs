@@ -42,7 +42,6 @@ startContents broker user pool = do
     liftIO $ infoM "Contents.startContents" "Contents daemon starting"
     runDaemon broker user pool . forever $ nextMessage >>= handleRequest
 
-
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply origin payload) =
     case fromWire payload of
@@ -53,7 +52,6 @@ handleRequest (Message reply origin payload) =
             GenerateNewAddress    -> performRegisterRequest reply origin
             UpdateSourceTag a s   -> performUpdateRequest reply origin a s
             RemoveSourceTag a s   -> performRemoveRequest reply origin a s
-
 
 {-
     For the given address, read all the contents entries matching it. The
@@ -71,12 +69,9 @@ performListRequest reply o = do
                     (lift . reply . uncurry ContentsListBypass)
     reply EndOfContentsList
 
-
-
 performRegisterRequest :: ReplyF -> Origin -> Daemon ()
 performRegisterRequest reply o =
     allocateNewAddressInVault o >>= reply . RandomAddress
-
 
 allocateNewAddressInVault :: Origin -> Daemon Address
 allocateNewAddressInVault o = do
@@ -92,7 +87,6 @@ allocateNewAddressInVault o = do
   where
     rollDice = getStdRandom (randomR (0, maxBound :: Word64))
     isAddressInVault a = isJust <$> InternalStore.readFrom o a
-
 
 performUpdateRequest
     :: ReplyF
@@ -118,14 +112,12 @@ performRemoveRequest reply o a s = do
     writeSourceTagsForAddress o a (diffSource s' s)
     reply RemoveSuccess
 
-
 retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
 retreiveSourceTagsForAddress o a = do
     result <- InternalStore.readFrom o a
     return $ case result of
         Just b'     -> either throw id (fromWire b')
         Nothing     -> mempty
-
 
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
 writeSourceTagsForAddress o a s =
