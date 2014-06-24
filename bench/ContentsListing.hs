@@ -41,12 +41,15 @@ server =
         s <- ZMQ.socket ZMQ.Dealer
         ZMQ.bind s "tcp://*:5000"
         forever (ZMQ.send s [] contentsWire)
-    
 
 main :: IO ()
 main = do
     void (forkIO server)
 
     defaultMain
-            [ bench "contents 128" $ nfIO $ runTest 128
-            , bench "contents 256" $ nfIO $ runTest 256 ]
+            [ 
+              bench "contents 32" $ nfIO $ runTest 32
+            , bench "contents 64" $ nfIO $ runTest 64
+            , bench "contents 128" $ nfIO $ runTest 128
+            , bench "contents 256" $ nfIO $ runTest 256
+            , bench "contents 512" $ nfIO $ runTest 512 ]

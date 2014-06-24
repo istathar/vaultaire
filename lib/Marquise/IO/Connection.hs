@@ -17,8 +17,6 @@ module Marquise.IO.Connection
     recv,
 ) where
 
-import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async
 import Control.Exception
 import Data.List.NonEmpty (fromList)
 import System.ZMQ4 hiding (send)
@@ -43,22 +41,18 @@ recv :: WireFormat response
      => Socket Dealer
      -> IO (Either SomeException response)
 recv sock = do
-    winner <- race waitTimeout receiveMessage
-    case winner of
-        Left () ->
-            -- This really needs to trigger a disconnect and reconnect of the
-            -- socket, or an out of sequence message will likely be recieved at
-            -- some point.
-            error "Timeout, non-recoverable due to un-implemented reconnect"
-        Right x -> return x
+    poll_result <- poll timeout [Sock sock [In] Nothing]
+    case poll_result of
+        [[In]] -> do
+            resp <- receiveMulti sock
+            return $ case resp of
+                [msg] -> fromWire msg
+                _ -> Left $ SomeException $ userError "expected one msg"
+        [[]] ->
+            -- TODO: do something more intelligent here, we panic so that there
+            -- is no chance of receiving this 'lost' message after a retry,
+            -- which would be completely incorrect.
+            error "Timeout unrecoverable due to un-implemented reconnect"
+        _ -> error "Marquise.IO.Connection.recv: impossible"
   where
-    receiveMessage = do
-        resp <- receiveMulti sock
-        return $ case resp of
-            [msg] -> fromWire msg
-            _ -> Left $ SomeException $ userError "expected one msg"
-
-waitTimeout :: IO a
-waitTimeout = do
-    threadDelay 60000000
-    error "Timeout, non-recoverable due to un-implemented reconnect"
+    timeout = 60000 -- milliseconds, 60s
