@@ -444,4 +444,22 @@ benchmark reader-algorithms
 
   ghc-prof-options:  -fprof-auto
 
+benchmark contents-listing
+  hs-source-dirs:    bench
+  main-is:           ContentsListing.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     bytestring,
+                     criterion,
+                     zeromq4-haskell,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
 -- vim: set tabstop=21 expandtab:

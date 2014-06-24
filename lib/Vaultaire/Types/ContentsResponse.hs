@@ -46,7 +46,7 @@ instance WireFormat ContentsResponse where
         | S.take 1 bs == "\x02" = do
             let body = S.drop 1 bs
             let unpacker = (,) <$> getBytes 8 <*> (getWord64LE >>= getBytes . fromIntegral)
-            let (addr_bytes, dict_bytes ) = flip runUnpacking body unpacker
+            let (addr_bytes, dict_bytes ) = runUnpacking unpacker body
             ContentsListEntry <$> fromWire addr_bytes <*> fromWire dict_bytes
 
         | otherwise = Left $ SomeException $
