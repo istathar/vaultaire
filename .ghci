@@ -1,4 +1,4 @@
 :set -XOverloadedStrings
 :set +m
-:set -isrc:tests
+:set -ilib:src:tests
 :set -I.

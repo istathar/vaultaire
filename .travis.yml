@@ -1,21 +1,26 @@
 language: haskell
 env:
-  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.1'
-  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.2'
-  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.3'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.1 CABALVER=1.18'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.2 CABALVER=1.18'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.3 CABALVER=1.18'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.8.1 CABALVER=1.18'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.1 CABALVER=1.20'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.2 CABALVER=1.20'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.6.3 CABALVER=1.20'
+  - 'UBUNTU_RELEASE=saucy GHCVER=7.8.1 CABALVER=1.20'
 
 before_install:
   - 'sudo add-apt-repository -y "deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_RELEASE} main universe"'
   - 'sudo add-apt-repository -y ppa:hvr/ghc'
   - 'sudo apt-get update'
   - 'sudo apt-get install librados-dev'
-  - 'sudo apt-get install cabal-install-1.18 ghc-$GHCVER happy'
+  - 'sudo apt-get install cabal-install-$CABALVER ghc-$GHCVER happy'
   - 'export PATH=/opt/ghc/$GHCVER/bin:$PATH'
   - sudo apt-get remove libzmq1
   - wget http://download.zeromq.org/zeromq-4.0.4.tar.gz
   - tar -xf zeromq-4.0.4.tar.gz
   - cd zeromq-4.0.4
-  - ./configure 
+  - ./configure
   - make
   - sudo make install
   - sudo su -c "echo '/usr/local/lib' > /etc/ld.so.conf.d/local.conf"
@@ -23,10 +28,13 @@ before_install:
   - cd ..
 
 install:
-  - 'cabal-1.18 update'
-  - 'cabal-1.18 install --only-dependencies --enable-tests --enable-benchmarks'
+  - 'cabal-$CABALVER update'
+  - 'cabal-$CABALVER install --only-dependencies --enable-tests --enable-benchmarks'
 
 script:
-  - 'cabal-1.18 configure'
-  - 'cabal-1.18 build'
-  - 'cabal-1.18 sdist'
+  - 'cabal-$CABALVER configure'
+  - 'cabal-$CABALVER build'
+  - 'cabal-$CABALVER sdist'
+  - 'cabal-$CABALVER test daymap-test'
+  - 'cabal-$CABALVER test reader-algorithms-test'
+  - 'cabal-$CABALVER test wire-formats-test'

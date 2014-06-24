@@ -1,49 +1,26 @@
-all: bufferd filerd readerd vault telemetry query
+all: build
 
 #
-# The name of the binary(ies) you want to build if `make` is invoked without an
-# explicit target - which is so important it gets to go on the first line. On
-# to business: the purpose of this Makefile is to let you build Haskell
-# programs with a minimum of fuss. You should be able to type
-#
-# $ make
-#
-# and have ./snippet be built; this will happen if and only if there is a
-# Haskell source file with a lower-cased named and a main in it by that name in
-# src/. This also works with lower-cased source files in tests/:
-#
-# $ make check
-#
-# will build ./check from tests/check.hs.
-#
-# As wired, src/ binaries are built tight and tests/ binaries are built with
-# profiling enabled.
+# Top-level targets. This is ugly. A program to extract these from the .cabal
+# file would work, but is there anything easier?
 #
 
-#
-# GHC makes a lot of temporary files. Where to put them?
-#
+marquised: dist/build/marquised/marquised
+reader-test: dist/build/reader-test/reader-test
+reader-algorithms: dist/build/reader-algorithms/reader-algorithms
+writer-test: dist/build/writer-test/writer-test
+daymap-test: dist/build/daymap-test/daymap-test
+writer-test: dist/build/writer-test/writer-test
+contents-test: dist/build/contents-test/contents-test
+identity-test: dist/build/identity-test/identity-test
+client-server-test: dist/build/client-server-test/client-server-test
+internal-store-test: dist/build/internal-store-test/internal-store-test
+writer-bench: dist/build/writer-bench/writer-bench
+reader-bench: dist/build/reader-bench/reader-bench
 
-BUILDDIR=/tmp/build/vaultaire
-
-#
-# Haskell compiler and build options. As specified here we always build with
-# the full threaded runtime and GHC profiling enabled, 'cause, you need those
-# things.
-#
-
-GHC=ghc \
-	-rtsopts \
-	-O2 \
-	-threaded \
-	-Wall \
-	-fwarn-tabs \
-	-fno-warn-missing-signatures \
-	-funbox-strict-fields \
-	-fno-warn-unused-binds
 
 #
-# The rest is all machinery. Here we do the V=1 trick to set verbosity.
+# Setup
 #
 
 ifdef V
@@ -53,104 +30,67 @@ MAKEFLAGS=-s -R
 REDIRECT=2>/dev/null
 endif
 
-.PHONY: all test tests config
+.PHONY: all build test
 
 #
-# Source files, main and testing
+# Build rules. This just wraps Cabal doing its thing in a Haskell
+# language-specific fashion.
 #
 
-CORE_SOURCES=$(shell find src -name '*.hs' -type f)
-TEST_SOURCES=$(shell find tests -name '*.hs' -type f)
+build: dist/setup-config tags
+	@/bin/echo -e "CABAL\tbuild"
+	cabal build
+
+test: dist/setup-config tags
+	@/bin/echo -e "CABAL\ttest"
+	cabal test
+
+dist/setup-config: vaultaire.cabal
+	cabal configure \
+		--enable-tests \
+		--enable-benchmarks \
+		-v0 2>/dev/null || /bin/echo -e "CABAL\tinstall --only-dependencies" && cabal install --only-dependencies --enable-tests --enable-benchmarks
+	@/bin/echo -e "CABAL\tconfigure"
+	cabal configure \
+		--enable-tests \
+		--enable-benchmarks \
+		--disable-library-profiling \
+		--disable-executable-profiling
 
 
-%: $(BUILDDIR)/%.bin tags
-	@/bin/echo -e "STRIP\t$@"
-	strip -s $<
-	mv $< $@
+# This will match writer-test/writer-test, so we have to strip the directory
+# portion off. Annoying, but you can't use two '%' in a pattern rule.
+dist/build/%: dist/setup-config tags $(SOURCES)
+	@/bin/echo -e "CABAL\tbuild $@"
+	cabal build $(notdir $@)
 
-$(BUILDDIR)/%.bin: config.h src/%.hs $(CORE_SOURCES)
-	@if [ ! -d $(BUILDDIR) ] ; then /bin/echo -e "MKDIR\t$(BUILDDIR)" ; mkdir -p $(BUILDDIR) ; fi
-	@/bin/echo -e "GHC\t$@"
-	$(GHC) --make \
-		-prof -fprof-auto \
-		-outputdir $(BUILDDIR)/$* \
-		-i"$(BUILDDIR):src" \
-		-I"." \
-		-o $@ \
-		src/$*.hs
+#
+# Build ctags file
+#
+
+SOURCES=$(shell find src -name '*.hs' -type f) \
+	$(shell find tests -name '*.hs' -type f) \
+	$(shell find lib -name '*.hs' -type f)
 
 HOTHASKTAGS=$(shell which hothasktags 2>/dev/null)
 CTAGS=$(if $(HOTHASKTAGS),$(HOTHASKTAGS),/bin/false)
 
-tags: $(CORE_SOURCES) $(TEST_SOURCES)
+tags: $(SOURCES)
 	if [ "$(HOTHASKTAGS)" ] ; then /bin/echo -e "CTAGS\ttags" ; fi
 	-$(CTAGS) $^ > tags $(REDIRECT)
 
-#
-# Build test suite code
-#
-
-tests: config check
-
-$(BUILDDIR)/%.bin: config.h tests/%.hs $(CORE_SOURCES) $(TEST_SOURCES)
-	@if [ ! -d $(BUILDDIR) ] ; then /bin/echo -e "MKDIR\t$(BUILDDIR)" ; mkdir -p $(BUILDDIR) ; fi
-	@/bin/echo -e "GHC\t$@"
-	$(GHC) --make \
-		-prof -fprof-auto \
-		-outputdir $(BUILDDIR)/tests \
-		-i"$(BUILDDIR):src:tests" \
-		-I"." \
-		-o $@ \
-		tests/$*.hs
-	@/bin/echo -e "STRIP\t$@"
-	strip -s $@
-
-#
-# Run tests directly. If using inotify, invoke instead as follows:
-#
-# $ inotifymake tests -- ./check
-#
-
-test: config check
-	@/bin/echo -e "EXEC\tcheck"
-	./check
-
-#
-# Cleanup, etc
-#
-
-clean: 
-	@/bin/echo -e "RM\ttempory files"
-	-rm -f *.hi *.o
-	-rm -f *.prof
-	-rm -rf $(BUILDDIR)
-	-rm -rf dist/
-	-rm -rf tmp/
-	@/bin/echo -e "RM\texecutables"
-	-ls src tests | grep ^[[:lower:]]*.hs | xargs basename -s .hs -a | xargs rm -f
-	@if [ -f tags ] ; then /bin/echo -e "RM\ttags" ; rm tags ; fi
-	-rm -f config.h
-
-
-format: $(CORE_SOURCES) $(TEST_SOURCES)
+format: $(SOURCES)
 	stylish-haskell -i $^
 
-#
-# Specific to building $(PROJECT), in this case ingestd
-#
+clean:
+	@/bin/echo -e "CABAL\tclean"
+	-cabal clean >/dev/null
+	@/bin/echo -e "RM\ttemporary files"
+	-rm -f tags
+	-rm -f *.prof
 
-config: config.h
-
-config.h: vaultaire.cabal Setup.hs
-	@/bin/echo -e "CABAL\tconfigure"
-	cabal configure --enable-tests
-
-doc: config.h $(CORE_SOURCES)
-	@/bin/echo -e "CABAL\thaddock"
+doc:
 	cabal haddock
 
-dist: config.h
-	cabal sdist
-
-install: config.h all
-	cabal install --force-reinstalls
+install:
+	cabal install
