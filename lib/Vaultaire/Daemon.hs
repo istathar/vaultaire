@@ -42,6 +42,7 @@ module Vaultaire.Daemon
 import Control.Applicative
 import Control.Concurrent (ThreadId, killThread, myThreadId)
 import Control.Concurrent.Async (Async)
+import Control.Concurrent(yield)
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
@@ -105,8 +106,8 @@ runDaemon :: String           -- ^ Broker for ZMQ
           -> Daemon a
           -> IO a
 runDaemon broker ceph_user pool (Daemon a) = do
-    msg_chan <- atomically $ newTBQueue 4
-    resp_chan <- atomically $ newTBQueue 16
+    msg_chan <- atomically $ newTBQueue 1
+    resp_chan <- atomically $ newTBQueue 1024
 
     parent_tid <- myThreadId
     messenger_a <- Async.async $ messenger broker msg_chan resp_chan
@@ -298,7 +299,7 @@ listen :: ZMQ.Socket z ZMQ.Router
        -> TBQueue (NonEmpty ByteString)
        -> ZMQ.ZMQ z ()
 listen router recv_chan resp_chan = forever $ do
-    result <- ZMQ.poll 100 [ZMQ.Sock router [ZMQ.In] Nothing]
+    result <- ZMQ.poll 10 [ZMQ.Sock router [ZMQ.In] Nothing]
     case result of
         -- Message waiting
         [[ZMQ.In]] -> do
