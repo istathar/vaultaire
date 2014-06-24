@@ -24,7 +24,6 @@ import Vaultaire.ContentsServer
 import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
                          withPool)
 import Vaultaire.Reader (startReader)
-import Vaultaire.Types
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 
