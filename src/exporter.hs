@@ -122,8 +122,8 @@ main = do
             let l = Contents.formObjectLabel o
             Contents.readVaultObject l
 
-    putStrLn "-- convert contents"
-
+    putStrLn "-- skipping contents"
+{-
     withPool $ do
             forM_ st $ \s -> do
                 debug s
@@ -135,7 +135,7 @@ main = do
 
                 -- Register that source at address
                 liftIO $ Marquise.queueSourceDictUpdate (head sfs) a' s'
-
+-}
 
     putStrLn "-- convert data points"
 
