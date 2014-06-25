@@ -15,11 +15,11 @@
 
 module Main where
 
-import Control.Exception (throw)
+import qualified Control.Concurrent.Async as A
 import Control.Concurrent.STM
+import Control.Exception (throw)
 import Control.Monad (forever, replicateM)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import qualified Control.Concurrent.Async as A
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
@@ -96,17 +96,17 @@ debug :: (MonadIO m, Show s) => s -> m ()
 debug = liftIO . putStrLn . show
 
 withPool :: Rados.Pool a -> IO a
-withPool action = Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf")  
+withPool action = Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf")
                     (Rados.runPool "vaultaire" action)
 
 forkThread :: IO a -> IO ()
-forkThread a = A.async a >>= A.link
+forkThread = A.async >=> A.link
 
 main :: IO ()
 main = do
     [arg1, arg2, arg3] <- getArgs
     queue <- newTBQueueIO 64
-    
+
     let t1 = read (arg2 ++ "000000000")
     let t2 = read (arg3 ++ "000000000")
 
@@ -115,7 +115,7 @@ main = do
     let is = Bucket.calculateTimemarks t1 t2
     let o  = Origin (S.pack arg1)
     let o' = Vaultaire.Origin (S.pack arg1)
-   
+
     putStrLn "-- load contents list"
 
     st <- withPool $ do
@@ -142,7 +142,7 @@ main = do
     forM_ sfs $ \sf -> do
         forkThread $ withPool $ forever $ do
             (i,s) <- liftIO $ atomically $ readTBQueue queue
-            --
+
             -- Work out address
             let a' = hashSourceToAddress o s
 
@@ -153,20 +153,13 @@ main = do
                 liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" ("-" :: String)
               else do
                 let ps = Bucket.pointsInRange t1 t2 m
-                liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6d" (length ps) 
+                liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6d" (length ps)
                 liftIO $ forM_ ps (convertPointAndWrite sf a')
 
 
     forM_ is $ \i -> do
         forM_ st $ \s -> do
             atomically $ writeTBQueue queue (i,s)
-            
-
-
-
-
-
-
 
 
 convertPointAndWrite :: Marquise.SpoolFiles -> Marquise.Address -> Point -> IO ()
