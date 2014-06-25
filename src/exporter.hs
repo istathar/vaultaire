@@ -18,7 +18,7 @@ module Main where
 import qualified Control.Concurrent.Async as A
 import Control.Concurrent.STM
 import Control.Exception (throw)
-import Control.Monad (forever, replicateM)
+import Control.Monad (forever, replicateM, (>=>))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
