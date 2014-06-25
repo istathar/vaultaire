@@ -152,4 +152,4 @@ verifySplit = fromMaybe (error "verifySplit: impossible due to many'")
 -- A burst should be, at maximum, very close to this side, unless the user
 -- decides to send a very long extended point.
 idealBurstSize :: Word64
-idealBurstSize =  1048576
+idealBurstSize =  16 * 1048576
