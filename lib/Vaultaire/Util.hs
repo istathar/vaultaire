@@ -7,12 +7,13 @@ module Vaultaire.Util
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Monad
 import Control.Monad.IO.Class
 import System.IO.Unsafe (unsafePerformIO)
 import System.Log.Logger
 
 linkThread :: MonadIO m => IO a -> m ()
-linkThread a = liftIO (async a >>= link)
+linkThread = liftIO . (async >=> link)
 
 waitForever :: MonadIO m => m ()
 waitForever = liftIO (threadDelay maxBound) >> waitForever
