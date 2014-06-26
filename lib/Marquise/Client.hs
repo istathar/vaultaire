@@ -55,6 +55,7 @@ module Marquise.Client
     decodeSimple,
 
     -- * Types
+    SourceDict,
     SpoolName,
     SpoolFiles,
     Address,
