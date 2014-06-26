@@ -65,7 +65,7 @@ suite = do
             addrs `shouldBe` [(0, "Hai2"), (rollOverAddress, "Hai3")]
 
     describe "identity QuickCheck" $
-        it "writes then reads" $ property propWriteThenRead
+        prop "writes then reads" propWriteThenRead
 
 propWriteThenRead :: (Origin, Address, ByteString) -> Property
 propWriteThenRead arb@(_,_,payload) = monadicIO $ do

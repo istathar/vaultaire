@@ -48,8 +48,8 @@ main = hspec suite
 suite :: Spec
 suite = do
     describe "processBucket" $ do
-        it "has no elements later than end" $ property propFilterNoLater
-        it "has no elements earlier than start" $ property propFilterNoEarlier
+        prop "has no elements later than end" propFilterNoLater
+        prop "has no elements earlier than start" propFilterNoEarlier
 
     describe "first write deduplication" $ do
         it "must preserve first write" $
@@ -58,8 +58,7 @@ suite = do
            >>= V.freeze
            >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 2])
 
-        it "should retain no duplicates" $
-            property $ propNoDuplicates (A.deDuplicate (==))
+        prop "should retain no duplicates" $ propNoDuplicates (A.deDuplicate (==))
 
     describe "last write deduplication" $ do
         it "last must preserve last write" $
@@ -68,8 +67,7 @@ suite = do
            >>= V.freeze
            >>= (`shouldBe` V.fromList [Point 0 0 0, Point 1 2 3])
 
-        it "should retain no duplicates" $
-            property $ propNoDuplicates (A.deDuplicateLast (==))
+        prop "should retain no duplicates" $ propNoDuplicates (A.deDuplicateLast (==))
 
     describe "merging" $
         it "correctly merges a pointer record and extended bucket" $
