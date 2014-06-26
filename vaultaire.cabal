@@ -91,7 +91,7 @@ library
                      locators >= 0.2.4,
                      siphash,
                      blaze-builder,
-                     rados-haskell >= 3
+                     rados-haskell >= 3.0.2
 
   ghc-options:       -O2
                      -threaded
