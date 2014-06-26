@@ -82,8 +82,7 @@ suite = do
                     addr' `shouldBe` addr
                 _ -> error "expected one"
 
-        it "updates source dict for any address" $
-            property propSourceDictUpdated
+        prop "updates source dict for any address" propSourceDictUpdated
 
 
 listToDict :: [(Text, Text)] -> SourceDict

@@ -42,7 +42,6 @@ module Vaultaire.Daemon
 import Control.Applicative
 import Control.Concurrent (ThreadId, killThread, myThreadId)
 import Control.Concurrent.Async (Async)
-import Control.Concurrent(yield)
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.STM
 import Control.Monad.IO.Class

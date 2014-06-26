@@ -19,7 +19,6 @@ module Marquise.Server
 
 import Control.Applicative
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async
 import Control.Exception (throw, throwIO)
 import Control.Monad.State
 import Data.Attoparsec (Parser)
@@ -36,6 +35,7 @@ import Marquise.Client (makeSpoolName, updateSourceDict)
 import Marquise.Types (SpoolName (..))
 import Pipes
 import Vaultaire.Types
+import Vaultaire.Util
 
 data ContentsRequest = ContentsRequest Address SourceDict
   deriving Show
@@ -48,8 +48,7 @@ marquiseServer broker origin user_sn =
             createDirectories sn
             linkThread (sendPoints broker origin sn)
             linkThread (sendContents broker origin sn)
-  where
-    linkThread = async >=> link
+            waitForever
 
 sendPoints :: String -> Origin -> SpoolName -> IO ()
 sendPoints broker origin sn = forever $ do
