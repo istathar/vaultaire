@@ -3,8 +3,8 @@ name:                vaultaire
 version:             2.0.2
 synopsis:            Data vault for metrics
 license:             BSD3
-author:              Andrew Cowie <andrew@operationaldynamics.com>
-maintainer:          Andrew Cowie <andrew@operationaldynamics.com>
+author:              Anchor Engineering <engineering@anchor.com.au>
+maintainer:          Anchor Engineering <engineering@anchor.com.au>
 copyright:           © 2013-2014 Anchor Systems, Pty Ltd and Others
 category:            Other
 tested-with:         GHC == 7.6
@@ -22,75 +22,37 @@ library
   default-language:  Haskell2010
 
   exposed-modules:   Vaultaire.Daemon,
-                     Vaultaire.Types,
                      Vaultaire.RollOver,
                      Vaultaire.Broker,
                      Vaultaire.DayMap,
                      Vaultaire.OriginMap,
-                     Vaultaire.Util,
                      Vaultaire.Writer,
                      Vaultaire.Reader,
                      Vaultaire.ReaderAlgorithms,
                      Vaultaire.InternalStore,
-                     Vaultaire.ContentsServer,
-                     Marquise.Client,
-                     Marquise.Server,
-                     Marquise.Types,
-                     Marquise.Classes,
-                     Marquise.IO,
-                     Marquise.IO.FFI,
-                     Marquise.IO.Writer,
-                     Marquise.IO.Reader,
-                     Marquise.IO.Contents,
-                     Marquise.IO.SpoolFile,
-                     Marquise.IO.Connection
-
-  other-modules:     Vaultaire.Classes.WireFormat,
-                     Vaultaire.Types.Address,
-                     Vaultaire.Types.ContentsOperation,
-                     Vaultaire.Types.ContentsResponse,
-                     Vaultaire.Types.SourceDict,
-                     Vaultaire.Types.ReadStream,
-                     Vaultaire.Types.ReadRequest,
-                     Vaultaire.Types.Common,
-                     Vaultaire.Types.WriteResult,
-                     Vaultaire.Types.ContentsListBypass
-                     Vaultaire.Types.PassThrough
-
+                     Vaultaire.ContentsServer
   build-depends:     base >=3 && <5,
                      bytestring,
-                     text,
-                     time,
-                     mtl,
-                     transformers,
-                     semigroups,
-                     containers,
-                     primitive,
-                     -- parsers does not build
-                     attoparsec <0.12,
-                     bifunctors,
-                     spool,
-                     pipes,
-                     pipes-parse,
-                     pipes-bytestring,
-                     pipes-concurrency,
-                     hslogger,
-                     directory,
-                     unix,
-                     filepath,
-                     hashable,
-                     unordered-containers,
-                     vector,
-                     vector-algorithms,
-                     zeromq4-haskell,
-                     exceptions,
-                     packer,
-                     stm,
-                     async,
                      random,
-                     locators >= 0.2.4,
-                     siphash,
-                     blaze-builder,
+                     zeromq4-haskell,
+                     containers,
+                     pipes-parse,
+                     pipes,
+                     mtl,
+                     unordered-containers,
+                     primitive,
+                     vector-algorithms,
+                     vector,
+                     spool,
+                     packer,
+                     time,
+                     pipes-concurrency,
+                     async,
+                     stm,
+                     semigroups,
+                     hslogger,
+                     vaultaire-common,
+                     text,
                      rados-haskell >= 3.0.3
 
   ghc-options:       -O2
@@ -115,6 +77,8 @@ executable vault
                      optparse-applicative,
                      trifecta,
                      directory,
+                     marquise,
+                     vaultaire-common,
                      pipes,
                      hslogger,
                      vaultaire
@@ -139,6 +103,8 @@ executable           kitchen-sink
                      async,
                      zeromq4-haskell,
                      optparse-applicative,
+                     marquise,
+                     vaultaire-common,
                      trifecta,
                      directory,
                      hslogger,
@@ -162,6 +128,7 @@ test-suite           daemon-test
   build-depends:     base >=3 && <5,
                      hspec,
                      async,
+                     vaultaire-common,
                      semigroups,
                      bytestring,
                      vaultaire,
@@ -202,6 +169,7 @@ test-suite           writer-test
                      pipes,
                      pipes-parse,
                      semigroups,
+                     vaultaire-common,
                      zeromq4-haskell,
                      mtl,
                      bytestring,
@@ -230,6 +198,7 @@ test-suite           reader-test
                      pipes,
                      pipes-parse,
                      semigroups,
+                     vaultaire-common,
                      zeromq4-haskell,
                      mtl,
                      bytestring,
@@ -255,6 +224,7 @@ test-suite           reader-algorithms-test
                      containers,
                      QuickCheck,
                      primitive,
+                     vaultaire-common,
                      spool,
                      vector,
                      mtl,
@@ -282,6 +252,7 @@ test-suite           identity-test
                      vector,
                      rados-haskell,
                      semigroups,
+                     vaultaire-common,
                      mtl,
                      bytestring,
                      zeromq4-haskell,
@@ -307,9 +278,9 @@ test-suite           internal-store-test
                      rados-haskell,
                      semigroups,
                      locators >= 0.2.4,
-                     quickcheck-instances,
                      pipes-parse,
                      mtl,
+                     vaultaire-common,
                      bytestring,
                      zeromq4-haskell,
                      vaultaire
@@ -319,33 +290,6 @@ test-suite           internal-store-test
                      -Wall
                      -Wwarn
                      -fwarn-tabs
-
-test-suite           client-server-test
-  hs-source-dirs:    tests
-  main-is:           ClientServer.hs
-  type:              exitcode-stdio-1.0
-  default-language:  Haskell2010
-
-  build-depends:     base >=3 && <5,
-                     hspec,
-                     QuickCheck,
-                     vector,
-                     rados-haskell,
-                     semigroups,
-                     locators >= 0.2.4,
-                     pipes-parse,
-                     mtl,
-                     async,
-                     bytestring,
-                     zeromq4-haskell,
-                     vaultaire
-
-  ghc-options:       -O2
-                     -threaded
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-
 
 test-suite           contents-test
   hs-source-dirs:    tests
@@ -365,34 +309,11 @@ test-suite           contents-test
                      semigroups,
                      locators >= 0.2.4,
                      mtl,
+                     marquise,
                      bytestring,
                      zeromq4-haskell,
-                     quickcheck-instances,
+                     vaultaire-common,
                      pipes,
-                     vaultaire
-
-  ghc-options:       -O2
-                     -threaded
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-
-test-suite           wire-formats-test
-  hs-source-dirs:    tests
-  main-is:           WireFormatsTest.hs
-  type:              exitcode-stdio-1.0
-  default-language:  Haskell2010
-
-  build-depends:     base >=3 && <5,
-                     hspec,
-                     containers,
-                     unordered-containers,
-                     text,
-                     locators >= 0.2.4,
-                     QuickCheck,
-                     mtl,
-                     bytestring,
-                     quickcheck-instances,
                      vaultaire
 
   ghc-options:       -O2

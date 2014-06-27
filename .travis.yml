@@ -23,6 +23,11 @@ before_install:
 
 install:
   - 'cabal-$CABALVER update'
+  - 'cabal sandbox init'
+  - 'git clone https://github.com/anchor/vaultaire-common.git ../vaultaire-common/'
+  - 'cabal sandbox add-source ../vaultaire-common/'
+  - 'git clone https://github.com/anchor/marquise.git ../marquise/'
+  - 'cabal sandbox add-source ../marquise/'
   - 'cabal-$CABALVER install --only-dependencies --enable-tests --enable-benchmarks'
 
 script:
@@ -31,4 +36,3 @@ script:
   - 'cabal-$CABALVER sdist'
   - 'cabal-$CABALVER test daymap-test'
   - 'cabal-$CABALVER test reader-algorithms-test'
-  - 'cabal-$CABALVER test wire-formats-test'

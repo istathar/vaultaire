@@ -19,7 +19,6 @@ import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
-import ArbitraryInstances ()
 import Control.Exception (throw)
 import Data.HashMap.Strict (fromList)
 import Data.Text
@@ -28,10 +27,11 @@ import Pipes.Prelude (toListM)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import TestHelpers
+import Test.Hspec.QuickCheck
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
-import Vaultaire.Types
 import Vaultaire.Util
+import Data.String
 
 startDaemons :: IO ()
 startDaemons = do
@@ -52,16 +52,16 @@ suite = do
     -- we can remove it before we have to maintain it.
     describe "Addresses" $ do
         it "encodes an address in base62" $ do
-            encodeAddressToString 0 `shouldBe` "00000000000"
-            encodeAddressToString (2^64-1) `shouldBe` "LygHa16AHYF"
-            encodeAddressToString (minBound :: Address) `shouldBe` "00000000000"
-            encodeAddressToString (maxBound :: Address) `shouldBe` "LygHa16AHYF"
+            show (0 :: Address) `shouldBe` "00000000000"
+            show (2^64-1 :: Address) `shouldBe` "LygHa16AHYF"
+            show (minBound :: Address) `shouldBe` "00000000000"
+            show (maxBound :: Address) `shouldBe` "LygHa16AHYF"
 
         it "decodes an address from base62" $ do
-            decodeStringAsAddress "00000000000" `shouldBe` 0
-            decodeStringAsAddress "00000000001" `shouldBe` 1
-            decodeStringAsAddress "LygHa16AHYF" `shouldBe` (2^64-1)
-            decodeStringAsAddress "LygHa16AHYG" `shouldBe` 0
+            fromString "00000000000" `shouldBe` (0 :: Address)
+            fromString "00000000001" `shouldBe` (1 :: Address)
+            fromString "LygHa16AHYF" `shouldBe` ((2^64-1) :: Address)
+            fromString "LygHa16AHYG" `shouldBe` (0 :: Address)
 
     describe "Full stack" $ do
         it "unions two dicts" $ do

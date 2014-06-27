@@ -5,10 +5,9 @@
 
 module Main where
 
-import ArbitraryInstances ()
 import Control.Monad
 import Control.Monad.State.Strict
-import Data.ByteString (ByteString)
+import Data.ByteString (ByteString, pack)
 import Pipes.Parse
 import Test.Hspec
 import Test.Hspec.QuickCheck
@@ -19,6 +18,8 @@ import Vaultaire.Daemon
 import Vaultaire.InternalStore (enumerateOrigin, internalStoreBuckets,
                                 readFrom, writeTo)
 import Vaultaire.Types
+
+instance Arbitrary ByteString where arbitrary = fmap pack arbitrary
 
 rollOverAddress :: Address
 rollOverAddress = Address internalStoreBuckets
