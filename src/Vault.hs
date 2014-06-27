@@ -278,14 +278,17 @@ runDumpDays pool user origin =  do
 
 runBroker :: IO ()
 runBroker = runZMQ $ do
+    -- Writer proxy.
     void $ async $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
                               "tcp://*:5000"
 
+    -- Reader proxy.
     void $ async $ startProxy (Router,"tcp://*:5570")
                               (Dealer,"tcp://*:5571")
                               "tcp://*:5001"
 
+    -- Contents proxy.
     void $ async $ startProxy (Router,"tcp://*:5580")
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
