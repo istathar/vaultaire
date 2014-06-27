@@ -26,8 +26,8 @@ import Vaultaire.Classes.WireFormat
 import Vaultaire.Types.Address
 import Vaultaire.Types.SourceDict
 
-data ContentsResponse = RandomAddress Address
-                      | InvalidContentsOrigin
+data ContentsResponse = InvalidContentsOrigin
+                      | RandomAddress Address
                       | ContentsListEntry Address SourceDict
                       | EndOfContentsList
                       | UpdateSuccess
