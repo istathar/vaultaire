@@ -17,7 +17,6 @@ module Main where
 
 import qualified Control.Concurrent.Async as A
 import Control.Concurrent.STM
-import Control.Exception (throw)
 import Control.Monad (forever, replicateM, (>=>))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
@@ -86,7 +85,9 @@ makeHashMapFromMap :: Map ByteString ByteString -> HashMap Text Text
 makeHashMapFromMap = HashMap.fromList . map raise . Map.toList
   where
     raise :: (ByteString, ByteString) -> (Text, Text)
-    raise (k,v) = (T.pack . S.unpack $ k, T.pack . S.unpack $ v)
+    raise (k,v) = (T.pack . S.unpack . clean $ k, T.pack . S.unpack . clean $ v)
+
+    clean = S.map (\c -> if c == ':' || c == ',' then '-' else c)
 
 filterUndesireables :: Map ByteString ByteString -> Map ByteString ByteString
 filterUndesireables = Map.delete "origin"
@@ -114,28 +115,12 @@ main = do
 
     let is = Bucket.calculateTimemarks t1 t2
     let o  = Origin (S.pack arg1)
-    let o' = Vaultaire.Origin (S.pack arg1)
 
     putStrLn "-- load contents list"
 
     st <- withPool $ do
             let l = Contents.formObjectLabel o
             Contents.readVaultObject l
-
-    putStrLn "-- skipping contents"
-{-
-    withPool $ do
-            forM_ st $ \s -> do
-                debug s
-                -- Work out address
-                let a' = hashSourceToAddress o s
-
-                -- All tags, less undesirables
-                let s' = convertSourceDict s
-
-                -- Register that source at address
-                liftIO $ Marquise.queueSourceDictUpdate (head sfs) a' s'
--}
 
     putStrLn "-- convert data points"
 
@@ -161,6 +146,19 @@ main = do
         forM_ st $ \s -> do
             atomically $ writeTBQueue queue (i,s)
 
+    putStrLn "-- convert contents"
+
+    withPool $ do
+            forM_ st $ \s -> do
+                debug s
+                -- Work out address
+                let a' = hashSourceToAddress o s
+
+                -- All tags, less undesirables
+                let s' = convertSourceDict s
+
+                -- Register that source at address
+                liftIO $ Marquise.queueSourceDictUpdate (head sfs) a' s'
 
 convertPointAndWrite :: Marquise.SpoolFiles -> Marquise.Address -> Point -> IO ()
 convertPointAndWrite spool a p =

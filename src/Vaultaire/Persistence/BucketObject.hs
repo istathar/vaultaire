@@ -31,7 +31,6 @@ module Vaultaire.Persistence.BucketObject (
 import Blaze.ByteString.Builder
 import Control.Exception
 import "mtl" Control.Monad.Error ()
-import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Char

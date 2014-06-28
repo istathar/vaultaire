@@ -24,7 +24,6 @@ module Vaultaire.Persistence.ContentsObject (
 import Prelude hiding (foldl, mapM_)
 
 import Control.Exception
-import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.Foldable
