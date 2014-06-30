@@ -42,7 +42,9 @@ executable           exporter
                      blaze-builder,
                      rados-haskell >= 3.0.0,
                      data-binary-ieee754,
-                     vaultaire >= 2.0.2
+                     vaultaire-common,
+                     vaultaire >= 2.0.2,
+                     marquise
 
   main-is:           exporter.hs
   hs-source-dirs:    src
