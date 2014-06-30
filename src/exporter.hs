@@ -30,7 +30,10 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time (UTCTime, formatTime, getCurrentTime)
 import System.Environment (getArgs)
+import System.IO (Handle, IOMode (..), openFile)
+import System.Locale (defaultTimeLocale)
 import qualified System.Rados.Monadic as Rados
 import Text.Printf
 
@@ -96,6 +99,24 @@ filterUndesireables = Map.delete "origin"
 debug :: (MonadIO m, Show s) => s -> m ()
 debug = liftIO . putStrLn . show
 
+report :: MonadIO m => Handle -> Origin -> Vaultaire.Address -> Timemark -> Int -> m ()
+report h o a' i n = liftIO $ do
+    date <- getTimestamp
+    hPrintf h "%s %s %s %s %6d\n" date (show o) (show a') (show i) n
+
+
+formatTimestamp :: UTCTime -> String
+formatTimestamp x = formatTime defaultTimeLocale "%a %e %b %y, %H:%M:%S.%q" x
+
+getTimestamp :: IO String
+getTimestamp = do
+    cur <- getCurrentTime
+    let time = formatTimestamp cur
+    let len  = length ("Sat  8 Oct 11, 07:12:21.999" :: String)
+    let str = take len time
+    return (str ++ "Z")
+
+
 withPool :: Rados.Pool a -> IO a
 withPool action = Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf")
                     (Rados.runPool "vaultaire" action)
@@ -124,6 +145,8 @@ main = do
 
     putStrLn "-- convert data points"
 
+    h <- openFile "exporter.log" AppendMode
+
     forM_ sfs $ \sf -> do
         forkThread $ withPool $ forever $ do
             (i,s) <- liftIO $ atomically $ readTBQueue queue
@@ -133,13 +156,15 @@ main = do
 
             m <- Bucket.readVaultObject o s i
 
-            if (Map.null m)
+            n <- if (Map.null m)
               then do
-                liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6s" ("-" :: String)
+                return 0
               else do
                 let ps = Bucket.pointsInRange t1 t2 m
-                liftIO $ putStrLn $ (show o) ++ " " ++ (show a') ++ " " ++ (show i) ++ " " ++ printf "%6d" (length ps)
                 liftIO $ forM_ ps (convertPointAndWrite sf a')
+                return (length ps)
+
+            report h o a' i n
 
 
     forM_ is $ \i -> do

@@ -21,6 +21,7 @@ executable           exporter
                      containers >= 0.5,
                      unordered-containers,
                      network,
+                     old-locale,
                      cereal,
                      uuid,
                      semigroups,
