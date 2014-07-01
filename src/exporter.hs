@@ -22,7 +22,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
-import Data.Foldable (forM_)
+import Data.Foldable (foldlM, forM_)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Map.Strict (Map)
@@ -31,8 +31,9 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time (UTCTime, formatTime, getCurrentTime)
+import Data.Time.Clock.POSIX
 import System.Environment (getArgs)
-import System.IO (Handle, IOMode (..), openFile)
+import System.IO (Handle, IOMode (..), hFlush, openFile)
 import System.Locale (defaultTimeLocale)
 import qualified System.Rados.Monadic as Rados
 import Text.Printf
@@ -99,22 +100,15 @@ filterUndesireables = Map.delete "origin"
 debug :: (MonadIO m, Show s) => s -> m ()
 debug = liftIO . putStrLn . show
 
-report :: MonadIO m => Handle -> Origin -> Vaultaire.Address -> Timemark -> Int -> m ()
-report h o a' i n = liftIO $ do
-    date <- getTimestamp
-    hPrintf h "%s %s %s %s %6d\n" date (show o) (show a') (show i) n
+report :: MonadIO m => Handle -> Origin -> Timemark -> Int -> m ()
+report h o i n = liftIO $ do
+    let date = formatTimestamp (posixSecondsToUTCTime (fromIntegral i))
+    hPrintf h "%s %s %d %6d\n" date (show o) i n
+    hFlush h
 
 
 formatTimestamp :: UTCTime -> String
-formatTimestamp x = formatTime defaultTimeLocale "%a %e %b %y, %H:%M:%S.%q" x
-
-getTimestamp :: IO String
-getTimestamp = do
-    cur <- getCurrentTime
-    let time = formatTimestamp cur
-    let len  = length ("Sat  8 Oct 11, 07:12:21.999" :: String)
-    let str = take len time
-    return (str ++ "Z")
+formatTimestamp x = formatTime defaultTimeLocale "%e %b %y, %H:%M:%S" x
 
 
 withPool :: Rados.Pool a -> IO a
@@ -127,7 +121,9 @@ forkThread = A.async >=> A.link
 main :: IO ()
 main = do
     [arg1, arg2, arg3] <- getArgs
-    queue <- newTBQueueIO 64
+{-
+    queue <- newTBQueueIO 1
+-}
 
     let t1 = read (arg2 ++ "000000000")
     let t2 = read (arg3 ++ "000000000")
@@ -145,8 +141,9 @@ main = do
 
     putStrLn "-- convert data points"
 
-    h <- openFile "exporter.log" AppendMode
+    h <- openFile "exporter.log" WriteMode
 
+{-
     forM_ sfs $ \sf -> do
         forkThread $ withPool $ forever $ do
             (i,s) <- liftIO $ atomically $ readTBQueue queue
@@ -164,12 +161,36 @@ main = do
                 liftIO $ forM_ ps (convertPointAndWrite sf a')
                 return (length ps)
 
-            report h o a' i n
+            report h o i n
 
 
     forM_ is $ \i -> do
         forM_ st $ \s -> do
             atomically $ writeTBQueue queue (i,s)
+-}
+
+    withPool $ do
+        forM_ is $ \i -> do
+            let sf = head sfs
+
+            count <- foldlM (\n s -> do
+                -- Work out address
+                let a' = hashSourceToAddress o s
+
+                m <- Bucket.readVaultObject o s i
+
+                if (Map.null m)
+                  then do
+                    return n
+                  else do
+                    let ps = Bucket.pointsInRange t1 t2 m
+                    liftIO $ forM_ ps (convertPointAndWrite sf a')
+                    return (n + length ps)
+                ) 0 st
+
+            report h o i count
+
+
 
     putStrLn "-- convert contents"
 
