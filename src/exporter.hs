@@ -42,8 +42,8 @@ import Vaultaire.Internal.CoreTypes
 import qualified Vaultaire.Persistence.BucketObject as Bucket
 import qualified Vaultaire.Persistence.ContentsObject as Contents
 
-import qualified "vaultaire" Marquise.Client as Marquise
-import qualified "vaultaire" Vaultaire.Types as Vaultaire
+import qualified "marquise" Marquise.Client as Marquise
+import qualified "vaultaire-common" Vaultaire.Types as Vaultaire
 
 type InclusionF = Map ByteString ByteString -> ByteString
 
