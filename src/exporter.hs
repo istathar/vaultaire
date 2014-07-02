@@ -167,7 +167,7 @@ main = do
             count <- foldlM (processSource sf o i) 0 st
             report h o i count
 
-{-
+
     putStrLn "-- convert contents"
 
     withPool $ do
@@ -181,7 +181,7 @@ main = do
 
                 -- Register that source at address
                 liftIO $ Marquise.queueSourceDictUpdate sf a' s'
--}
+
 
 convertPointAndWrite :: Marquise.SpoolFiles -> Marquise.Address -> Point -> IO ()
 convertPointAndWrite spool a p =
