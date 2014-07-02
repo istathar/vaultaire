@@ -12,7 +12,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
 
-module Vaultaire.JournalFile
+module Version1.JournalFile
 (
     BlockName,
     BlockSize,

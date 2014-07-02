@@ -15,7 +15,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
-module Vaultaire.Internal.CoreTypes
+module Version1.Internal.CoreTypes
 (
     Point(..),
     Timestamp,

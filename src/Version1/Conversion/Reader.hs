@@ -13,7 +13,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
-module Vaultaire.Conversion.Reader (
+module Version1.Conversion.Reader (
     convertVaultToPoint,
     decodeSingle,
     convertVaultToSource,
@@ -27,8 +27,8 @@ import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import qualified Data.Text as T
 
-import qualified Vaultaire.Internal.CoreTypes as Core
-import qualified Vaultaire.Serialize.DiskFormat as Protobuf
+import qualified Version1.Internal.CoreTypes as Core
+import qualified Version1.Serialize.DiskFormat as Protobuf
 
 
 --

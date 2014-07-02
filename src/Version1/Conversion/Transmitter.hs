@@ -13,7 +13,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
-module Vaultaire.Conversion.Transmitter (
+module Version1.Conversion.Transmitter (
     createDataFrame,
     createSourceResponse,
     createSourceResponseBurst,
@@ -38,8 +38,8 @@ import Data.Monoid (Monoid, mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 
-import qualified Vaultaire.Internal.CoreTypes as Core
-import qualified Vaultaire.Serialize.WireFormat as Protobuf
+import qualified Version1.Internal.CoreTypes as Core
+import qualified Version1.Serialize.WireFormat as Protobuf
 
 
 --

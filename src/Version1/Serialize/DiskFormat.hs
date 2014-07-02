@@ -17,7 +17,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 
-module Vaultaire.Serialize.DiskFormat
+module Version1.Serialize.DiskFormat
 (
     Word3(..),
     Compression(..),
@@ -42,7 +42,7 @@ import Data.Word
 import GHC.Generics (Generic)
 import Prelude hiding (and, or)
 
-import Vaultaire.Serialize.Common
+import Version1.Serialize.Common
 
 and :: Bits a => a -> a -> a
 and = (.&.)

@@ -15,7 +15,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Vaultaire.Conversion.Writer (
+module Version1.Conversion.Writer (
     createDiskPrefix,
     createDiskContent,
     createDiskPoint,
@@ -29,13 +29,13 @@ module Vaultaire.Conversion.Writer (
 import Data.ByteString (ByteString)
 import Data.Int (Int64)
 import qualified Data.Map.Strict as Map
-import Data.Monoid (Monoid, mempty)
+import Data.Monoid (mempty)
 import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 
-import qualified Vaultaire.Internal.CoreTypes as Core
-import qualified Vaultaire.Serialize.DiskFormat as Protobuf
-import qualified Vaultaire.Serialize.DiskFormat as Disk
+import qualified Version1.Internal.CoreTypes as Core
+import qualified Version1.Serialize.DiskFormat as Protobuf
+import qualified Version1.Serialize.DiskFormat as Disk
 
 createDiskPrefix :: Int64 -> Disk.VaultPrefix
 createDiskPrefix n =

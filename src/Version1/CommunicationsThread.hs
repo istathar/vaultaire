@@ -1,4 +1,4 @@
-module Vaultaire.CommunicationsThread where
+module Version1.CommunicationsThread where
 
 import Control.Concurrent.STM.TChan
 import Control.Monad

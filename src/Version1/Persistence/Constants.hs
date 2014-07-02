@@ -12,7 +12,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
-module Vaultaire.Persistence.Constants where
+module Version1.Persistence.Constants where
 
 import Data.ByteString (ByteString)
 import Data.Word (Word64)

@@ -12,7 +12,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Vaultaire.Serialize.WireFormat
+module Version1.Serialize.WireFormat
 (
     DataFrame(..),
     SourceTag(..),
@@ -38,7 +38,7 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Text.Printf
 
-import Vaultaire.Serialize.Common
+import Version1.Serialize.Common
 
 data DataFrame = DataFrame {
     origin           :: Optional D8 (Value ByteString),

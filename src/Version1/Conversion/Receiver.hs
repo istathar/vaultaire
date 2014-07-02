@@ -13,7 +13,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
-module Vaultaire.Conversion.Receiver (
+module Version1.Conversion.Receiver (
     convertToPoint,
     decodeBurst,
     decodeRequestMulti
@@ -32,8 +32,8 @@ import Data.ProtocolBuffers hiding (field)
 import Data.Serialize
 import qualified Data.Text as T
 
-import qualified Vaultaire.Internal.CoreTypes as Core
-import qualified Vaultaire.Serialize.WireFormat as Protobuf
+import qualified Version1.Internal.CoreTypes as Core
+import qualified Version1.Serialize.WireFormat as Protobuf
 
 
 --

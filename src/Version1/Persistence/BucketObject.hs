@@ -15,7 +15,7 @@
 {-# LANGUAGE PackageImports    #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
-module Vaultaire.Persistence.BucketObject (
+module Version1.Persistence.BucketObject (
     formObjectLabel,
     floorTimestampToMark,
     calculateTimemarks,
@@ -41,10 +41,10 @@ import Data.Serialize
 import Data.Word
 import System.Rados.Monadic
 
-import Vaultaire.Conversion.Reader
-import Vaultaire.Internal.CoreTypes
-import Vaultaire.Persistence.Constants
-import qualified Vaultaire.Serialize.DiskFormat as Disk
+import Version1.Conversion.Reader
+import Version1.Internal.CoreTypes
+import Version1.Persistence.Constants
+import qualified Version1.Serialize.DiskFormat as Disk
 
 {-
     I'd really like to think there's an easier way of doing constants

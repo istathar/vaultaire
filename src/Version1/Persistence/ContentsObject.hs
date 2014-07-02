@@ -15,7 +15,7 @@
 {-# OPTIONS -fno-warn-orphans #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
 
-module Vaultaire.Persistence.ContentsObject (
+module Version1.Persistence.ContentsObject (
     formObjectLabel,
     appendVaultSource,
     readVaultObject
@@ -32,11 +32,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import System.Rados.Monadic
 
-import Vaultaire.Conversion.Reader
-import Vaultaire.Conversion.Writer
-import Vaultaire.Internal.CoreTypes
-import Vaultaire.Persistence.Constants
-import qualified Vaultaire.Serialize.DiskFormat as Disk
+import Version1.Conversion.Reader
+import Version1.Conversion.Writer
+import Version1.Internal.CoreTypes
+import Version1.Persistence.Constants
+import qualified Version1.Serialize.DiskFormat as Disk
 
 
 --

@@ -14,7 +14,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
-module Vaultaire.Serialize.Common
+module Version1.Serialize.Common
 (
     SourceTag(..),
     ValueType(..)
