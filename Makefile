@@ -5,6 +5,7 @@ all: build
 # file would work, but is there anything easier?
 #
 
+vault: dist/build/vault/vault
 marquised: dist/build/marquised/marquised
 reader-test: dist/build/reader-test/reader-test
 reader-algorithms: dist/build/reader-algorithms/reader-algorithms

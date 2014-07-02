@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
-
 --
 -- Data vault for metrics
 --
@@ -11,6 +8,9 @@
 -- you can redistribute it and/or modify it under the terms of
 -- the 3-clause BSD licence.
 --
+
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
 
 module Vaultaire.ContentsServer
 (

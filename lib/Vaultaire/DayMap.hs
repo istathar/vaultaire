@@ -1,6 +1,6 @@
 module Vaultaire.DayMap
 (
-    DayMap,
+    DayMap(..),
     NumBuckets,
     Epoch,
     Time,
@@ -27,7 +27,7 @@ loadDayMap bs
                show (BS.length bs) ++ " bytes."
     | otherwise =
         let loaded = mustLoadDayMap bs
-            (first, _) = Map.findMin loaded
+            (first, _) = Map.findMin (unDayMap loaded)
         in if first == 0
             then Right loaded
             else Left "bad first entry, must start at zero."
@@ -38,18 +38,18 @@ lookupFirst = (fst .) . splitRemainder
 
 -- Return first and the remainder that is later than that.
 splitRemainder :: Time -> DayMap -> ((Epoch, NumBuckets), DayMap)
-splitRemainder t dm =
-    let (left, middle, right) = Map.splitLookup t dm
+splitRemainder t (DayMap m) =
+    let (left, middle, right) = Map.splitLookup t m
         first = case middle of
-            Just m -> if Map.null left -- Corner case, leftmost entry
-                        then (t, m)
+            Just n -> if Map.null left -- Corner case, leftmost entry
+                        then (t, n)
                         else Map.findMax left
             Nothing -> Map.findMax left
-    in (first, right)
+    in (first, DayMap right)
 
 lookupRange :: Time -> Time -> DayMap -> [(Epoch, NumBuckets)]
 lookupRange start end dm =
-    let (first, remainder) = splitRemainder start dm
+    let (first, (DayMap remainder)) = splitRemainder start dm
         (rest,_) = Map.split end remainder
     in first : Map.toList rest
 
@@ -57,6 +57,6 @@ lookupRange start end dm =
 
 mustLoadDayMap :: ByteString -> DayMap
 mustLoadDayMap =
-    Map.fromList . runUnpacking parse
+    DayMap . Map.fromList . runUnpacking parse
   where
     parse = many $ (,) <$> getWord64LE <*> getWord64LE

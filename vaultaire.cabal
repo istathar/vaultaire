@@ -51,7 +51,7 @@ library
                      stm,
                      semigroups,
                      hslogger,
-                     vaultaire-common,
+                     vaultaire-common >= 2.0.1,
                      text,
                      rados-haskell >= 3.0.3
 

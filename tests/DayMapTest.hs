@@ -22,18 +22,18 @@ goodDayFile = "\x00\x00\x00\x00\x00\x00\x00\x00\
               \\x01\x00\x00\x00\x00\x00\x00\x00\&\
               \CCCCCCCCDDDDDDDD"
 
-goodDayMap  = Map.fromList [(0,1)
+goodDayMap  = DayMap $ Map.fromList [(0,1)
                            ,(0x4343434343434343, 0x4444444444444444)]
 
 
 simple :: DayMap
-simple = Map.fromList [(0, 100), (10, 200), (30, 300)]
+simple = DayMap $ Map.fromList [(0, 100), (10, 200), (30, 300)]
 
 singleEntry :: DayMap
-singleEntry = Map.fromList [(0, 100)]
+singleEntry = DayMap $ Map.fromList [(0, 100)]
 
 empty :: DayMap
-empty = Map.empty
+empty = DayMap $ Map.empty
 
 suite :: Spec
 suite = do
