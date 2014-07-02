@@ -16,8 +16,7 @@
 module Main where
 
 import qualified Control.Concurrent.Async as A
-import Control.Concurrent.STM
-import Control.Monad (forever, replicateM, (>=>))
+import Control.Monad ((>=>))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Binary.IEEE754 (doubleToWord)
 import Data.ByteString (ByteString)
@@ -30,7 +29,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Time (UTCTime, formatTime, getCurrentTime)
+import Data.Time (UTCTime, formatTime)
 import Data.Time.Clock.POSIX
 import System.Environment (getArgs)
 import System.IO (Handle, IOMode (..), hFlush, openFile)
@@ -121,14 +120,13 @@ forkThread = A.async >=> A.link
 main :: IO ()
 main = do
     [arg1, arg2, arg3] <- getArgs
-{-
-    queue <- newTBQueueIO 1
--}
 
     let t1 = read (arg2 ++ "000000000")
     let t2 = read (arg3 ++ "000000000")
 
-    sfs <- replicateM 4 (Marquise.createSpoolFiles "exporter")
+
+--  sfs <- replicateM 4 (Marquise.createSpoolFiles "exporter")
+    sf <- Marquise.createSpoolFiles "exporter"
 
     let is = Bucket.calculateTimemarks t1 t2
     let o  = Origin (S.pack arg1)
@@ -143,36 +141,9 @@ main = do
 
     h <- openFile "exporter.log" WriteMode
 
-{-
-    forM_ sfs $ \sf -> do
-        forkThread $ withPool $ forever $ do
-            (i,s) <- liftIO $ atomically $ readTBQueue queue
-
-            -- Work out address
-            let a' = hashSourceToAddress o s
-
-            m <- Bucket.readVaultObject o s i
-
-            n <- if (Map.null m)
-              then do
-                return 0
-              else do
-                let ps = Bucket.pointsInRange t1 t2 m
-                liftIO $ forM_ ps (convertPointAndWrite sf a')
-                return (length ps)
-
-            report h o i n
-
-
-    forM_ is $ \i -> do
-        forM_ st $ \s -> do
-            atomically $ writeTBQueue queue (i,s)
--}
 
     withPool $ do
         forM_ is $ \i -> do
-            let sf = head sfs
-
             count <- foldlM (\n s -> do
                 -- Work out address
                 let a' = hashSourceToAddress o s
@@ -183,13 +154,17 @@ main = do
                   then do
                     return n
                   else do
+{-
                     let ps = Bucket.pointsInRange t1 t2 m
-                    liftIO $ forM_ ps (convertPointAndWrite sf a')
-                    return (n + length ps)
+-}
+                    liftIO $ forM_ m (convertPointAndWrite sf a')
+                    let n2 = Map.size m
+--                  liftIO $ printf "%s %s %d %6d\n" (show o) (show a') i n2
+                    liftIO $ printf "%s %d %6d\n" (show o) i n2
+                    return (n + n2)
                 ) 0 st
 
             report h o i count
-
 
 
     putStrLn "-- convert contents"
@@ -204,7 +179,8 @@ main = do
                 let s' = convertSourceDict s
 
                 -- Register that source at address
-                liftIO $ Marquise.queueSourceDictUpdate (head sfs) a' s'
+                liftIO $ Marquise.queueSourceDictUpdate sf a' s'
+
 
 convertPointAndWrite :: Marquise.SpoolFiles -> Marquise.Address -> Point -> IO ()
 convertPointAndWrite spool a p =

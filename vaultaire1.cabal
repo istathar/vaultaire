@@ -59,4 +59,6 @@ executable           exporter
                      -fno-warn-missing-signatures
                      -fno-warn-unused-do-bind
 
+  ghc-prof-options:  -fprof-auto
+
 -- vim: set tabstop=21 expandtab:
