@@ -9,6 +9,7 @@
 -- the BSD licence.
 --
 
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
 {-# OPTIONS -fno-warn-type-defaults #-}
@@ -117,6 +118,25 @@ withPool action = Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/c
 forkThread :: IO a -> IO ()
 forkThread = A.async >=> A.link
 
+processSource sf o i !n s = do
+                -- Work out address
+                let a' = hashSourceToAddress o s
+
+                m <- Bucket.readVaultObject o s i
+
+                if (Map.null m)
+                  then do
+                    return n
+                  else do
+{-
+                    let ps = Bucket.pointsInRange t1 t2 m
+-}
+                    let n2 = Map.size m
+                    liftIO $ printf "%s %s %d %6d\n" (show o) (show a') i n2
+                    liftIO $ forM_ m (convertPointAndWrite sf a')
+                    return (n + n2)
+
+
 main :: IO ()
 main = do
     [arg1, arg2, arg3] <- getArgs
@@ -144,29 +164,10 @@ main = do
 
     withPool $ do
         forM_ is $ \i -> do
-            count <- foldlM (\n s -> do
-                -- Work out address
-                let a' = hashSourceToAddress o s
-
-                m <- Bucket.readVaultObject o s i
-
-                if (Map.null m)
-                  then do
-                    return n
-                  else do
-{-
-                    let ps = Bucket.pointsInRange t1 t2 m
--}
-                    liftIO $ forM_ m (convertPointAndWrite sf a')
-                    let n2 = Map.size m
---                  liftIO $ printf "%s %s %d %6d\n" (show o) (show a') i n2
-                    liftIO $ printf "%s %d %6d\n" (show o) i n2
-                    return (n + n2)
-                ) 0 st
-
+            count <- foldlM (processSource sf o i) 0 st
             report h o i count
 
-
+{-
     putStrLn "-- convert contents"
 
     withPool $ do
@@ -180,7 +181,7 @@ main = do
 
                 -- Register that source at address
                 liftIO $ Marquise.queueSourceDictUpdate sf a' s'
-
+-}
 
 convertPointAndWrite :: Marquise.SpoolFiles -> Marquise.Address -> Point -> IO ()
 convertPointAndWrite spool a p =
