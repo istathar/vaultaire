@@ -30,7 +30,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Time (UTCTime, formatTime)
+import Data.Time (getCurrentTime, UTCTime, formatTime)
 import Data.Time.Clock.POSIX
 import System.Environment (getArgs)
 import System.IO (Handle, IOMode (..), hFlush, openFile)
@@ -102,8 +102,11 @@ debug = liftIO . putStrLn . show
 
 report :: MonadIO m => Handle -> Origin -> Timemark -> Int -> m ()
 report h o i n = liftIO $ do
-    let date = formatTimestamp (posixSecondsToUTCTime (fromIntegral i))
-    hPrintf h "%s %s %d %6d\n" date (show o) i n
+    now <- getCurrentTime
+    let date = posixSecondsToUTCTime (fromIntegral i)
+    let t1 = formatTimestamp now
+    let t2 = formatTimestamp date
+    hPrintf h "%s  %s  %s %d %8d\n" t1 t2 (show o) i n
     hFlush h
 
 
