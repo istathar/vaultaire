@@ -19,19 +19,18 @@ import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
-import Control.Exception (throw)
 import Data.HashMap.Strict (fromList)
+import Data.String
 import Data.Text
 import Marquise.Client
 import Pipes.Prelude (toListM)
+import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import TestHelpers
-import Test.Hspec.QuickCheck
 import Vaultaire.Broker
 import Vaultaire.ContentsServer
 import Vaultaire.Util
-import Data.String
 
 startDaemons :: IO ()
 startDaemons = do
@@ -73,8 +72,8 @@ suite = do
 
             let o = Origin "PONY"
             xs <- withContentsConnection "localhost" $ \c -> do
-                updateSourceDict addr dict_a o c >>= either throw return
-                updateSourceDict addr dict_b o c >>= either throw return
+                updateSourceDict addr dict_a o c
+                updateSourceDict addr dict_b o c
                 toListM (enumerateOrigin o c)
             case xs of
                 [(addr', dict)] -> do
@@ -95,7 +94,7 @@ propSourceDictUpdated addr dict = monadicIO $ do
         cleanupTestEnvironment
         let o = Origin "PONY"
         withContentsConnection "localhost" $ \c -> do
-            updateSourceDict addr dict o c >>= either throw return
+            updateSourceDict addr dict o c
             toListM (enumerateOrigin o c)
     case xs of
         [(addr', dict')] -> assert (addr' == addr && dict' == dict)
