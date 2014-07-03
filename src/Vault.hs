@@ -15,8 +15,8 @@ module Main where
 import Control.Exception (throw)
 import Control.Monad
 import qualified Data.ByteString.Char8 as S
+import Data.Map (fromAscList)
 import Data.Maybe (fromJust)
-import Data.Packer (putWord64LE, runPacking)
 import Data.String
 import Data.Word (Word32, Word64)
 import Marquise.Client
@@ -35,6 +35,7 @@ import Vaultaire.ContentsServer
 import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
                          withPool)
 import Vaultaire.Reader (startReader)
+import Vaultaire.Types
 import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 
@@ -50,7 +51,11 @@ data Component = Broker
                | Writer { batchPeriod :: Word32, bucketSize :: Word64 }
                | Marquise { origin :: Origin, namespace :: String }
                | Contents
-               | RegisterOrigin { origin :: Origin, buckets :: Word64 }
+               | RegisterOrigin { origin  :: Origin
+                                , buckets :: Word64
+                                , step    :: Word64
+                                , begin   :: Word64
+                                , end     :: Word64 }
                | Read { origin  :: Origin
                       , address :: Address
                       , start   :: Word64
@@ -110,33 +115,35 @@ optionsParser Options{..} = Options <$> parsePool
        <> parseListComponent
        <> parseDumpDaysComponent )
 
-    parseBrokerComponent = command "broker" $
-        info (pure Broker) (progDesc "Start a broker deamon")
+    parseBrokerComponent =
+        componentHelper "broker" (pure Broker) "Start a broker daemon"
 
-    parseReaderComponent = command "reader" $
-        info (pure Reader) (progDesc "Start a writer daemon")
+    parseReaderComponent =
+        componentHelper "reader" (pure Reader) "Start a reader daemon"
 
-    parseWriterComponent = command "writer" $
-        info writerOptionsParser (progDesc "Start a writer daemon")
+    parseWriterComponent =
+        componentHelper "writer" writerOptionsParser "Start a writer daemon"
 
-    parseMarquiseComponent = command "marquise" $
-        info marquiseOptionsParser (progDesc "Start a marquise daemon")
+    parseMarquiseComponent =
+        componentHelper "marquise" marquiseOptionsParser "Start a marquise daemon"
 
-    parseContentsComponent = command "contents" $
-        info (pure Contents) (progDesc "Start a contents daemon")
+    parseContentsComponent =
+        componentHelper "contents" (pure Contents) "Start a contents daemon"
 
-    parseRegisterOriginComponent = command "register" $
-        info registerOriginParser (progDesc "Register a new origin")
+    parseRegisterOriginComponent =
+        componentHelper "register" registerOriginParser "Register a new origin"
 
-    parseReadComponent = command "read" $
-        info readOptionsParser (progDesc "Read points")
+    parseReadComponent =
+        componentHelper "read" readOptionsParser "Read points"
 
-    parseListComponent = command "list" $
-        info listOptionsParser (progDesc "List addresses and metadata in origin")
+    parseListComponent =
+        componentHelper "list" listOptionsParser "List addresses and metadata in origin"
 
-    parseDumpDaysComponent = command "days" $
-        info dumpDaysParser (progDesc "Display the current day map contents")
+    parseDumpDaysComponent =
+        componentHelper "days" dumpDaysParser "Display the current day map contents"
 
+    componentHelper cmd_name parser desc =
+        command cmd_name (info (helper <*> parser) (progDesc desc))
 
 parseOrigin :: O.Parser Origin
 parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
@@ -156,6 +163,7 @@ readOptionsParser = Read <$> parseOrigin
         <> value 0
         <> showDefault
         <> help "Start time in nanoseconds since epoch"
+
     parseEnd = O.option $
         long "end"
         <> short 'e'
@@ -170,7 +178,11 @@ dumpDaysParser :: O.Parser Component
 dumpDaysParser = DumpDays <$> parseOrigin
 
 registerOriginParser :: O.Parser Component
-registerOriginParser = RegisterOrigin <$> parseOrigin <*> parseBuckets
+registerOriginParser = RegisterOrigin <$> parseOrigin
+                                      <*> parseBuckets
+                                      <*> parseStep
+                                      <*> parseBegin
+                                      <*> parseEnd
   where
     parseBuckets = O.option $
         long "buckets"
@@ -179,6 +191,26 @@ registerOriginParser = RegisterOrigin <$> parseOrigin <*> parseBuckets
         <> showDefault
         <> help "Number of buckets to distribute writes over"
 
+    parseStep = O.option $
+        long "step"
+        <> short 's'
+        <> value 14400000000000
+        <> showDefault
+        <> help "Back-dated rollover period (see documentation: TODO)"
+
+    parseBegin = O.option $
+        long "begin"
+        <> short 'b'
+        <> value 0
+        <> showDefault
+        <> help "Back-date begin time (default is no backdating)"
+
+    parseEnd = O.option $
+        long "end"
+        <> short 'e'
+        <> value 0
+        <> showDefault
+        <> help "Back-date end time"
 
 writerOptionsParser :: O.Parser Component
 writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
@@ -256,7 +288,8 @@ main = do
         Writer batch_period roll_over_size -> runWriter pool user broker batch_period roll_over_size
         Marquise origin namespace -> marquiseServer broker origin namespace
         Contents -> runContents pool user broker
-        RegisterOrigin origin buckets -> runRegisterOrigin pool user origin buckets
+        RegisterOrigin origin buckets step begin end ->
+            runRegisterOrigin pool user origin buckets step begin end
         Read origin addr start end -> runRead broker origin addr start end
         List origin -> runList broker origin
         DumpDays origin -> runDumpDays pool user origin
@@ -327,8 +360,8 @@ runContents pool user broker =
                 (Just $ S.pack user)
                 (S.pack pool)
 
-runRegisterOrigin :: String -> String -> Origin -> Word64 -> IO ()
-runRegisterOrigin pool user origin buckets = do
+runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> IO ()
+runRegisterOrigin pool user origin buckets step begin end = do
     let targets = [simpleDayOID origin, extendedDayOID origin]
     let user' = Just (S.pack user)
     let pool' = S.pack pool
@@ -343,8 +376,7 @@ runRegisterOrigin pool user origin buckets = do
                 Left e -> throw e
                 Right _ -> error "Origin already registered."
 
-            writeFull contents >>= maybe (return ()) throw
+            writeFull (toWire dayMap) >>= maybe (return ()) throw
 
-    contents = runPacking 16 $ do
-        putWord64LE 0
-        putWord64LE buckets
+    dayMap = DayMap . fromAscList $
+        ((0, buckets):)[(n, buckets) | n <- [begin,begin+step..end]]
