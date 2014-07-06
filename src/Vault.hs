@@ -12,6 +12,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
+import Control.Concurrent.MVar
 import Control.Exception (throw)
 import Control.Monad
 import qualified Data.ByteString.Char8 as S
@@ -28,6 +29,7 @@ import Pipes
 import System.Directory
 import System.Log.Handler.Syslog
 import System.Log.Logger
+import System.Posix.Signals
 import System.Rados.Monadic (RadosError (..), runObject, stat, writeFull)
 import System.ZMQ4.Monadic
 import Text.Trifecta
@@ -273,10 +275,17 @@ possibleKeys =
 parseArgsWithConfig :: FilePath -> IO Options
 parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 
+quitHandler :: MVar () -> Handler
+quitHandler semaphore = Catch (putMVar semaphore ())
+
 main :: IO ()
 main = do
     -- command line +RTS -Nn -RTS value
     when (numCapabilities == 1) (getNumProcessors >>= setNumCapabilities)
+
+    quit <- newEmptyMVar
+    _ <- installHandler sigINT  (quitHandler quit) Nothing
+    _ <- installHandler sigTERM (quitHandler quit) Nothing
 
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
@@ -297,6 +306,10 @@ main = do
         Read origin addr start end -> runRead broker origin addr start end
         List origin -> runList broker origin
         DumpDays origin -> runDumpDays pool user origin
+
+    -- Block until shutdown triggered
+    takeMVar quit
+
 
 runRead :: String -> Origin -> Address -> Word64 -> Word64 -> IO ()
 runRead broker origin addr start end =

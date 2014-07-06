@@ -81,6 +81,7 @@ executable vault
                      vaultaire-common,
                      pipes,
                      hslogger,
+                     unix,
                      vaultaire
 
   ghc-options:       -O2
