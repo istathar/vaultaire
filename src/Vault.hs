@@ -19,6 +19,7 @@ import Data.Map (fromAscList)
 import Data.Maybe (fromJust)
 import Data.String
 import Data.Word (Word32, Word64)
+import GHC.Conc
 import Marquise.Client
 import Marquise.Server (marquiseServer)
 import Options.Applicative hiding (Parser, option)
@@ -274,6 +275,9 @@ parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 
 main :: IO ()
 main = do
+    -- command line +RTS -Nn -RTS value
+    when (numCapabilities == 1) (getNumProcessors >>= setNumCapabilities)
+
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
     let log_level = if debug then DEBUG else WARNING
