@@ -81,6 +81,7 @@ executable vault
                      vaultaire-common,
                      pipes,
                      hslogger,
+                     async,
                      unix,
                      vaultaire
 

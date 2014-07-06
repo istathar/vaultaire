@@ -9,9 +9,12 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
+
+import qualified Control.Concurrent.Async as A
 import Control.Concurrent.MVar
 import Control.Exception (throw)
 import Control.Monad
@@ -39,7 +42,6 @@ import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
                          withPool)
 import Vaultaire.Reader (startReader)
 import Vaultaire.Types
-import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 
 data Options = Options
@@ -275,6 +277,16 @@ possibleKeys =
 parseArgsWithConfig :: FilePath -> IO Options
 parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 
+--
+-- Main program entry point
+--
+
+forkThread :: IO a -> IO ()
+forkThread a = A.link =<< A.async a
+
+forkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
+forkThreadZMQ a = (liftIO . A.link) =<< async a
+
 quitHandler :: MVar () -> Handler
 quitHandler semaphore = Catch (putMVar semaphore ())
 
@@ -340,32 +352,31 @@ runDumpDays pool user origin =  do
 runBroker :: IO ()
 runBroker = runZMQ $ do
     -- Writer proxy.
-    void $ async $ startProxy (Router,"tcp://*:5560")
+    forkThreadZMQ $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
                               "tcp://*:5000"
 
     -- Reader proxy.
-    void $ async $ startProxy (Router,"tcp://*:5570")
+    forkThreadZMQ $ startProxy (Router,"tcp://*:5570")
                               (Dealer,"tcp://*:5571")
                               "tcp://*:5001"
 
     -- Contents proxy.
-    void $ async $ startProxy (Router,"tcp://*:5580")
+    forkThreadZMQ $ startProxy (Router,"tcp://*:5580")
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
     liftIO $ debugM "Main.runBroker" "Proxies started."
-    waitForever
 
 runReader :: String -> String -> String -> IO ()
 runReader pool user broker =
-    startReader ("tcp://" ++ broker ++ ":5571")
+    forkThread $ startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
 
 runWriter :: String -> String -> String -> Word32 -> Word64 -> IO ()
 runWriter pool user broker poll_period bucket_size =
-    startWriter ("tcp://" ++ broker ++ ":5561")
+    forkThread $ startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
@@ -373,7 +384,7 @@ runWriter pool user broker poll_period bucket_size =
 
 runContents :: String -> String -> String -> IO ()
 runContents pool user broker =
-    startContents ("tcp://" ++ broker ++ ":5581")
+    forkThread $ startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)
                 (S.pack pool)
 
