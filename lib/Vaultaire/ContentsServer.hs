@@ -100,11 +100,11 @@ performUpdateRequest reply o a input = do
     case result of
         Nothing -> writeSourceTagsForAddress o a input
         Just current -> do
-                    -- items in first SourceDict (the passed in update from user) win
-                    let update = unionSource input current
-                    if current == update
-                        then return ()
-                        else writeSourceTagsForAddress o a update
+            -- items in first SourceDict (the passed in update from user) win
+            let update = unionSource input current
+            if current == update
+                then return ()
+                else writeSourceTagsForAddress o a update
     reply UpdateSuccess
 
 performRemoveRequest
@@ -119,10 +119,10 @@ performRemoveRequest reply o a input = do
     case result of
         Nothing -> return ()
         Just current -> do
-                    let update = diffSource current input
-                    if current == update
-                        then return ()
-                        else writeSourceTagsForAddress o a update
+            let update = diffSource current input
+            if current == update
+                then return ()
+                else writeSourceTagsForAddress o a update
     reply RemoveSuccess
 
 retreiveSourceTagsForAddress :: Origin -> Address -> Daemon (Maybe SourceDict)
