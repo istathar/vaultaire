@@ -94,10 +94,17 @@ performUpdateRequest
     -> Address
     -> SourceDict
     -> Daemon ()
-performUpdateRequest reply o a s = do
-    s' <- retreiveSourceTagsForAddress o a
-    -- items in first SourceDict (the passed in update from user) win
-    writeSourceTagsForAddress o a (unionSource s s')
+performUpdateRequest reply o a input = do
+    result <- retreiveSourceTagsForAddress o a
+
+    case result of
+        Nothing -> writeSourceTagsForAddress o a input
+        Just current -> do
+                    -- items in first SourceDict (the passed in update from user) win
+                    let update = unionSource input current
+                    if current == update
+                        then return ()
+                        else writeSourceTagsForAddress o a update
     reply UpdateSuccess
 
 performRemoveRequest
@@ -106,18 +113,24 @@ performRemoveRequest
     -> Address
     -> SourceDict
     -> Daemon ()
-performRemoveRequest reply o a s = do
-    s' <- retreiveSourceTagsForAddress o a
+performRemoveRequest reply o a input = do
+    result <- retreiveSourceTagsForAddress o a
     -- elements of first SourceDict not appearing in second remain
-    writeSourceTagsForAddress o a (diffSource s' s)
+    case result of
+        Nothing -> return ()
+        Just current -> do
+                    let update = diffSource current input
+                    if current == update
+                        then return ()
+                        else writeSourceTagsForAddress o a update
     reply RemoveSuccess
 
-retreiveSourceTagsForAddress :: Origin -> Address -> Daemon SourceDict
+retreiveSourceTagsForAddress :: Origin -> Address -> Daemon (Maybe SourceDict)
 retreiveSourceTagsForAddress o a = do
     result <- InternalStore.readFrom o a
     return $ case result of
-        Just b'     -> either throw id (fromWire b')
-        Nothing     -> mempty
+        Just b'     -> either throw Just (fromWire b')
+        Nothing     -> Nothing
 
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
 writeSourceTagsForAddress o a s =

@@ -98,4 +98,4 @@ propSourceDictUpdated addr dict = monadicIO $ do
             toListM (enumerateOrigin o c)
     case xs of
         [(addr', dict')] -> assert (addr' == addr && dict' == dict)
-        _ -> error "expected one"
+        _                -> error "expected one"
