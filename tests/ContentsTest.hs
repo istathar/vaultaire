@@ -19,6 +19,7 @@ import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
+import Control.Concurrent
 import Data.HashMap.Strict (fromList)
 import Data.String
 import Data.Text
@@ -34,9 +35,13 @@ import Vaultaire.Util
 
 startDaemons :: IO ()
 startDaemons = do
-    linkThread $ runZMQ $
-        startProxy (Router,"tcp://*:5580") (Dealer,"tcp://*:5581") "tcp://*:5008"
-    linkThread $ startContents "tcp://localhost:5581" Nothing "test"
+    shutdown <- newEmptyMVar
+    linkThread $ do
+        runZMQ $ startProxy (Router,"tcp://*:5580")
+                            (Dealer,"tcp://*:5581") "tcp://*:5008"
+        readMVar shutdown
+
+    linkThread $ startContents "tcp://localhost:5581" Nothing "test" shutdown
 
 main :: IO ()
 main = do

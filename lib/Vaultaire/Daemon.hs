@@ -22,6 +22,7 @@ module Vaultaire.Daemon
     Bucket,
     -- * Functions
     runDaemon,
+    handleMessages,
     liftPool,
     nextMessage,
     async,
@@ -48,6 +49,7 @@ import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
+import Data.Maybe
 import Data.Word (Word64)
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
@@ -92,6 +94,33 @@ type ReplyF  = WireFormat w => w -> Daemon ()
 type Payload = Word64
 type Bucket  = Word64
 
+-- | Handle messages using an arbitrary concurrency abstraction.
+--
+-- In order for this to behave, your message handling function must be
+-- stateless, there is no guarantee that it will be run in the same thread,
+-- thus no assumptions should be made about the DayMap from a previous request
+-- sticking around.
+--
+-- This prohibits any multi-message requests, if this is what you want you had
+-- best define your own concurrency mechanism.
+handleMessages :: String                 -- ^ Broker for ZMQ
+               -> Maybe ByteString       -- ^ Username for Ceph
+               -> ByteString             -- ^ Pool name for Ceph
+               -> MVar ()                -- ^ Shutdown signal
+               -> (Message -> Daemon ()) -- ^ Message handling function
+               -> IO ()
+handleMessages broker ceph_user pool shutdown f =
+    runDaemon broker ceph_user pool loop
+  where
+    -- Dumb, no concurrency for now.
+    loop = do
+        done <- isJust <$> liftIO (tryReadMVar shutdown)
+        unless done $ do
+            maybe_next <- nextMessage
+            case maybe_next of
+                Nothing -> loop
+                Just msg -> f msg >> loop
+
 -- | This will go as far as to connect to Ceph and begin listening for
 -- messages.
 runDaemon :: String           -- ^ Broker for ZMQ
@@ -123,21 +152,31 @@ liftPool = Daemon . lift . lift
 --   2. The routing information back to the client, from the broker.
 --   3. The the origin, unverified and unauthenticated for now.
 --   4. The client's payload.
-nextMessage :: Daemon Message
+nextMessage :: Daemon (Maybe Message)
 nextMessage = do
     conn <- ask
-    msg <- liftIO $ withMVar conn doRecv
-    case msg of
-        -- Invalid message, try again
-        Nothing -> nextMessage
-        Just (env_a, env_b, origin, payload) ->
-            -- This can be moved out of a lambda when I fully understand this:
-            -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
-            let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
-            in return $ Message (\r -> do var <- ask
+    result <- liftIO $ withMVar conn $ \c ->
+        ZMQ.poll 10 [ZMQ.Sock c [ZMQ.In] Nothing]
+    case result of
+        -- Message waiting
+        [[ZMQ.In]] -> do
+            msg <- liftIO $ withMVar conn doRecv
+
+            case msg of
+                -- Invalid message
+                Nothing -> return Nothing
+                Just (env_a, env_b, origin, payload) ->
+                    -- This can be moved out of a lambda when I fully understand this:
+                    -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
+                    let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
+                    in return . Just $
+                        Message (\r -> do var <- ask
                                           liftIO $ withMVar var (send r))
                                 (Origin origin)
                                 payload
+        -- Timeout, do nothing.
+        [[]]        -> return Nothing
+        _           -> fatal "Daemon.listen" "impossible"
   where
     doRecv sock =  do
         msg <- ZMQ.receiveMulti sock
@@ -149,8 +188,6 @@ nextMessage = do
                                 "bad message recieved, " ++ show (length n)
                                 ++ " parts; ignoring"
                 return Nothing
-
-
 
 -- | Run an action in the 'Control.Concurrent.Async' monad.
 -- State will be empty and completely separated from any other thread. This is
@@ -177,9 +214,7 @@ withExtendedDayMap origin' f = do
     om <- get
     return $ f . snd . snd <$> originLookup origin' om
 
--- | Ensure that the 'DayMap's for a given 'Origin' are up to date. If you need
--- the day map to be up to date for the entirity of an operation you must use
--- this within a 'withDayFileLock'.
+-- | Ensure that the 'DayMap's for a given 'Origin' are up to date.
 refreshOriginDays :: Origin -> Daemon ()
 refreshOriginDays origin' = do
     om <- get

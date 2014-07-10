@@ -12,6 +12,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
+import Control.Concurrent
 import Control.Exception (throw)
 import Control.Monad
 import qualified Data.ByteString.Char8 as S
@@ -280,23 +281,37 @@ main = do
 
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
+    -- Start and configure logger
     let log_level = if debug then DEBUG else WARNING
     logger <- openlog "vaultaire" [PID] USER log_level
     updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
 
+    -- Shutdown is signaled by putting a () into the MVar
+    --
+    -- TODO: afcowie: add signal handler for this
+    shutdown <- newEmptyMVar
+
     debugM "Main.main" "Logger initialized, starting component"
 
     case component of
-        Broker -> runBroker
-        Reader -> runReader pool user broker
-        Writer batch_period roll_over_size -> runWriter pool user broker batch_period roll_over_size
-        Marquise origin namespace -> marquiseServer broker origin namespace
-        Contents -> runContents pool user broker
+        Broker ->
+            runBroker shutdown
+        Reader ->
+            runReader pool user broker shutdown
+        Writer batch_period roll_over_size ->
+            runWriter pool user broker batch_period roll_over_size shutdown
+        Marquise origin namespace ->
+            marquiseServer broker origin namespace
+        Contents ->
+            runContents pool user broker shutdown
         RegisterOrigin origin buckets step begin end ->
             runRegisterOrigin pool user origin buckets step begin end
-        Read origin addr start end -> runRead broker origin addr start end
-        List origin -> runList broker origin
-        DumpDays origin -> runDumpDays pool user origin
+        Read origin addr start end ->
+            runRead broker origin addr start end
+        List origin ->
+            runList broker origin
+        DumpDays origin ->
+            runDumpDays pool user origin
 
 runRead :: String -> Origin -> Address -> Word64 -> Word64 -> IO ()
 runRead broker origin addr start end =
@@ -324,8 +339,8 @@ runDumpDays pool user origin =  do
             print extended
 
 
-runBroker :: IO ()
-runBroker = runZMQ $ do
+runBroker :: MVar () -> IO ()
+runBroker shutdown = runZMQ $ do
     -- Writer proxy.
     void $ async $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
@@ -341,16 +356,17 @@ runBroker = runZMQ $ do
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
-    liftIO $ debugM "Main.runBroker" "Proxies started."
-    waitForever
+    liftIO $ do
+        debugM "Main.runBroker" "Proxies started."
+        readMVar shutdown
 
-runReader :: String -> String -> String -> IO ()
+runReader :: String -> String -> String -> MVar () -> IO ()
 runReader pool user broker =
     startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
 
-runWriter :: String -> String -> String -> Word32 -> Word64 -> IO ()
+runWriter :: String -> String -> String -> Word32 -> Word64 -> MVar () -> IO ()
 runWriter pool user broker poll_period bucket_size =
     startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
@@ -358,7 +374,7 @@ runWriter pool user broker poll_period bucket_size =
                 bucket_size
                 (fromIntegral poll_period)
 
-runContents :: String -> String -> String -> IO ()
+runContents :: String -> String -> String -> MVar () -> IO ()
 runContents pool user broker =
     startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)

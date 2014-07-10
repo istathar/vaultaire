@@ -19,7 +19,7 @@ module Vaultaire.Writer
 ) where
 
 import Control.Applicative
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (MVar, threadDelay)
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.STM
 import Control.Monad
@@ -72,12 +72,13 @@ startWriter :: String           -- ^ Broker
             -> ByteString       -- ^ Pool name for Ceph
             -> Word64           -- ^ Maximum bytes in bucket before rollover
             -> NominalDiffTime
+            -> MVar ()          -- ^ Shutdown signal
             -> IO ()
-startWriter broker user pool bucket_size batch_period = runDaemon broker user pool $ do
+startWriter broker user pool bucket_size batch_period shutdown = do
     liftIO $ infoM "Writer.startWriter" "Writer daemon starting"
-    runEffect $ lift nextMessage
-             >~ evalStateP emptyOriginMap (dispatch bucket_size batch_period)
-    fatal "Writer.startWriter" "impossible"
+    handleMessages broker user pool shutdown $ \msg ->
+        runEffect $ yield msg
+                  >-> evalStateP emptyOriginMap (dispatch bucket_size batch_period)
 
 -- If the incoming message currently has a processing thread running for that
 -- origin, feed the message into that thread. Otherwise create a new one and

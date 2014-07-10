@@ -3,9 +3,9 @@
 module Main where
 
 import Control.Applicative
-import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import Data.List.NonEmpty (fromList)
 import System.Rados.Monadic hiding (async)
 import System.ZMQ4.Monadic hiding (async)
@@ -15,7 +15,7 @@ import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
 import Vaultaire.RollOver
-import Vaultaire.Types (Origin (..), WriteResult (..))
+import Vaultaire.Types
 import Vaultaire.Util
 
 main :: IO ()
@@ -34,30 +34,15 @@ suite = do
             runTestDaemon "tcp://localhost:1234" (return ())
             >>= (`shouldBe` ())
 
-        it "ignores bad message and replies to good message" $ do
-            shutdown <- newEmptyMVar
-            msg <- async $ replyOne shutdown
+        it "ignores bad message and replies to good message" $
+            withReplier $ do
+                sendBadMsg
+                sendPonyMsg >>= (`shouldBe` ["PONYim in ur vaults"])
 
-            async sendBadMsg
-            rep <- async $ sendPonyMsg
-            wait rep >>= (`shouldBe` ["\NUL"])
-
-            putMVar shutdown ()
-            wait msg >>= (`shouldBe` ("PONY", "im in ur vaults"))
-
-        it "replies to mutliple messages" $ do
-            shutdown <- newEmptyMVar
-            msg <- async $ replyTwo shutdown
-
-            rep_a <- async $ sendPonyMsg
-            rep_b <- async $ sendPonyMsg
-
-            wait rep_a >>= (`shouldBe` ["\NUL"])
-            wait rep_b >>= (`shouldBe` ["\NUL"])
-
-            putMVar shutdown ()
-            wait msg >>= (`shouldBe` (("PONY", "im in ur vaults")
-                                     ,("PONY", "im in ur vaults")))
+        it "replies to mutliple messages" $
+            withReplier $ do
+                sendPonyMsg >>= (`shouldBe` ["PONYim in ur vaults"])
+                sendPonyMsg >>= (`shouldBe` ["PONYim in ur vaults"])
 
     describe "Daemon day map" $ do
         it "loads an origins map" $ do
@@ -126,30 +111,23 @@ suite = do
 
         it "does basic sanity checking on latest file" $
             runTestDaemon "tcp://localhost:1234"
-                (do liftPool $ runObject "02_PONY_simple_latest" $
-                        append "garbage"
+                (do _ <- liftPool $ runObject "02_PONY_simple_latest" $
+                            append "garbage"
                     rollOverSimpleDay "PONY" 8)
                 `shouldThrow` anyErrorCall
 
-replyOne :: MVar () -> IO (ByteString, ByteString)
-replyOne shutdown =
-    runDaemon "tcp://localhost:5561" Nothing "test" $ do
-        r <- reply
-        liftIO $ takeMVar shutdown
-        return r
+withReplier :: IO a -> IO a
+withReplier f = do
+    shutdown <- newEmptyMVar
+    linkThread $
+        handleMessages "tcp://localhost:5561" Nothing "test" shutdown handler
+    r <- f
+    putMVar shutdown ()
+    return r
+  where
+    handler (Message rep_f (Origin origin) msg ) =
+        rep_f . PassThrough $ origin `S.append` msg
 
-reply :: Daemon (ByteString, ByteString)
-reply = do
-        Message rep_f (Origin origin') msg <- nextMessage
-        rep_f OnDisk
-        return (origin', msg)
-
-replyTwo :: MVar () -> IO ((ByteString, ByteString), (ByteString, ByteString))
-replyTwo shutdown =
-    runDaemon "tcp://localhost:5561" Nothing "test" $ do
-        r <- (,) <$> reply <*> reply
-        liftIO $ takeMVar shutdown
-        return r
 
 sendPonyMsg :: IO [ByteString]
 sendPonyMsg = runZMQ $ do

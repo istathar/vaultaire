@@ -18,8 +18,8 @@ module Vaultaire.ContentsServer
 ) where
 
 import Control.Applicative
+import Control.Concurrent (MVar)
 import Control.Exception
-import Control.Monad (forever)
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust)
@@ -37,10 +37,11 @@ startContents
     :: String           -- ^ Broker
     -> Maybe ByteString -- ^ Username for Ceph
     -> ByteString       -- ^ Pool name for Ceph
+    -> MVar ()
     -> IO ()
-startContents broker user pool = do
+startContents broker user pool shutdown = do
     liftIO $ infoM "Contents.startContents" "Contents daemon starting"
-    runDaemon broker user pool . forever $ nextMessage >>= handleRequest
+    handleMessages broker user pool shutdown handleRequest
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply origin payload) =
