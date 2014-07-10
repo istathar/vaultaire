@@ -8,7 +8,6 @@ module Vaultaire.Writer
 (
     startWriter,
     -- Testing
-    processEvents,
     processPoints,
     appendExtended,
     appendSimple,
@@ -19,9 +18,7 @@ module Vaultaire.Writer
 ) where
 
 import Control.Applicative
-import Control.Concurrent (MVar, threadDelay)
-import qualified Control.Concurrent.Async as Async
-import Control.Concurrent.STM
+import Control.Concurrent (MVar)
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
@@ -35,26 +32,19 @@ import Data.Packer
 import Data.Time
 import Data.Traversable (for)
 import Data.Word (Word64)
-import Pipes hiding (for)
-import Pipes.Concurrent
-import Pipes.Lift
 import System.Log.Logger
 import System.Rados.Monadic hiding (async)
 import Vaultaire.Daemon
 import Vaultaire.DayMap
-import Vaultaire.OriginMap
 import Vaultaire.RollOver
 import Vaultaire.Types
 import Vaultaire.Util (fatal)
-
-type DispatchMap = OriginMap (Output Event)
 
 type EpochMap = HashMap Epoch
 type BucketMap = HashMap Bucket
 
 data BatchState = BatchState
-    { replyFs        :: ![WriteResult -> Daemon ()]
-    , simple         :: !(EpochMap (BucketMap Builder))
+    { simple         :: !(EpochMap (BucketMap Builder))
     , extended       :: !(EpochMap (BucketMap Builder))
     , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
     , latestSimple   :: !Time
@@ -71,130 +61,49 @@ startWriter :: String           -- ^ Broker
             -> Maybe ByteString -- ^ Username for Ceph
             -> ByteString       -- ^ Pool name for Ceph
             -> Word64           -- ^ Maximum bytes in bucket before rollover
-            -> NominalDiffTime
             -> MVar ()          -- ^ Shutdown signal
             -> IO ()
-startWriter broker user pool bucket_size batch_period shutdown = do
+startWriter broker user pool bucket_size shutdown = do
     liftIO $ infoM "Writer.startWriter" "Writer daemon starting"
-    handleMessages broker user pool shutdown $ \msg ->
-        runEffect $ yield msg
-                  >-> evalStateP emptyOriginMap (dispatch bucket_size batch_period)
-
--- If the incoming message currently has a processing thread running for that
--- origin, feed the message into that thread. Otherwise create a new one and
--- feed it in.
-dispatch :: Word64
-         -> NominalDiffTime
-         -> Consumer Message (StateT DispatchMap Daemon) ()
-dispatch bucket_size batch_period = do
-    m@(Message _ origin _) <- await
-    let event = Msg m
-    dispatch_map <- get
-    case originLookup origin dispatch_map of
-        Just output -> do
-            sent <- send' output event
-            -- If it wasn't sent, the thread has shut itself down.
-            if sent
-                then dispatch bucket_size batch_period
-                else startThread origin dispatch_map event
-        Nothing   -> startThread origin dispatch_map event
-  where
-    send' o = liftIO . atomically . send o
-
-    startThread origin' dispatch_map m = do
-        (output, seal, input) <- liftIO $ spawn' Single
-
-        liftIO $ Async.async (feedTicks output) >>= Async.link
-
-        -- The entire origin has a shared lock taken at this point for the
-        -- duration of this batch period. Any rollovers of this origin will
-        -- have to synchronize.
-        lift . lift . withLock (originLockOID origin') $
-            async (processBatch bucket_size batch_period origin' seal input)
-            >>= liftIO . Async.link
-
-        must_send <- send' output m
-        unless must_send $
-            fatal "Writer.dispatch" "thread died immediately, bailing"
-        lift . put $ originInsert origin' output dispatch_map
-        dispatch bucket_size batch_period
+    handleMessages broker user pool shutdown (processBatch bucket_size)
 
 batchStateNow :: Word64 -> (DayMap, DayMap) -> IO BatchState
 batchStateNow bucket_size dms =
-    BatchState mempty mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
+    BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
--- | The dispatcher has done the hard work for us and sorted incoming bursts by
--- origin. Now we simply need to process these messages with local state,
--- writing to ceph when our collection time has elapsed.
-processBatch :: Word64 -> NominalDiffTime -> Origin -> Input Event -> STM () -> Daemon ()
-processBatch bucket_size period origin' input seal = do
-    refreshOriginDays origin'
-    simple_dm <- withSimpleDayMap origin' id
-    extended_dm  <- withExtendedDayMap origin' id
-    case (,) <$> simple_dm <*> extended_dm of
-        Nothing ->
-            -- Reply to first message with an fatal, try again on the next
-            -- message. This is a potential DOS of sorts, however is needed
-            -- unless we know when to expire
-            runEffect $ fromInput input >-> badOrigin
-        Just dms -> do
-            -- Process for a batch period
-            start_state <- liftIO $ batchStateNow bucket_size dms
-            runEffect $ fromInput input
-                      >-> evalStateP start_state (processEvents period)
-                      >-> write origin' True
-            liftIO $ atomically seal
+processBatch :: Word64 -> Message -> Daemon ()
+processBatch bucket_size (Message reply origin payload) = do
+    write_state <- withLock (originLockOID origin) $ do
+        refreshOriginDays origin
+        simple_dm <- withSimpleDayMap origin id
+        extended_dm  <- withExtendedDayMap origin id
+        case (,) <$> simple_dm <*> extended_dm of
+            Nothing -> return Nothing
+            Just dms -> do
+                liftIO $ debugM "Writer.processEvents" $
+                                "Processing payload (" ++ show (BS.length payload)
+                                ++ " bytes)"
 
-badOrigin :: Consumer Event Daemon ()
-badOrigin = do
-    event <- await
-    case event of
-        Msg (Message reply_f _ _) ->
-            lift $ reply_f InvalidWriteOrigin
-        Tick -> badOrigin
+                -- Most messages simply need to be placed into the correct epoch
+                -- and bucket, extended ones are a little more complex in that they
+                -- have to be stored as an offset to a pending write to the
+                -- extended buckets.
 
-feedTicks :: Output Event -> IO ()
-feedTicks o = runEffect $ tickStream >-> toOutput o
-  where tickStream = forever $ lift (threadDelay tickRate) >> yield Tick
-        tickRate   = 10000000 `div` 100 -- 100ms
+                s <- liftIO $ batchStateNow bucket_size dms
 
--- | Place a message into state or flush if appropriate.
-processEvents :: (MonadState BatchState m, MonadIO m)
-              => NominalDiffTime -> Pipe Event BatchState m ()
-processEvents batch_period = do
-    event <- await
-    s <- get
-    case event of
-        Msg (Message rf origin' payload') -> do
-            liftIO $ debugM "Writer.processEvents" $
-                            "Processing payload (" ++ show (BS.length payload')
-                            ++ " bytes)"
-            -- Most messages simply need to be placed into the correct epoch
-            -- and bucket, extended ones are a little more complex in that they
-            -- have to be stored as an offset to a pending write to the
-            -- extended buckets.
-
-            (latest_simple, latest_ext) <- lift $
-                processPoints 0 payload' (dayMaps s) origin'
-                              (latestSimple s) (latestExtended s)
-
-
-            s' <- get
-            put s'{ replyFs = rf:replyFs s'
-                 , latestSimple = latest_simple
-                 , latestExtended = latest_ext }
-
-            processEvents batch_period
-        Tick -> do
-            now <- liftIO getCurrentTime
-            if batch_period `addUTCTime` start s < now
-                then get >>= yield
-                else processEvents batch_period
+                return . Just . flip execState s $
+                    processPoints 0 payload (dayMaps s) origin (latestSimple s) (latestExtended s)
+    case write_state of
+        Nothing -> reply InvalidWriteOrigin
+        Just s -> do
+            write origin True s
+            reply OnDisk
 
 processPoints :: MonadState BatchState m
-              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> Time -> Time -> m (Time,Time)
+              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> Time -> Time -> m ()
 processPoints offset message day_maps origin latest_simple latest_ext
-    | fromIntegral offset >= BS.length message = return (latest_simple, latest_ext)
+    | fromIntegral offset >= BS.length message = modify (\s -> s{ latestSimple = latest_simple
+                                                                , latestExtended = latest_ext })
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (simple_epoch, simple_buckets) = lookupFirst time (fst day_maps)
@@ -280,35 +189,31 @@ appendExtended epoch bucket (Address address) time len string = do
 --   2. Simple buckets are written to disk with the pending writes applied.
 --   3. Acks are sent
 --   4. Any rollovers are done
-write :: Origin -> Bool -> Consumer BatchState Daemon ()
-write origin do_rollovers = do
-    s <- await
-    extended_offsets <- writeExtendedBuckets s
+write :: Origin -> Bool -> BatchState -> Daemon ()
+write origin do_rollovers s = do
+    extended_offsets <- writeExtendedBuckets
 
     let simple_buckets = applyOffsets extended_offsets (simple s) (pending s)
     simple_offsets <- stepTwo simple_buckets
 
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
-    lift $ do
-        when do_rollovers $ do
-            updateSimpleLatest origin (latestSimple s)
-            updateExtendedLatest origin (latestExtended s)
+    when do_rollovers $ do
+        updateSimpleLatest origin (latestSimple s)
+        updateExtendedLatest origin (latestExtended s)
 
-        mapM_ ($ OnDisk) (replyFs s)
+    -- 4. Do any rollovers
+    when do_rollovers $ do
+        let limit = bucketSize s
+        -- We want to ensure that the rollover only happens if an offset is
+        -- exceeded for the latest epoch, otherwise we get duplicate
+        -- rollovers.
+        (simple_epoch, n_simple_buckets) <- getLatestEpoch withSimpleDayMap
+        (extended_epoch, n_extended_buckets) <- getLatestEpoch withExtendedDayMap
 
-        -- 4. Do any rollovers
-        when do_rollovers $ do
-            let limit = bucketSize s
-            -- We want to ensure that the rollover only happens if an offset is
-            -- exceeded for the latest epoch, otherwise we get duplicate
-            -- rollovers.
-            (simple_epoch, n_simple_buckets) <- getLatestEpoch withSimpleDayMap
-            (extended_epoch, n_extended_buckets) <- getLatestEpoch withExtendedDayMap
-
-            when (offsetExceeded simple_offsets simple_epoch limit)
-                 (rollOverSimpleDay origin n_simple_buckets)
-            when (offsetExceeded extended_offsets extended_epoch limit)
+        when (offsetExceeded simple_offsets simple_epoch limit)
+                (rollOverSimpleDay origin n_simple_buckets)
+        when (offsetExceeded extended_offsets extended_epoch limit)
                  (rollOverExtendedDay origin n_extended_buckets)
   where
     getLatestEpoch f =
@@ -327,8 +232,8 @@ write origin do_rollovers = do
 
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.
-    writeExtendedBuckets s =
-        lift . withExLock (writeLockOID origin) $ liftPool $ do
+    writeExtendedBuckets =
+        withExLock (writeLockOID origin) $ liftPool $ do
             -- First pass to get current offsets
             offsets <- forWithKey (extended s) $ \epoch buckets -> do
 
@@ -384,7 +289,7 @@ write origin do_rollovers = do
                     in HashMap.insert epoch simple_buckets' simple_map''
 
     -- Final write,
-    stepTwo simple_buckets = lift $ liftPool $
+    stepTwo simple_buckets = liftPool $
         forWithKey simple_buckets $ \epoch buckets -> do
             writes <- forWithKey buckets $ \bucket builder -> do
                 let payload = toStrict $ toLazyByteString builder

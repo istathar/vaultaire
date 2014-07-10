@@ -132,7 +132,7 @@ startTestDaemons shutdown = do
                             (Dealer,"tcp://*:5571")
                             "tcp://*:5001"
         readMVar shutdown
-    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 0 shutdown
+    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 shutdown
     linkThread $ startReader "tcp://localhost:5571" Nothing "test" shutdown
 
 readObject :: ByteString -> IO (Either RadosError ByteString)

@@ -19,7 +19,7 @@ import qualified Data.ByteString.Char8 as S
 import Data.Map (fromAscList)
 import Data.Maybe (fromJust)
 import Data.String
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 import GHC.Conc
 import Marquise.Client
 import Marquise.Server (marquiseServer)
@@ -38,7 +38,6 @@ import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
                          withPool)
 import Vaultaire.Reader (startReader)
 import Vaultaire.Types
-import Vaultaire.Util
 import Vaultaire.Writer (startWriter)
 
 data Options = Options
@@ -50,7 +49,7 @@ data Options = Options
 
 data Component = Broker
                | Reader
-               | Writer { batchPeriod :: Word32, bucketSize :: Word64 }
+               | Writer { bucketSize :: Word64 }
                | Marquise { origin :: Origin, namespace :: String }
                | Contents
                | RegisterOrigin { origin  :: Origin
@@ -215,15 +214,8 @@ registerOriginParser = RegisterOrigin <$> parseOrigin
         <> help "Back-date end time"
 
 writerOptionsParser :: O.Parser Component
-writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
+writerOptionsParser = Writer <$> parseBucketSize
   where
-    parseBatchPeriod = O.option $
-        long "batch_period"
-        <> short 'p'
-        <> value 4
-        <> showDefault
-        <> help "Number of seconds to wait before flushing writes"
-
     parseBucketSize = O.option $
         long "roll_over_size"
         <> short 'r'
@@ -298,8 +290,8 @@ main = do
             runBroker shutdown
         Reader ->
             runReader pool user broker shutdown
-        Writer batch_period roll_over_size ->
-            runWriter pool user broker batch_period roll_over_size shutdown
+        Writer roll_over_size ->
+            runWriter pool user broker roll_over_size shutdown
         Marquise origin namespace ->
             marquiseServer broker origin namespace
         Contents ->
@@ -366,13 +358,12 @@ runReader pool user broker =
                 (Just $ S.pack user)
                 (S.pack pool)
 
-runWriter :: String -> String -> String -> Word32 -> Word64 -> MVar () -> IO ()
-runWriter pool user broker poll_period bucket_size =
+runWriter :: String -> String -> String -> Word64 -> MVar () -> IO ()
+runWriter pool user broker bucket_size =
     startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
-                (fromIntegral poll_period)
 
 runContents :: String -> String -> String -> MVar () -> IO ()
 runContents pool user broker =
