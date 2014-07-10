@@ -155,28 +155,28 @@ liftPool = Daemon . lift . lift
 nextMessage :: Daemon (Maybe Message)
 nextMessage = do
     conn <- ask
-    result <- liftIO $ withMVar conn $ \c ->
-        ZMQ.poll 10 [ZMQ.Sock c [ZMQ.In] Nothing]
-    case result of
-        -- Message waiting
-        [[ZMQ.In]] -> do
-            msg <- liftIO $ withMVar conn doRecv
+    liftIO $ withMVar conn $ \c -> do
+        result <- ZMQ.poll 10 [ZMQ.Sock c [ZMQ.In] Nothing]
+        case result of
+            -- Message waiting
+            [[ZMQ.In]] -> do
+                msg <- doRecv c
 
-            case msg of
-                -- Invalid message
-                Nothing -> return Nothing
-                Just (env_a, env_b, origin, payload) ->
-                    -- This can be moved out of a lambda when I fully understand this:
-                    -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
-                    let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
-                    in return . Just $
-                        Message (\r -> do var <- ask
-                                          liftIO $ withMVar var (send r))
-                                (Origin origin)
-                                payload
-        -- Timeout, do nothing.
-        [[]]        -> return Nothing
-        _           -> fatal "Daemon.listen" "impossible"
+                case msg of
+                    -- Invalid message
+                    Nothing -> return Nothing
+                    Just (env_a, env_b, origin, payload) ->
+                        -- This can be moved out of a lambda when I fully understand this:
+                        -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
+                        let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
+                        in return . Just $
+                            Message (\r -> do var <- ask
+                                              liftIO $ withMVar var (send r))
+                                    (Origin origin)
+                                    payload
+            -- Timeout, do nothing.
+            [[]]        -> return Nothing
+            _           -> fatal "Daemon.listen" "impossible"
   where
     doRecv sock =  do
         msg <- ZMQ.receiveMulti sock
