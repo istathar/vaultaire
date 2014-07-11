@@ -22,6 +22,7 @@ module Vaultaire.Daemon
     Bucket,
     -- * Functions
     runDaemon,
+    handleMessages,
     liftPool,
     nextMessage,
     async,
@@ -40,22 +41,22 @@ module Vaultaire.Daemon
 ) where
 
 import Control.Applicative
-import Control.Concurrent (ThreadId, killThread, myThreadId)
 import Control.Concurrent.Async (Async)
-import qualified Control.Concurrent.Async as Async
-import Control.Concurrent.STM
+import Control.Concurrent.MVar
+import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import Data.List.NonEmpty (NonEmpty, fromList)
+import Data.List.NonEmpty (fromList)
+import Data.Maybe
 import Data.Word (Word64)
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
                              withExclusiveLock, withSharedLock)
 import qualified System.Rados.Monadic as Rados
-import qualified System.ZMQ4.Monadic as ZMQ
+import qualified System.ZMQ4 as ZMQ
 import Text.Printf
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
@@ -67,14 +68,12 @@ import Vaultaire.Util
 -- | The 'Daemon' monad stores per 'Origin' 'DayMap's and queues for message
 -- retrieval and reply. The underlying base monad is a rados 'Pool', you can
 -- lift to this via 'liftPool'.
-newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConfig Pool) a)
-  deriving ( Functor, Applicative, Monad, MonadIO, MonadReader DaemonConfig,
+newtype Daemon a = Daemon (StateT OriginDays (ReaderT SharedConnection Pool) a)
+  deriving ( Functor, Applicative, Monad, MonadIO, MonadReader SharedConnection,
              MonadState OriginDays)
 
-data DaemonConfig = DaemonConfig
-    { recvChan :: TBQueue RawMsg
-    , respChan :: TBQueue (NonEmpty ByteString)
-    }
+-- | Handle to commuicate with the 0MQ router.
+type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
 
 -- Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
@@ -94,7 +93,33 @@ data Message = Message
 type ReplyF  = WireFormat w => w -> Daemon ()
 type Payload = Word64
 type Bucket  = Word64
-type RawMsg  = (ByteString, ByteString, ByteString, ByteString)
+
+-- | Handle messages using an arbitrary concurrency abstraction.
+--
+-- In order for this to behave, your message handling function must be
+-- stateless, there is no guarantee that it will be run in the same thread,
+-- thus no assumptions should be made about the DayMap from a previous request
+-- sticking around.
+--
+-- This prohibits any multi-message requests, if this is what you want you had
+-- best define your own concurrency mechanism.
+handleMessages :: String                 -- ^ Broker for ZMQ
+               -> Maybe ByteString       -- ^ Username for Ceph
+               -> ByteString             -- ^ Pool name for Ceph
+               -> MVar ()                -- ^ Shutdown signal
+               -> (Message -> Daemon ()) -- ^ Message handling function
+               -> IO ()
+handleMessages broker ceph_user pool shutdown f =
+    runDaemon broker ceph_user pool loop
+  where
+    -- Dumb, no concurrency for now.
+    loop = do
+        done <- isJust <$> liftIO (tryReadMVar shutdown)
+        unless done $ do
+            maybe_next <- nextMessage
+            case maybe_next of
+                Nothing -> loop
+                Just msg -> f msg >> loop
 
 -- | This will go as far as to connect to Ceph and begin listening for
 -- messages.
@@ -103,59 +128,66 @@ runDaemon :: String           -- ^ Broker for ZMQ
           -> ByteString       -- ^ Pool name for Ceph
           -> Daemon a
           -> IO a
-runDaemon broker ceph_user pool (Daemon a) = do
-    msg_chan <- atomically $ newTBQueue 1
-    resp_chan <- atomically $ newTBQueue 1024
-
-    parent_tid <- myThreadId
-    messenger_a <- Async.async $ messenger broker msg_chan resp_chan
-    -- Ensure that any exceptions are re-thrown in a third thread.
-    monitor_a <- Async.async $ monitorMessenger messenger_a parent_tid
-
-    r <- withPool ceph_user pool $
-        runReaderT (evalStateT a emptyOriginMap) (DaemonConfig msg_chan resp_chan)
-
-    Async.cancel monitor_a
-    Async.cancel messenger_a
-
-    return r
+runDaemon broker ceph_user pool (Daemon a) =
+    bracket (setupSharedConnection broker)
+            (\(ctx, conn) -> do
+                sock <- takeMVar conn
+                ZMQ.close sock
+                ZMQ.shutdown ctx)
+            (\(_, conn) ->
+                withPool ceph_user pool $
+                    runReaderT (evalStateT a emptyOriginMap) conn)
 
 -- Connect to ceph and run your pool action
 withPool :: Maybe ByteString -> ByteString -> Pool a -> IO a
 withPool ceph_user pool = runConnect ceph_user (parseConfig "/etc/ceph/ceph.conf") . runPool pool
-
--- | Handle messsenger thread shutting down or throwing an exception
--- explicitly. On normal shutdown, this thread must be killed by the parent
--- thread before the messenger thread is shutdown..
-monitorMessenger :: Async () -> ThreadId -> IO ()
-monitorMessenger thread parent = do
-    result <- Async.waitCatch thread
-    case result of
-        Left e ->
-            errorM "Daemon.monitorMessenger" $
-                   "Messenger thread exploded, killing parent: " ++ show e
-        Right _ ->
-            errorM "Daemon.monitorMessenger"
-                   "Messenger thread exited, killing parent."
-
-    killThread parent
 
 -- | Lift an action from the librados 'Pool' monad.
 liftPool :: Pool a -> Daemon a
 liftPool = Daemon . lift . lift
 
 -- | Pop the next message off an internal FIFO queue of messages.
-nextMessage :: Daemon Message
+--   Incoming message should be four parts:
+--   1. The routing information back to the broker.
+--   2. The routing information back to the client, from the broker.
+--   3. The the origin, unverified and unauthenticated for now.
+--   4. The client's payload.
+nextMessage :: Daemon (Maybe Message)
 nextMessage = do
-    (env_a, env_b, origin, payload) <- getMsg
-    -- This can be moved out of a lambda when I fully understand this:
-    -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
-    return $ Message (\r -> do resp_chan <- respChan <$> ask
-                               writeQueue resp_chan (fromList [env_a, env_b, toWire r]))
-                     (Origin origin)
-                     payload
+    conn <- ask
+    result <- liftIO $ withMVar conn $ \c ->
+        ZMQ.poll 10 [ZMQ.Sock c [ZMQ.In] Nothing]
+    case result of
+        -- Message waiting
+        [[ZMQ.In]] -> do
+            msg <- liftIO $ withMVar conn doRecv
+
+            case msg of
+                -- Invalid message
+                Nothing -> return Nothing
+                Just (env_a, env_b, origin, payload) ->
+                    -- This can be moved out of a lambda when I fully understand this:
+                    -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
+                    let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
+                    in return . Just $
+                        Message (\r -> do var <- ask
+                                          liftIO $ withMVar var (send r))
+                                (Origin origin)
+                                payload
+        -- Timeout, do nothing.
+        [[]]        -> return Nothing
+        _           -> fatal "Daemon.listen" "impossible"
   where
-    getMsg = recvChan <$> ask >>= liftIO . atomically . readTBQueue
+    doRecv sock =  do
+        msg <- ZMQ.receiveMulti sock
+        case msg of
+            [env_a, env_b, origin, payload] ->
+                return . Just $ (env_a, env_b, origin, payload)
+            n -> do
+                liftIO . errorM "Daemon.nextMessage" $
+                                "bad message recieved, " ++ show (length n)
+                                ++ " parts; ignoring"
+                return Nothing
 
 -- | Run an action in the 'Control.Concurrent.Async' monad.
 -- State will be empty and completely separated from any other thread. This is
@@ -165,6 +197,8 @@ nextMessage = do
 -- receiving messages will work fine and is thread safe.
 async :: Daemon a -> Daemon (Async a)
 async (Daemon a) = do
+    -- TODO: Handle waiting for any 'child' threads created, as the underlying
+    --       connection is now shared.
     conf <- ask
     liftPool $ Rados.async (runReaderT (evalStateT a emptyOriginMap) conf)
 
@@ -180,9 +214,7 @@ withExtendedDayMap origin' f = do
     om <- get
     return $ f . snd . snd <$> originLookup origin' om
 
--- | Ensure that the 'DayMap's for a given 'Origin' are up to date. If you need
--- the day map to be up to date for the entirity of an operation you must use
--- this within a 'withDayFileLock'.
+-- | Ensure that the 'DayMap's for a given 'Origin' are up to date.
 refreshOriginDays :: Origin -> Daemon ()
 refreshOriginDays origin' = do
     om <- get
@@ -277,53 +309,16 @@ simpleDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_simple_d
 extendedDayOID :: Origin -> ByteString
 extendedDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_extended_days"
 
-writeQueue :: MonadIO m => TBQueue a -> a -> m ()
-writeQueue q = liftIO . atomically . writeTBQueue q
-
-messenger :: String
-          -> TBQueue RawMsg
-          -> TBQueue (NonEmpty ByteString)
-          -> IO ()
-messenger broker recv_chan resp_chan = ZMQ.runZMQ $ do
-    router <- ZMQ.socket ZMQ.Router
-    ZMQ.setReceiveHighWM (ZMQ.restrict (0 :: Int)) router
-    ZMQ.connect router broker
-    listen router recv_chan resp_chan
-
--- | Listen for messages, multiplexing incoming and outgoing over the same
--- socket.
-listen :: ZMQ.Socket z ZMQ.Router
-       -> TBQueue RawMsg
-       -> TBQueue (NonEmpty ByteString)
-       -> ZMQ.ZMQ z ()
-listen router recv_chan resp_chan = forever $ do
-    result <- ZMQ.poll 10 [ZMQ.Sock router [ZMQ.In] Nothing]
-    case result of
-        -- Message waiting
-        [[ZMQ.In]] -> do
-            msg <- ZMQ.receiveMulti router
-            case msg of
-                [env_a, env_b, origin', payload'] ->
-                    writeQueue recv_chan (env_a, env_b, origin', payload')
-                n -> liftIO $ putStrLn $
-                    "bad message recieved, " ++ show (length n)
-                    ++ " parts; ignoring"
-        -- Timeout, do nothing.
-        [[]]        -> return ()
-        _           -> fatal "Daemon.listen" "impossible"
-
-    -- Send all responses every iteration
-    sendResponses router resp_chan
-
--- This depletes the entire queue of messages.
-sendResponses :: ZMQ.Socket z ZMQ.Router -> TBQueue (NonEmpty ByteString) -> ZMQ.ZMQ z ()
-sendResponses router resp_chan = do
-    ack <- liftIO $ atomically $ tryReadTBQueue resp_chan
-    case ack of
-        Nothing -> return ()
-        Just payload -> do
-            ZMQ.sendMulti router payload
-            sendResponses router resp_chan
+-- | Build the 'SharedConnection' for use by potentially many consumers within
+-- this 'Daemon'.
+setupSharedConnection :: String -- ^ Broker name
+                      -> IO (ZMQ.Context, SharedConnection)
+setupSharedConnection broker = do
+    ctx <- ZMQ.context
+    sock <- ZMQ.socket ctx ZMQ.Router
+    ZMQ.connect sock broker
+    mvar <- newMVar sock
+    return (ctx, mvar)
 
 bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
 bucketOID (Origin origin') epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"

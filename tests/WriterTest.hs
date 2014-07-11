@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Applicative
+import Control.Concurrent hiding (yield)
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -141,9 +142,15 @@ suite now = do
                 _ <- runObject "02_PONY_extended_latest" remove
                 runObject "02_PONY_simple_latest" remove
 
-            linkThread $ runZMQ $ startProxy
-                (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
-            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 0
+
+            shutdown <- newEmptyMVar
+            linkThread $ do
+                runZMQ $ startProxy (Router,"tcp://*:5560")
+                                    (Dealer,"tcp://*:5561") "tcp://*:5000"
+                readMVar shutdown
+
+            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 0 shutdown
+
             sendTestMsg >>= (`shouldBe` ["\NUL"])
 
             let expected = sort [ "02_PONY_00000000000000000004_00000000000000000000_extended"
