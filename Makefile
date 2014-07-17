@@ -7,6 +7,7 @@ all: build
 
 vault: dist/build/vault/vault
 marquised: dist/build/marquised/marquised
+demowave: dist/build/demowave/demowave
 reader-test: dist/build/reader-test/reader-test
 reader-algorithms: dist/build/reader-algorithms/reader-algorithms
 writer-test: dist/build/writer-test/writer-test
