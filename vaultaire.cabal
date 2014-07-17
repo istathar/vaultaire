@@ -108,6 +108,8 @@ executable demowave
                      vaultaire-common,
                      pipes,
                      hslogger,
+                     time,
+                     data-binary-ieee754,
                      vaultaire
 
   ghc-options:       -O2

@@ -9,70 +9,45 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Main where
 import Control.Concurrent
 import Control.Monad
+import Data.Binary.IEEE754 (doubleToWord)
 import qualified Data.ByteString.Char8 as S
+import Data.Time.Clock.POSIX
+import Data.Word
 import GHC.Conc
 import Marquise.Client
-import Marquise.Server (marquiseServer)
 import Options.Applicative hiding (Parser, option)
-import qualified Options.Applicative as O
-import Pipes
+import Options.Applicative
 import System.Log.Handler.Syslog
 import System.Log.Logger
-import Vaultaire.Types
 
-data Options = Options
-  { pool      :: String
-  , user      :: String
-  , broker    :: String
-  , debug     :: Bool
-  }
+data Options = Options {
+    pool   :: String,
+    user   :: String,
+    broker :: String,
+    debug  :: Bool
+} 
 
 -- | Command line option parsing
 
-helpfulParser :: O.ParserInfo Options
+helpfulParser :: ParserInfo Options
 helpfulParser = info (helper <*> optionsParser) fullDesc
 
-optionsParser :: O.Parser Options
-optionsParser = Options <$> parsePool
-                                    <*> parseUser
-                                    <*> parseBroker
-                                    <*> parseDebug
+optionsParser :: Parser Options
+optionsParser =
+    Options <$> parseDebug
   where
-    parsePool = strOption $
-           long "pool"
-        <> short 'p'
-        <> metavar "POOL"
-        <> value "vaultaire"
-        <> showDefault
-        <> help "Ceph pool name for storage"
-
-    parseUser = strOption $
-           long "user"
-        <> short 'u'
-        <> metavar "USER"
-        <> value "vaultaire"
-        <> showDefault
-        <> help "Ceph user for access to storage"
-
-    parseBroker = strOption $
-           long "broker"
-        <> short 'b'
-        <> metavar "BROKER"
-        <> value "localhost"
-        <> showDefault
-        <> help "Vault broker host name or IP address"
-
     parseDebug = switch $
            long "debug"
         <> short 'd'
         <> help "Set log level to DEBUG"
 
-parseOrigin :: O.Parser Origin
+parseOrigin :: Parser Origin
 parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
   where
     mkOrigin = Origin . S.pack
@@ -90,15 +65,37 @@ main = do
     logger <- openlog "vaultaire" [PID] USER log_level
     updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
 
-    -- Shutdown is signaled by putting a () into the MVar
-    --
-    -- TODO: afcowie: add signal handler for this
-    shutdown <- newEmptyMVar
+    logM "Main.main" DEBUG "Starting"
 
-    debugM "Main.main" "Starting"
+    spool <- createSpoolFiles "demowave"
+
+    let a = hashIdentifier "This is a test of the emergency broadcast system"
+
+    forever $ do
+        i <- getCurrentTimeNanoseconds
+        let v = demoWaveAt i
+        logM "Main.loop" DEBUG (show a ++ "\t" ++ show i ++ "\t" ++ show v)
+        queueSimple spool a i v
+        threadDelay (5 * 1000000)
 
 
+getCurrentTimeNanoseconds :: IO TimeStamp -- Word64
+getCurrentTimeNanoseconds = do
+    t <- getPOSIXTime
+    let nanos = ((* 1e9) . fromRational . toRational) t :: Double
+    let i = (TimeStamp . round) nanos
+    return i
 
-    liftIO $ do
-        debugM "Main.runBroker" "Proxies started."
-        readMVar shutdown
+
+demoWaveAt
+    :: TimeStamp
+    -> Word64
+demoWaveAt (TimeStamp x) =
+    let
+        period = 3600 * 3
+        f = 1/period                                    -- instances per second
+        w = 2 * pi * f :: Double
+        y t = sin (w * ((fromRational . toRational) t))
+    in
+        doubleToWord (y x)
+
