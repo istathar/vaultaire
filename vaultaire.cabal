@@ -105,7 +105,7 @@ executable demowave
                      directory,
                      marquise,
                      containers,
-                     vaultaire-common,
+                     vaultaire-common >= 2.0.4,
                      pipes,
                      hslogger,
                      time,

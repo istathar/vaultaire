@@ -15,9 +15,8 @@
 module Main where
 import Control.Concurrent
 import Control.Monad
-import Data.Binary.IEEE754 (doubleToWord)
+import Data.Binary.IEEE754 (doubleToWord, wordToDouble)
 import qualified Data.ByteString.Char8 as S
-import Data.Time.Clock.POSIX
 import Data.Word
 import GHC.Conc
 import Marquise.Client
@@ -25,10 +24,12 @@ import Options.Applicative hiding (Parser, option)
 import Options.Applicative
 import System.Log.Handler.Syslog
 import System.Log.Logger
+import Text.Printf
+import Vaultaire.Types
 
 data Options = Options {
-    debug  :: Bool
-} 
+    debug :: Bool
+}
 
 -- | Command line option parsing
 
@@ -71,9 +72,9 @@ main = do
     forever $ do
         i <- getCurrentTimeNanoseconds
         let v = demoWaveAt i
-        logM "Main.loop" DEBUG (show a ++ "\t" ++ show i ++ "\t" ++ show v)
+        logM "Main.loop" DEBUG (show a ++ "\t" ++ show i ++ "\t" ++ show (wordToDouble v))
         queueSimple spool a i v
-        threadDelay (5 * 1000000)
+        threadDelay (1 * 1000000)
 
 demoWaveAt :: TimeStamp -> Word64
 demoWaveAt (TimeStamp x) =
@@ -81,7 +82,8 @@ demoWaveAt (TimeStamp x) =
         period = 3600 * 3
         f = 1/period                                    -- instances per second
         w = 2 * pi * f :: Double
-        y t = sin (w * ((fromRational . toRational) t))
+        t = ((/ 1e9) . fromRational . toRational) x
+        y = sin (w * t)
     in
-        doubleToWord (y x)
+        doubleToWord y
 
