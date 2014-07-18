@@ -27,9 +27,6 @@ import System.Log.Handler.Syslog
 import System.Log.Logger
 
 data Options = Options {
-    pool   :: String,
-    user   :: String,
-    broker :: String,
     debug  :: Bool
 } 
 
@@ -78,18 +75,7 @@ main = do
         queueSimple spool a i v
         threadDelay (5 * 1000000)
 
-
-getCurrentTimeNanoseconds :: IO TimeStamp -- Word64
-getCurrentTimeNanoseconds = do
-    t <- getPOSIXTime
-    let nanos = ((* 1e9) . fromRational . toRational) t :: Double
-    let i = (TimeStamp . round) nanos
-    return i
-
-
-demoWaveAt
-    :: TimeStamp
-    -> Word64
+demoWaveAt :: TimeStamp -> Word64
 demoWaveAt (TimeStamp x) =
     let
         period = 3600 * 3
