@@ -75,7 +75,7 @@ executable vault
                      rados-haskell,
                      zeromq4-haskell,
                      optparse-applicative,
-                     trifecta,
+                     trifecta >= 1.4.3,
                      directory,
                      marquise,
                      containers,
