@@ -299,50 +299,54 @@ main = do
     logger <- openlog "vaultaire" [PID] USER log_level
     updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
 
-    -- Shutdown is signaled by putting a () into the MVar
-    --
-    -- TODO: afcowie: add signal handler for this
-    shutdown <- newEmptyMVar
-
     debugM "Main.main" "Logger initialized, starting component"
+
+    -- Run daemons and/or commands. These are all expected to fork threads and
+    -- return. If termination is requested, then they have to put unit into the
+    -- shutdown MVar.
 
     case component of
         Broker ->
-            runBroker shutdown
+            runBroker quit
         Reader ->
-            runReader pool user broker shutdown
+            runReader pool user broker quit
         Writer roll_over_size ->
-            runWriter pool user broker roll_over_size shutdown
+            runWriter pool user broker roll_over_size quit
         Marquise origin namespace ->
-            marquiseServer broker origin namespace
+            runMarquiseServer broker origin namespace quit
         Contents ->
-            runContents pool user broker shutdown
+            runContents pool user broker quit
         RegisterOrigin origin buckets step begin end ->
-            runRegisterOrigin pool user origin buckets step begin end
+            runRegisterOrigin pool user origin buckets step begin end quit
         Read origin addr start end ->
-            runRead broker origin addr start end
+            runRead broker origin addr start end quit
         List origin ->
-            runList broker origin
+            runList broker origin quit
         DumpDays origin ->
-            runDumpDays pool user origin
+            runDumpDays pool user origin quit
 
     -- Block until shutdown triggered
-    takeMVar quit
+    debugM "Main.main" "Running until shutdown"
+    _ <- readMVar quit
+    putStrLn ""
+    debugM "Main.main" "Ending"
 
 
-runRead :: String -> Origin -> Address -> Word64 -> Word64 -> IO ()
-runRead broker origin addr start end =
+runRead :: String -> Origin -> Address -> Word64 -> Word64 -> MVar () -> IO ()
+runRead broker origin addr start end shutdown = do
     withReaderConnection broker $ \c ->
         runEffect $ for (readSimple addr start end origin c >-> decodeSimple)
                         (lift . print)
+    putMVar shutdown ()
 
-runList :: String -> Origin -> IO ()
-runList broker origin =
+runList :: String -> Origin -> MVar () -> IO ()
+runList broker origin shutdown = do
     withContentsConnection broker $ \c ->
         runEffect $ for (enumerateOrigin origin c) (lift . print)
+    putMVar shutdown ()
 
-runDumpDays :: String -> String -> Origin -> IO ()
-runDumpDays pool user origin =  do
+runDumpDays :: String -> String -> Origin -> MVar () -> IO ()
+runDumpDays pool user origin shutdown =  do
     let user' = Just (S.pack user)
     let pool' = S.pack pool
 
@@ -354,10 +358,11 @@ runDumpDays pool user origin =  do
             print simple
             putStrLn "Extended day map:"
             print extended
+    putMVar shutdown ()
 
 
 runBroker :: MVar () -> IO ()
-runBroker shutdown = runZMQ $ do
+runBroker _ = runZMQ $ do
     -- Writer proxy.
     forkThreadZMQ $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
@@ -373,15 +378,14 @@ runBroker shutdown = runZMQ $ do
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
-    liftIO $ do
-        debugM "Main.runBroker" "Proxies started."
-        readMVar shutdown
+    liftIO $ debugM "Main.runBroker" "Proxies started"
 
 runReader :: String -> String -> String -> MVar () -> IO ()
 runReader pool user broker shutdown =
     forkThread $ startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
+                shutdown
 
 runWriter :: String -> String -> String -> Word64 -> MVar () -> IO ()
 runWriter pool user broker bucket_size shutdown =
@@ -389,20 +393,28 @@ runWriter pool user broker bucket_size shutdown =
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
+                shutdown
 
 runContents :: String -> String -> String -> MVar () -> IO ()
 runContents pool user broker shutdown =
     forkThread $ startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)
                 (S.pack pool)
+                shutdown
 
-runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> IO ()
-runRegisterOrigin pool user origin buckets step begin end = do
+runMarquiseServer :: String -> Origin -> String -> MVar () -> IO ()
+runMarquiseServer broker origin namespace _ = do
+    forkThread $ marquiseServer broker origin namespace
+
+
+runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> MVar () -> IO ()
+runRegisterOrigin pool user origin buckets step begin end shutdown = do
     let targets = [simpleDayOID origin, extendedDayOID origin]
     let user' = Just (S.pack user)
     let pool' = S.pack pool
 
     withPool user' pool' (forM_ targets initializeDayMap)
+    putMVar shutdown ()
   where
     initializeDayMap target =
         runObject target $ do
