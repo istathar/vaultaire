@@ -93,34 +93,6 @@ executable vault
 
   ghc-prof-options:  -fprof-auto
 
-executable           kitchen-sink
-  hs-source-dirs:    tests
-  main-is:           KitchenSink.hs
-  default-language:  Haskell2010
-
-  build-depends:     base >=3 && <5,
-                     bytestring,
-                     rados-haskell,
-                     packer,
-                     async,
-                     zeromq4-haskell,
-                     optparse-applicative,
-                     marquise,
-                     vaultaire-common,
-                     trifecta,
-                     directory,
-                     hslogger,
-                     vaultaire
-
-  ghc-options:       -O2
-                     -threaded
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-
-  ghc-prof-options:  -fprof-auto
-
-
 test-suite           daemon-test
   hs-source-dirs:    tests
   main-is:           DaemonTest.hs
@@ -234,31 +206,6 @@ test-suite           reader-algorithms-test
                      bytestring,
                      vaultaire
 
-
-  ghc-options:       -O2
-                     -threaded
-                     -Wall
-                     -Wwarn
-                     -fwarn-tabs
-
-test-suite           identity-test
-  hs-source-dirs:    tests
-  main-is:           IdentityTest.hs
-  type:              exitcode-stdio-1.0
-  default-language:  Haskell2010
-
-  build-depends:     base >=3 && <5,
-                     hspec,
-                     containers,
-                     QuickCheck,
-                     vector,
-                     rados-haskell,
-                     semigroups,
-                     vaultaire-common,
-                     mtl,
-                     bytestring,
-                     zeromq4-haskell,
-                     vaultaire
 
   ghc-options:       -O2
                      -threaded

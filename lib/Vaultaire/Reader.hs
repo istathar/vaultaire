@@ -9,6 +9,7 @@ module Vaultaire.Reader
 ) where
 
 import Control.Applicative
+import Control.Concurrent (MVar)
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.ST
@@ -26,11 +27,11 @@ import Vaultaire.Types
 startReader :: String           -- ^ Broker
             -> Maybe ByteString -- ^ Username for Ceph
             -> ByteString       -- ^ Pool name for Ceph
+            -> MVar ()
             -> IO ()
-startReader broker user pool = do
+startReader broker user pool shutdown = do
     liftIO $ infoM "Reader.startReader" "Reader daemon starting"
-    runDaemon broker user pool $
-        forever $ nextMessage >>= handleRequest
+    handleMessages broker user pool shutdown handleRequest
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =

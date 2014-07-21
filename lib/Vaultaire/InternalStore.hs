@@ -40,12 +40,12 @@ import Vaultaire.Writer (BatchState (..), appendExtended, write)
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon ()
 writeTo origin addr payload =
-    runEffect (yield makeState >-> write (namespace origin) False)
+    write (namespace origin) False makeState
   where
     makeState :: BatchState
     makeState =
         let zt     = UTCTime (ModifiedJulianDay 0) 0 in -- kind of dumb
-        let empty  = BatchState mempty mempty mempty mempty 0 0 mempty 0 zt in
+        let empty  = BatchState mempty mempty mempty 0 0 mempty 0 zt in
         let bucket = calculateBucketNumber internalStoreBuckets addr in
         let len    = fromIntegral $ BS.length payload in
         execState (appendExtended 0 bucket addr 0 len payload) empty

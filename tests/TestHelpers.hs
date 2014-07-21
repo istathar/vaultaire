@@ -24,6 +24,7 @@ module TestHelpers
 )
 where
 
+import Control.Concurrent
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (fromList)
@@ -118,14 +119,21 @@ sendTestMsg = runZMQ $ do
     sendMulti s $ fromList ["PONY", extendedCompound]
     receiveMulti s
 
-startTestDaemons :: IO ()
-startTestDaemons = do
-    linkThread $ runZMQ $ startProxy
-        (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
-    linkThread $ runZMQ $ startProxy
-        (Router,"tcp://*:5570") (Dealer,"tcp://*:5571") "tcp://*:5001"
-    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 0
-    linkThread $ startReader "tcp://localhost:5571" Nothing "test"
+startTestDaemons :: MVar () -> IO ()
+startTestDaemons shutdown = do
+    linkThread $ do
+        runZMQ $ startProxy (Router,"tcp://*:5560")
+                            (Dealer,"tcp://*:5561")
+                            "tcp://*:5000"
+        readMVar shutdown
+
+    linkThread $ do
+        runZMQ $ startProxy (Router,"tcp://*:5570")
+                            (Dealer,"tcp://*:5571")
+                            "tcp://*:5001"
+        readMVar shutdown
+    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 shutdown
+    linkThread $ startReader "tcp://localhost:5571" Nothing "test" shutdown
 
 readObject :: ByteString -> IO (Either RadosError ByteString)
 readObject = runTestPool . flip runObject readFull

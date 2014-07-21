@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Applicative
+import Control.Concurrent hiding (yield)
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -12,9 +13,6 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.List (sort)
 import Data.Monoid
 import Data.Time
-import Pipes
-import Pipes.Lift
-import Pipes.Parse
 import System.Rados.Monadic
 import System.ZMQ4.Monadic hiding (Event)
 import Test.Hspec hiding (pending)
@@ -34,20 +32,20 @@ suite :: UTCTime -> Spec
 suite now = do
     describe "appendSimple" $ do
         it "generates a single builder from one append" $ do
-            let (_, st) = go $ appendSimple 0 1 "HAI"
+            let st = go $ appendSimple 0 1 "HAI"
             let builder = HashMap.lookup 0 (simple st) >>= HashMap.lookup 1
             case builder of Nothing -> error "lookup"
                             Just b  -> toLazyByteString b `shouldBe` "HAI"
 
         it "generates a single builder from one append" $ do
-            let (_, st) = go $ appendSimple 0 1 "A" >> appendSimple 0 1 "B"
+            let st = go $ appendSimple 0 1 "A" >> appendSimple 0 1 "B"
             let builder = HashMap.lookup 0 (simple st) >>= HashMap.lookup 1
             case builder of Nothing -> error "lookup"
                             Just b  -> toLazyByteString b `shouldBe` "AB"
 
     describe "appendExtended" $
         it "creates appropriate builders and extended map" $ do
-            let (_, st) = go $ appendExtended 0 1 0x42 0x90 2 "BC"
+            let st = go $ appendExtended 0 1 0x42 0x90 2 "BC"
 
             let ext_bytes = "\x02\x00\x00\x00\x00\x00\x00\x00\&BC"
             let ext = HashMap.lookup 0 (extended st) >>= HashMap.lookup 1
@@ -65,7 +63,7 @@ suite now = do
 
     describe "processPoints" $ do
         it "handles multiple simple points" $ do
-            let (latest, st) = go $ processPoints 0 simpleCompound
+            let st = go $ processPoints 0 simpleCompound
                                                     startDayMaps "PONY" 0 0
             HashMap.null (extended st) `shouldBe` True
             HashMap.null (pending st) `shouldBe` True
@@ -77,10 +75,11 @@ suite now = do
                                    `shouldBe` simpleCompound
 
             HashMap.null (simple st) `shouldBe` False
-            latest `shouldBe` (2, 0)
+            latestSimple st `shouldBe` 2
+            latestExtended st `shouldBe` 0
 
         it "handles multiple simple and extended points" $ do
-            let (latest, st) = go $ processPoints 0 extendedCompound
+            let st = go $ processPoints 0 extendedCompound
                                                       startDayMaps "PONY" 0 0
             HashMap.null (extended st) `shouldBe` False
             HashMap.null (pending st) `shouldBe` False
@@ -114,24 +113,8 @@ suite now = do
                 Just fs -> let b = mconcat . reverse $ map ($2) (snd fs)
                            in toStrict (toLazyByteString b) `shouldBe` pendingBytes
 
-            latest `shouldBe` (2,3)
-
-    describe "processMessage" $ do
-        it "yields state immediately with expired time" $ do
-            writes <- evalStateT drawAll $
-                yieldEvents >-> evalStateP (startState now) (processEvents 0)
-
-            length writes `shouldBe` 1
-            let w = head writes
-            HashMap.null (extended w) `shouldBe` False
-            HashMap.null (pending w) `shouldBe` False
-            HashMap.null (simple w) `shouldBe` False
-
-        it "does not yield state immmediately with a higher batch period" $ do
-            writes <- evalStateT drawAll $
-                yieldEvents >-> evalStateP (startState now) (processEvents 1)
-
-            null writes `shouldBe` True
+            latestSimple st `shouldBe` 2
+            latestExtended st `shouldBe` 3
 
     describe "full stack" $
         it "writes a message to disk immediately" $ do
@@ -141,9 +124,15 @@ suite now = do
                 _ <- runObject "02_PONY_extended_latest" remove
                 runObject "02_PONY_simple_latest" remove
 
-            linkThread $ runZMQ $ startProxy
-                (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
-            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 0
+
+            shutdown <- newEmptyMVar
+            linkThread $ do
+                runZMQ $ startProxy (Router,"tcp://*:5560")
+                                    (Dealer,"tcp://*:5561") "tcp://*:5000"
+                readMVar shutdown
+
+            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 shutdown
+
             sendTestMsg >>= (`shouldBe` ["\NUL"])
 
             let expected = sort [ "02_PONY_00000000000000000004_00000000000000000000_extended"
@@ -171,7 +160,7 @@ suite now = do
                 >>= (`shouldBe` Right "\x02\x00\x00\x00\x00\x00\x00\x00")
 
   where
-    go = flip runState (startState now)
+    go = flip execState (startState now)
 
 extendedBytes :: ByteString
 extendedBytes = "\x1f\x00\x00\x00\x00\x00\x00\x00\
@@ -186,11 +175,6 @@ extendedPointers = "\x05\x00\x00\x00\x00\x00\x00\x00\
                    \\x05\x00\x00\x00\x00\x00\x00\x00\
                    \\x03\x00\x00\x00\x00\x00\x00\x00\
                    \\x27\x00\x00\x00\x00\x00\x00\x00"
-
-yieldEvents :: Monad m => Producer Event m ()
-yieldEvents = do
-    yield (Msg $ Message undefined "PONY" extendedCompound)
-    yield Tick
 
 pendingBytes :: ByteString
 pendingBytes = "\x05\x00\x00\x00\x00\x00\x00\x00\
@@ -209,4 +193,4 @@ startDayMaps =
     in either error id $ (,) <$> norm <*> ext
 
 startState :: UTCTime -> BatchState
-startState = BatchState mempty mempty mempty mempty 0 0 startDayMaps 0
+startState = BatchState mempty mempty mempty 0 0 startDayMaps 0

@@ -3,6 +3,7 @@
 
 module Main where
 
+import Control.Concurrent
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (fromList)
@@ -12,11 +13,15 @@ import TestHelpers
 
 main :: IO ()
 main = do
-    runTestDaemon "tcp://localhost:1234" (return ())
-    startTestDaemons
+    shutdown <- newEmptyMVar
+    cleanupTestEnvironment
+    startTestDaemons shutdown
     -- Prime vault by writing a test message to it
     sendTestMsg >>= (`shouldBe` ["\NUL"])
+
     hspec suite
+
+    putMVar shutdown ()
 
 suite :: Spec
 suite =

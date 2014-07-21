@@ -22,7 +22,7 @@ import qualified Data.ByteString.Char8 as S
 import Data.Map (fromAscList)
 import Data.Maybe (fromJust)
 import Data.String
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 import GHC.Conc
 import Marquise.Client
 import Marquise.Server (marquiseServer)
@@ -53,7 +53,7 @@ data Options = Options
 
 data Component = Broker
                | Reader
-               | Writer { batchPeriod :: Word32, bucketSize :: Word64 }
+               | Writer { bucketSize :: Word64 }
                | Marquise { origin :: Origin, namespace :: String }
                | Contents
                | RegisterOrigin { origin  :: Origin
@@ -218,15 +218,8 @@ registerOriginParser = RegisterOrigin <$> parseOrigin
         <> help "Back-date end time"
 
 writerOptionsParser :: O.Parser Component
-writerOptionsParser = Writer <$> parseBatchPeriod <*> parseBucketSize
+writerOptionsParser = Writer <$> parseBucketSize
   where
-    parseBatchPeriod = O.option $
-        long "batch_period"
-        <> short 'p'
-        <> value 4
-        <> showDefault
-        <> help "Number of seconds to wait before flushing writes"
-
     parseBucketSize = O.option $
         long "roll_over_size"
         <> short 'r'
@@ -301,23 +294,37 @@ main = do
 
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
+    -- Start and configure logger
     let log_level = if debug then DEBUG else WARNING
     logger <- openlog "vaultaire" [PID] USER log_level
     updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
 
+    -- Shutdown is signaled by putting a () into the MVar
+    --
+    -- TODO: afcowie: add signal handler for this
+    shutdown <- newEmptyMVar
+
     debugM "Main.main" "Logger initialized, starting component"
 
     case component of
-        Broker -> runBroker
-        Reader -> runReader pool user broker
-        Writer batch_period roll_over_size -> runWriter pool user broker batch_period roll_over_size
-        Marquise origin namespace -> marquiseServer broker origin namespace
-        Contents -> runContents pool user broker
+        Broker ->
+            runBroker shutdown
+        Reader ->
+            runReader pool user broker shutdown
+        Writer roll_over_size ->
+            runWriter pool user broker roll_over_size shutdown
+        Marquise origin namespace ->
+            marquiseServer broker origin namespace
+        Contents ->
+            runContents pool user broker shutdown
         RegisterOrigin origin buckets step begin end ->
             runRegisterOrigin pool user origin buckets step begin end
-        Read origin addr start end -> runRead broker origin addr start end
-        List origin -> runList broker origin
-        DumpDays origin -> runDumpDays pool user origin
+        Read origin addr start end ->
+            runRead broker origin addr start end
+        List origin ->
+            runList broker origin
+        DumpDays origin ->
+            runDumpDays pool user origin
 
     -- Block until shutdown triggered
     takeMVar quit
@@ -349,8 +356,8 @@ runDumpDays pool user origin =  do
             print extended
 
 
-runBroker :: IO ()
-runBroker = runZMQ $ do
+runBroker :: MVar () -> IO ()
+runBroker shutdown = runZMQ $ do
     -- Writer proxy.
     forkThreadZMQ $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
@@ -366,24 +373,25 @@ runBroker = runZMQ $ do
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
-    liftIO $ debugM "Main.runBroker" "Proxies started."
+    liftIO $ do
+        debugM "Main.runBroker" "Proxies started."
+        readMVar shutdown
 
-runReader :: String -> String -> String -> IO ()
-runReader pool user broker =
+runReader :: String -> String -> String -> MVar () -> IO ()
+runReader pool user broker shutdown =
     forkThread $ startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
 
-runWriter :: String -> String -> String -> Word32 -> Word64 -> IO ()
-runWriter pool user broker poll_period bucket_size =
+runWriter :: String -> String -> String -> Word64 -> MVar () -> IO ()
+runWriter pool user broker bucket_size shutdown =
     forkThread $ startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
-                (fromIntegral poll_period)
 
-runContents :: String -> String -> String -> IO ()
-runContents pool user broker =
+runContents :: String -> String -> String -> MVar () -> IO ()
+runContents pool user broker shutdown =
     forkThread $ startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)
                 (S.pack pool)
