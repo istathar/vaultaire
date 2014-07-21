@@ -72,9 +72,10 @@ main = do
     forever $ do
         i <- getCurrentTimeNanoseconds
         let v = demoWaveAt i
-        logM "Main.loop" DEBUG (show a ++ "\t" ++ show i ++ "\t" ++ show (wordToDouble v))
+        let msg = printf "%s\t%d\t% 9.6f" (show a) (unTimeStamp i) (wordToDouble v)
+        logM "Main.loop" DEBUG msg
         queueSimple spool a i v
-        threadDelay (1 * 1000000)
+        threadDelay (5 * 1000000)   -- every 5 s
 
 demoWaveAt :: TimeStamp -> Word64
 demoWaveAt (TimeStamp x) =
