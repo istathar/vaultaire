@@ -299,6 +299,29 @@ test-suite           contents-test
                      -Wwarn
                      -fwarn-tabs
 
+test-suite           integration-test
+  hs-source-dirs:    tests
+  main-is:           IntegrationTest.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     containers,
+                     unordered-containers,
+                     text,
+                     QuickCheck,
+                     marquise,
+                     bytestring,
+                     pipes,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
 benchmark writer-bench
   hs-source-dirs:    bench, tests
   main-is:           Writer.hs
