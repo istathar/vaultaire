@@ -24,8 +24,9 @@ import GHC.Conc
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
-import System.IO (hFlush, hPutStr, stdout)
-import System.Log.Handler.Syslog
+import System.IO (hFlush, hPutStrLn, stdout)
+import System.Log.Formatter
+import System.Log.Handler (setFormatter)
 import System.Log.Handler.Simple
 import System.Log.Logger
 import System.Posix.Signals
@@ -268,19 +269,19 @@ parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 
 interruptHandler :: MVar () -> Handler
 interruptHandler semaphore = Catch $ do
-    hPutStr stdout "\n"
+    hPutStrLn stdout "\nInterrupt"
     hFlush stdout
-    warningM "Main.interruptHandler" "Interrupted"
     putMVar semaphore ()
 
 terminateHandler :: MVar () -> Handler
 terminateHandler semaphore = Catch $ do
-    infoM "Main.terminateHandler" "Terminated"
+    hPutStrLn stdout "Terminating"
+    hFlush stdout
     putMVar semaphore ()
 
 quitHandler :: Handler
 quitHandler = Catch $ do
-    hPutStr stdout "\n"
+    hPutStrLn stdout ""
     hFlush stdout
     logger <- getLogger rootLoggerName
     let level   = getLevel logger
@@ -306,12 +307,14 @@ main = do
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
     -- Start and configure logger, deleting the default handler in favour of
-    -- our own formatter.
+    -- our own formatter with timestamps to stdout.
+
     let level = if debug then DEBUG else INFO
 
     logger  <- getRootLogger
     handler <- streamHandler stdout DEBUG
-    let logger' = (setHandlers [handler] . setLevel level) logger
+    let handler' = setFormatter handler (tfLogFormatter "%e %b %y, %H:%M:%S" "$time  $msg")
+    let logger' = (setHandlers [handler'] . setLevel level) logger
     saveGlobalLogger logger'
 
 

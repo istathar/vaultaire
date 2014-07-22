@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.0.2
+version:             2.0.4
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
@@ -51,7 +51,7 @@ library
                      async,
                      stm,
                      semigroups,
-                     hslogger,
+                     hslogger >= 1.2.4,
                      vaultaire-common >= 2.0.3,
                      text,
                      rados-haskell >= 3.0.3
@@ -81,7 +81,7 @@ executable vault
                      containers,
                      vaultaire-common,
                      pipes,
-                     hslogger,
+                     hslogger >= 1.2.4,
                      async,
                      unix,
                      vaultaire
