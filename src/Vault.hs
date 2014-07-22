@@ -9,10 +9,13 @@
 -- the 3-clause BSD licence.
 --
 
+{-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
-import Control.Concurrent
+
+import qualified Control.Concurrent.Async as A
+import Control.Concurrent.MVar
 import Control.Exception (throw)
 import Control.Monad
 import qualified Data.ByteString.Char8 as S
@@ -29,6 +32,7 @@ import Pipes
 import System.Directory
 import System.Log.Handler.Syslog
 import System.Log.Logger
+import System.Posix.Signals
 import System.Rados.Monadic (RadosError (..), runObject, stat, writeFull)
 import System.ZMQ4.Monadic
 import Text.Trifecta
@@ -266,10 +270,27 @@ possibleKeys =
 parseArgsWithConfig :: FilePath -> IO Options
 parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 
+--
+-- Main program entry point
+--
+
+forkThread :: IO a -> IO ()
+forkThread a = A.link =<< A.async a
+
+forkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
+forkThreadZMQ a = (liftIO . A.link) =<< async a
+
+quitHandler :: MVar () -> Handler
+quitHandler semaphore = Catch (putMVar semaphore ())
+
 main :: IO ()
 main = do
     -- command line +RTS -Nn -RTS value
     when (numCapabilities == 1) (getNumProcessors >>= setNumCapabilities)
+
+    quit <- newEmptyMVar
+    _ <- installHandler sigINT  (quitHandler quit) Nothing
+    _ <- installHandler sigTERM (quitHandler quit) Nothing
 
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
@@ -278,46 +299,54 @@ main = do
     logger <- openlog "vaultaire" [PID] USER log_level
     updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
 
-    -- Shutdown is signaled by putting a () into the MVar
-    --
-    -- TODO: afcowie: add signal handler for this
-    shutdown <- newEmptyMVar
-
     debugM "Main.main" "Logger initialized, starting component"
+
+    -- Run daemons and/or commands. These are all expected to fork threads and
+    -- return. If termination is requested, then they have to put unit into the
+    -- shutdown MVar.
 
     case component of
         Broker ->
-            runBroker shutdown
+            runBroker quit
         Reader ->
-            runReader pool user broker shutdown
+            runReader pool user broker quit
         Writer roll_over_size ->
-            runWriter pool user broker roll_over_size shutdown
+            runWriter pool user broker roll_over_size quit
         Marquise origin namespace ->
-            marquiseServer broker origin namespace
+            runMarquiseServer broker origin namespace quit
         Contents ->
-            runContents pool user broker shutdown
+            runContents pool user broker quit
         RegisterOrigin origin buckets step begin end ->
-            runRegisterOrigin pool user origin buckets step begin end
+            runRegisterOrigin pool user origin buckets step begin end quit
         Read origin addr start end ->
-            runRead broker origin addr start end
+            runRead broker origin addr start end quit
         List origin ->
-            runList broker origin
+            runList broker origin quit
         DumpDays origin ->
-            runDumpDays pool user origin
+            runDumpDays pool user origin quit
 
-runRead :: String -> Origin -> Address -> Word64 -> Word64 -> IO ()
-runRead broker origin addr start end =
+    -- Block until shutdown triggered
+    debugM "Main.main" "Running until shutdown"
+    _ <- readMVar quit
+    putStrLn ""
+    debugM "Main.main" "Ending"
+
+
+runRead :: String -> Origin -> Address -> Word64 -> Word64 -> MVar () -> IO ()
+runRead broker origin addr start end shutdown = do
     withReaderConnection broker $ \c ->
         runEffect $ for (readSimple addr start end origin c >-> decodeSimple)
                         (lift . print)
+    putMVar shutdown ()
 
-runList :: String -> Origin -> IO ()
-runList broker origin =
+runList :: String -> Origin -> MVar () -> IO ()
+runList broker origin shutdown = do
     withContentsConnection broker $ \c ->
         runEffect $ for (enumerateOrigin origin c) (lift . print)
+    putMVar shutdown ()
 
-runDumpDays :: String -> String -> Origin -> IO ()
-runDumpDays pool user origin =  do
+runDumpDays :: String -> String -> Origin -> MVar () -> IO ()
+runDumpDays pool user origin shutdown =  do
     let user' = Just (S.pack user)
     let pool' = S.pack pool
 
@@ -329,55 +358,63 @@ runDumpDays pool user origin =  do
             print simple
             putStrLn "Extended day map:"
             print extended
+    putMVar shutdown ()
 
 
 runBroker :: MVar () -> IO ()
-runBroker shutdown = runZMQ $ do
+runBroker _ = runZMQ $ do
     -- Writer proxy.
-    void $ async $ startProxy (Router,"tcp://*:5560")
+    forkThreadZMQ $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
                               "tcp://*:5000"
 
     -- Reader proxy.
-    void $ async $ startProxy (Router,"tcp://*:5570")
+    forkThreadZMQ $ startProxy (Router,"tcp://*:5570")
                               (Dealer,"tcp://*:5571")
                               "tcp://*:5001"
 
     -- Contents proxy.
-    void $ async $ startProxy (Router,"tcp://*:5580")
+    forkThreadZMQ $ startProxy (Router,"tcp://*:5580")
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
-    liftIO $ do
-        debugM "Main.runBroker" "Proxies started."
-        readMVar shutdown
+    liftIO $ debugM "Main.runBroker" "Proxies started"
 
 runReader :: String -> String -> String -> MVar () -> IO ()
-runReader pool user broker =
-    startReader ("tcp://" ++ broker ++ ":5571")
+runReader pool user broker shutdown =
+    forkThread $ startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
+                shutdown
 
 runWriter :: String -> String -> String -> Word64 -> MVar () -> IO ()
-runWriter pool user broker bucket_size =
-    startWriter ("tcp://" ++ broker ++ ":5561")
+runWriter pool user broker bucket_size shutdown =
+    forkThread $ startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
+                shutdown
 
 runContents :: String -> String -> String -> MVar () -> IO ()
-runContents pool user broker =
-    startContents ("tcp://" ++ broker ++ ":5581")
+runContents pool user broker shutdown =
+    forkThread $ startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)
                 (S.pack pool)
+                shutdown
 
-runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> IO ()
-runRegisterOrigin pool user origin buckets step begin end = do
+runMarquiseServer :: String -> Origin -> String -> MVar () -> IO ()
+runMarquiseServer broker origin namespace _ = do
+    forkThread $ marquiseServer broker origin namespace
+
+
+runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> MVar () -> IO ()
+runRegisterOrigin pool user origin buckets step begin end shutdown = do
     let targets = [simpleDayOID origin, extendedDayOID origin]
     let user' = Just (S.pack user)
     let pool' = S.pack pool
 
     withPool user' pool' (forM_ targets initializeDayMap)
+    putMVar shutdown ()
   where
     initializeDayMap target =
         runObject target $ do

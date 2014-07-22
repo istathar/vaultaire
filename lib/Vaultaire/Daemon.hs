@@ -112,14 +112,18 @@ handleMessages :: String                 -- ^ Broker for ZMQ
 handleMessages broker ceph_user pool shutdown f =
     runDaemon broker ceph_user pool loop
   where
-    -- Dumb, no concurrency for now.
+    -- Dumb, no concurrency for now. WARNING we originally had tryReadMVar but
+    -- it was causing non-deterministic asynchronous delayed hangs. We'll come
+    -- back to this question.
     loop = do
-        done <- isJust <$> liftIO (tryReadMVar shutdown)
-        unless done $ do
-            maybe_next <- nextMessage
-            case maybe_next of
-                Nothing -> loop
-                Just msg -> f msg >> loop
+        done <- isJust <$> liftIO (tryTakeMVar shutdown)
+        if done
+            then liftIO (putMVar shutdown ())
+            else do
+                maybe_next <- nextMessage
+                case maybe_next of
+                    Nothing -> loop
+                    Just msg -> f msg >> loop
 
 -- | This will go as far as to connect to Ceph and begin listening for
 -- messages.
