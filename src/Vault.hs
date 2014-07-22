@@ -26,6 +26,7 @@ import qualified Options.Applicative as O
 import System.Directory
 import System.IO (hFlush, hPutStr, stdout)
 import System.Log.Handler.Syslog
+import System.Log.Handler.Simple
 import System.Log.Logger
 import System.Posix.Signals
 import Text.Trifecta
@@ -304,10 +305,15 @@ main = do
 
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
-    -- Start and configure logger
+    -- Start and configure logger, deleting the default handler in favour of
+    -- our own formatter.
     let level = if debug then DEBUG else INFO
-    logger <- openlog "vaultaire" [PID] USER level
-    updateGlobalLogger rootLoggerName (addHandler logger . setLevel level)
+
+    logger  <- getRootLogger
+    handler <- streamHandler stdout DEBUG
+    let logger' = (setHandlers [handler] . setLevel level) logger
+    saveGlobalLogger logger'
+
 
     debugM "Main.main" "Logger initialized, starting component"
 

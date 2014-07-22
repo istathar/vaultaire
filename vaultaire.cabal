@@ -316,6 +316,7 @@ test-suite           integration-test
                      marquise,
                      bytestring,
                      pipes,
+                     zeromq4-haskell,
                      vaultaire
 
   ghc-options:       -O2
