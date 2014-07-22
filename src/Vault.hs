@@ -24,7 +24,7 @@ import GHC.Conc
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
-import System.IO (hFlush, hPutStrLn, stdout)
+import System.IO (hFlush, hPutStr, stdout)
 import System.Log.Handler.Syslog
 import System.Log.Logger
 import System.Posix.Signals
@@ -267,15 +267,30 @@ parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 
 interruptHandler :: MVar () -> Handler
 interruptHandler semaphore = Catch $ do
-    hPutStrLn stdout "\n"
+    hPutStr stdout "\n"
     hFlush stdout
-    infoM "Main.interruptHandler" "Interrupted"
+    warningM "Main.interruptHandler" "Interrupted"
     putMVar semaphore ()
 
 terminateHandler :: MVar () -> Handler
 terminateHandler semaphore = Catch $ do
-    infoM "Main.terminateHandler" "Terminated"
+    warningM "Main.terminateHandler" "Terminated"
     putMVar semaphore ()
+
+quitHandler :: Handler
+quitHandler = Catch $ do
+    hPutStr stdout "\n"
+    hFlush stdout
+--  logger <- getLogger "vaultaire"
+    logger <- getLogger rootLoggerName
+    let level   = getLevel logger
+        level'  = case level of
+                    Just DEBUG   -> WARNING
+                    Just WARNING -> DEBUG
+                    _            -> DEBUG
+        logger' = setLevel level' logger
+    saveGlobalLogger logger'
+    warningM "Main.quitHandler" ("Change log level to " ++ show level')
 
 main :: IO ()
 main = do
@@ -283,15 +298,17 @@ main = do
     when (numCapabilities == 1) (getNumProcessors >>= setNumCapabilities)
 
     quit <- newEmptyMVar
+
     _ <- installHandler sigINT  (interruptHandler quit) Nothing
     _ <- installHandler sigTERM (terminateHandler quit) Nothing
+    _ <- installHandler sigQUIT (quitHandler) Nothing
 
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
     -- Start and configure logger
-    let log_level = if debug then DEBUG else WARNING
-    logger <- openlog "vaultaire" [PID] USER log_level
-    updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
+    let level = if debug then DEBUG else WARNING
+    logger <- openlog "vaultaire" [PID] USER level
+    updateGlobalLogger rootLoggerName (addHandler logger . setLevel level)
 
     debugM "Main.main" "Logger initialized, starting component"
 
