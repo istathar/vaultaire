@@ -30,7 +30,7 @@ library
                      Vaultaire.Reader,
                      Vaultaire.ReaderAlgorithms,
                      Vaultaire.InternalStore,
-                     Vaultaire.ContentsServer
+                     Vaultaire.Contents
 
   build-depends:     base >=3 && <5,
                      bytestring,

@@ -12,7 +12,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 
-module Vaultaire.ContentsServer
+module Vaultaire.Contents
 (
     startContents,
 ) where
