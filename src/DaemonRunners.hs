@@ -27,7 +27,6 @@ import Control.Concurrent.MVar
 import qualified Data.ByteString.Char8 as S
 import Data.Word (Word64)
 import Pipes
-import System.Log.Handler.Syslog
 import System.Log.Logger
 import System.ZMQ4.Monadic
 

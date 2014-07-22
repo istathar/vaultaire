@@ -28,7 +28,6 @@ import Data.Map (fromAscList)
 import Data.Word (Word64)
 import Marquise.Client
 import Pipes
-import System.Log.Handler.Syslog
 import System.Log.Logger
 import System.Rados.Monadic (RadosError (..), runObject, stat, writeFull)
 import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,

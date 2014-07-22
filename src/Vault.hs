@@ -24,6 +24,7 @@ import GHC.Conc
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
+import System.IO (hFlush, hPutStrLn, stdout)
 import System.Log.Handler.Syslog
 import System.Log.Logger
 import System.Posix.Signals
@@ -264,8 +265,17 @@ parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 -- Main program entry point
 --
 
-quitHandler :: MVar () -> Handler
-quitHandler semaphore = Catch (putMVar semaphore ())
+interruptHandler :: MVar () -> Handler
+interruptHandler semaphore = Catch $ do
+    hPutStrLn stdout "\n"
+    hFlush stdout
+    infoM "Main.interruptHandler" "Interrupted"
+    putMVar semaphore ()
+
+terminateHandler :: MVar () -> Handler
+terminateHandler semaphore = Catch $ do
+    infoM "Main.terminateHandler" "Terminated"
+    putMVar semaphore ()
 
 main :: IO ()
 main = do
@@ -273,8 +283,8 @@ main = do
     when (numCapabilities == 1) (getNumProcessors >>= setNumCapabilities)
 
     quit <- newEmptyMVar
-    _ <- installHandler sigINT  (quitHandler quit) Nothing
-    _ <- installHandler sigTERM (quitHandler quit) Nothing
+    _ <- installHandler sigINT  (interruptHandler quit) Nothing
+    _ <- installHandler sigTERM (terminateHandler quit) Nothing
 
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
@@ -312,6 +322,5 @@ main = do
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"
     _ <- readMVar quit
-    putStrLn ""
-    debugM "Main.main" "Ending"
+    debugM "Main.main" "End"
 
