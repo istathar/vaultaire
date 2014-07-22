@@ -274,23 +274,22 @@ interruptHandler semaphore = Catch $ do
 
 terminateHandler :: MVar () -> Handler
 terminateHandler semaphore = Catch $ do
-    warningM "Main.terminateHandler" "Terminated"
+    infoM "Main.terminateHandler" "Terminated"
     putMVar semaphore ()
 
 quitHandler :: Handler
 quitHandler = Catch $ do
     hPutStr stdout "\n"
     hFlush stdout
---  logger <- getLogger "vaultaire"
     logger <- getLogger rootLoggerName
     let level   = getLevel logger
         level'  = case level of
-                    Just DEBUG   -> WARNING
-                    Just WARNING -> DEBUG
-                    _            -> DEBUG
+                    Just DEBUG  -> INFO
+                    Just INFO   -> DEBUG
+                    _           -> DEBUG
         logger' = setLevel level' logger
     saveGlobalLogger logger'
-    warningM "Main.quitHandler" ("Change log level to " ++ show level')
+    infoM "Main.quitHandler" ("Change log level to " ++ show level')
 
 main :: IO ()
 main = do
@@ -306,7 +305,7 @@ main = do
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
     -- Start and configure logger
-    let level = if debug then DEBUG else WARNING
+    let level = if debug then DEBUG else INFO
     logger <- openlog "vaultaire" [PID] USER level
     updateGlobalLogger rootLoggerName (addHandler logger . setLevel level)
 
