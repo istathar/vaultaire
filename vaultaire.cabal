@@ -75,13 +75,15 @@ executable vault
                      rados-haskell,
                      zeromq4-haskell,
                      optparse-applicative,
-                     trifecta,
+                     trifecta >= 1.4.3,
                      directory,
                      marquise,
                      containers,
                      vaultaire-common,
                      pipes,
                      hslogger,
+                     async,
+                     unix,
                      vaultaire
 
   ghc-options:       -O2
