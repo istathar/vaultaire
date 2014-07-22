@@ -302,7 +302,7 @@ test-suite           contents-test
                      -fwarn-tabs
 
 test-suite           integration-test
-  hs-source-dirs:    tests
+  hs-source-dirs:    tests,src
   main-is:           IntegrationTest.hs
   type:              exitcode-stdio-1.0
   default-language:  Haskell2010
@@ -316,7 +316,12 @@ test-suite           integration-test
                      marquise,
                      bytestring,
                      pipes,
+                     semigroups,
+                     async,
+                     hslogger >= 1.2.4,
                      zeromq4-haskell,
+                     rados-haskell >= 3.0.1,
+                     vaultaire-common,
                      vaultaire
 
   ghc-options:       -O2
@@ -337,6 +342,7 @@ benchmark writer-bench
                      semigroups,
                      rados-haskell,
                      criterion,
+                     vaultaire-common,
                      vaultaire
 
   ghc-options:       -O2
@@ -377,6 +383,8 @@ benchmark contents-listing
                      bytestring,
                      criterion,
                      zeromq4-haskell,
+                     vaultaire-common,
+                     marquise,
                      vaultaire
 
   ghc-options:       -O2

@@ -15,33 +15,20 @@
 
 module Main where
 
-import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
-
 import Control.Concurrent
 import Data.HashMap.Strict (fromList)
-import Data.String
 import Data.Text
 import Marquise.Client
-import Pipes.Prelude (toListM)
-import Test.Hspec.QuickCheck
-import Test.QuickCheck
-import Test.QuickCheck.Monadic (assert, monadicIO, run)
-import TestHelpers
-import Vaultaire.Broker
-import Vaultaire.ContentsServer
-import Vaultaire.Util
+
+import DaemonRunners
 
 startDaemons :: IO ()
 startDaemons = do
     shutdown <- newEmptyMVar
-    linkThread $ do
-        runZMQ $ startProxy (Router,"tcp://*:5580")
-                            (Dealer,"tcp://*:5581") "tcp://*:5008"
-        readMVar shutdown
+    runBrokerDaemon shutdown
 
-    linkThread $ startContents "tcp://localhost:5581" Nothing "test" shutdown
 
 main :: IO ()
 main = do
@@ -52,7 +39,7 @@ suite :: Spec
 suite = do
     describe "Things" $ do
         it "does stuff" $ do
-            return True
+            True `shouldBe` True
 
 
 listToDict :: [(Text, Text)] -> SourceDict
