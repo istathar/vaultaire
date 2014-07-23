@@ -82,8 +82,8 @@ suite spool =
   let
     origin    = Origin "ZZZZZZ"
     address   = hashIdentifier "Row row row yer boat"
-    begin     = 1406078299651575182
-    end       = 1406078299651575184
+    begin     = 1406078299651575183
+    end       = 1406078299651575183
     timestamp = 1406078299651575183
     payload   = 42
   in do
@@ -94,13 +94,21 @@ suite spool =
             pass
 
     describe "Retreive data" $ do
-        it "reads point via marquise" $ do
-            result <- withReaderConnection "localhost" $ \c -> do
-                P.head (readSimple address begin end origin c >-> decodeSimple)
+        it "reads point via marquise" $
+          let
+            go n = do
+                result <- withReaderConnection "localhost" $ \c -> do
+                    P.head (readSimple address begin end origin c >-> decodeSimple)
 
-            case result of
-                Nothing -> expectationFailure "Expected a value back, didn't get one"
-                Just v  -> (simplePayload v) `shouldBe` payload
+                case result of
+                    Nothing -> if n > 100
+                                then expectationFailure "Expected a value back, didn't get one"
+                                else do
+                                    threadDelay 10000 -- 10 ms
+                                    go (n+1)
+                    Just v  -> (simplePayload v) `shouldBe` payload
+          in
+            go 1
 
 
 -- | Mark that we are expecting this code to have succeeded, unless it threw an exception
