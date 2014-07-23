@@ -28,6 +28,7 @@ import Data.Map (fromAscList)
 import Data.Word (Word64)
 import Marquise.Client
 import Pipes
+import System.Log.Logger
 import System.Rados.Monadic (RadosError (..), runObject, stat, writeFull)
 import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
                          withPool)
@@ -77,7 +78,7 @@ runRegisterOrigin pool user origin buckets step begin end shutdown = do
             case result of
                 Left NoEntity{} -> return ()
                 Left e -> throw e
-                Right _ -> error "Origin already registered."
+                Right _ -> liftIO $ infoM "CommandRunners.runRegisterOrigin" ("Target already in place (" ++ S.unpack target ++ ")")
 
             writeFull (toWire dayMap) >>= maybe (return ()) throw
 
