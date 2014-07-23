@@ -12,6 +12,10 @@
 {-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
 
+--
+-- | This module encapsulates the various daemons that you might want to start
+-- up as part of a Vaultaire cluster, along with their default behaviours.
+--
 module DaemonRunners
 (
    runBrokerDaemon,
