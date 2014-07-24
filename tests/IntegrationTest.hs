@@ -21,8 +21,10 @@ import Control.Monad
 import qualified Data.ByteString.Char8 as S
 import Data.HashMap.Strict (fromList)
 import Data.Text (Text)
+import Data.Word
 import Pipes
 import qualified Pipes.Prelude as P
+import System.IO.Unsafe
 import Test.Hspec hiding (pending)
 
 import CommandRunners
@@ -30,6 +32,7 @@ import DaemonRunners
 import Marquise.Client
 import TestHelpers (cleanup)
 import Vaultaire.Daemon
+import Vaultaire.Types (getCurrentTimeNanoseconds)
 
 pool :: String
 pool = "test"
@@ -37,6 +40,14 @@ pool = "test"
 user :: String
 user = "vaultaire"
 
+namespace :: String
+namespace = "integration"
+
+now :: Word64
+now = unTimeStamp $ unsafePerformIO $ getCurrentTimeNanoseconds
+{-# NOINLINE now #-}
+
+-- FIXME needs to erase marquise spool as well
 destroyExistingVault :: IO ()
 destroyExistingVault =
     runDaemon "inproc://1" (Just (S.pack user)) (S.pack pool) cleanup
@@ -49,19 +60,18 @@ startServerDaemons shutdown =
     num_buckets = 128
     step_size = 1
     origin = Origin "ZZZZZZ"
-    namespace = "integration"
   in do
     runBrokerDaemon shutdown
     runWriterDaemon pool user broker bucket_size shutdown
     runReaderDaemon pool user broker shutdown
     runContentsDaemon pool user broker shutdown
     runMarquiseDaemon broker origin namespace shutdown
-    junk <- newEmptyMVar -- FIXME get the MVar out of commands
+    junk <- newEmptyMVar -- TODO get the MVar out of commands
     runRegisterOrigin pool user origin num_buckets step_size 0 0 junk
 
 setupClientSide :: IO SpoolFiles
 setupClientSide = do
-    createSpoolFiles "integration"
+    createSpoolFiles namespace
 
 
 main :: IO ()
@@ -119,7 +129,7 @@ suite spool =
         address = hashIdentifier "Gently down the stream"
         count   = 100
         f x     = (address, TimeStamp (begin+x), x)
-        begin   = 1406115824417958484
+        begin   = now
         end     = begin + count
         points  = map f [1..count]
       in do
