@@ -14,7 +14,7 @@ writer-test: dist/build/writer-test/writer-test
 daymap-test: dist/build/daymap-test/daymap-test
 writer-test: dist/build/writer-test/writer-test
 contents-test: dist/build/contents-test/contents-test
-identity-test: dist/build/identity-test/identity-test
+integration-test: dist/build/integration-test/integration-test
 client-server-test: dist/build/client-server-test/client-server-test
 internal-store-test: dist/build/internal-store-test/internal-store-test
 writer-bench: dist/build/writer-bench/writer-bench

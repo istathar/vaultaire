@@ -30,7 +30,7 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import TestHelpers
 import Vaultaire.Broker
-import Vaultaire.ContentsServer
+import Vaultaire.Contents
 import Vaultaire.Util
 
 startDaemons :: IO ()

@@ -15,7 +15,8 @@ import Criterion.Main
 import Data.ByteString (ByteString)
 import Control.Monad
 import Control.Exception(throwIO)
-import Marquise.IO.Connection
+import Marquise.Client
+import Marquise.Server
 import Control.Concurrent(forkIO)
 import qualified System.ZMQ4.Monadic as ZMQ
 import Vaultaire.Types

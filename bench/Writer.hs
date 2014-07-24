@@ -4,6 +4,7 @@
 module Main where
 import Prelude hiding (words)
 
+import Control.Concurrent.MVar
 import Criterion.Main
 import Vaultaire.Broker
 import Vaultaire.Writer
@@ -59,7 +60,8 @@ main = do
     linkThread $ runZMQ $ startProxy
         (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
 
-    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0
+    quit <- newEmptyMVar
+    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 quit
 
     let !points = simplePoints [0..10000]
 
