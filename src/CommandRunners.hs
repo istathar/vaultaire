@@ -78,7 +78,7 @@ runRegisterOrigin pool user origin buckets step begin end shutdown = do
             case result of
                 Left NoEntity{} -> return ()
                 Left e -> throw e
-                Right _ -> liftIO $ infoM "CommandRunners.runRegisterOrigin" ("Target already in place (" ++ S.unpack target ++ ")")
+                Right _ -> liftIO $ infoM "Commands.runRegisterOrigin" ("Target already in place (" ++ S.unpack target ++ ")")
 
             writeFull (toWire dayMap) >>= maybe (return ()) throw
 

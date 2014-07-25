@@ -65,7 +65,7 @@ runBrokerDaemon _ = runZMQ $ do
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
-    liftIO $ debugM "Main.runBroker" "Proxies started"
+    liftIO $ debugM "Daemons.runBroker" "Proxies started"
 
 runReaderDaemon :: String -> String -> String -> MVar () -> IO ()
 runReaderDaemon pool user broker shutdown =
