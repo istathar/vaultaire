@@ -29,6 +29,7 @@ import Text.Trifecta
 import CommandRunners
 import DaemonRunners
 import Marquise.Client
+import Package (package, version)
 import Vaultaire.Program
 
 
@@ -280,7 +281,7 @@ main = do
             then Quiet
             else Normal
 
-    quit <- initializeProgram "vaultaire 2.1.0" level
+    quit <- initializeProgram (package ++ "-" ++ version) level
 
     -- Run daemons and/or commands. These are all expected to fork threads and
     -- return. If termination is requested, then they have to put unit into the

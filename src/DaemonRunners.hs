@@ -91,6 +91,6 @@ runContentsDaemon pool user broker shutdown =
 
 -- | Convenience wrapper around Marquise.Server
 runMarquiseDaemon :: String -> Origin -> String -> MVar () -> IO ()
-runMarquiseDaemon broker origin namespace _ = do
-    forkThread $ marquiseServer broker origin namespace
+runMarquiseDaemon broker origin namespace shutdown = do
+    forkThread $ marquiseServer broker origin namespace shutdown
 
