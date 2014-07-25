@@ -20,21 +20,16 @@ import qualified Data.ByteString.Char8 as S
 import Data.Maybe (fromJust)
 import Data.String
 import Data.Word (Word64)
-import GHC.Conc
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
-import System.IO (hFlush, hPutStrLn, stdout)
-import System.Log.Formatter
-import System.Log.Handler (setFormatter)
-import System.Log.Handler.Simple
 import System.Log.Logger
-import System.Posix.Signals
 import Text.Trifecta
 
 import CommandRunners
 import DaemonRunners
 import Marquise.Client
+import Vaultaire.Program
 
 
 data Options = Options
@@ -42,6 +37,7 @@ data Options = Options
   , user      :: String
   , broker    :: String
   , debug     :: Bool
+  , quiet     :: Bool
   , component :: Component }
 
 data Component = Broker
@@ -71,6 +67,7 @@ optionsParser Options{..} = Options <$> parsePool
                                     <*> parseUser
                                     <*> parseBroker
                                     <*> parseDebug
+                                    <*> parseQuiet
                                     <*> parseComponents
   where
     parsePool = strOption $
@@ -100,7 +97,12 @@ optionsParser Options{..} = Options <$> parsePool
     parseDebug = switch $
            long "debug"
         <> short 'd'
-        <> help "Set log level to DEBUG"
+        <> help "Output lots of debugging information"
+
+    parseQuiet = switch $
+           long "quiet"
+        <> short 'q'
+        <> help "Only emit warnings or fatal messages"
 
     parseComponents = subparser
        (   parseBrokerComponent
@@ -241,12 +243,13 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False Broker
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
                 <*> lookup "broker" ls `mplus` pure broker
                 <*> pure debug
+                <*> pure quiet
                 <*> pure Broker
 
 configParser :: Parser [(String, String)]
@@ -267,62 +270,22 @@ parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 -- Main program entry point
 --
 
-interruptHandler :: MVar () -> Handler
-interruptHandler semaphore = Catch $ do
-    hPutStrLn stdout "\nInterrupt"
-    hFlush stdout
-    putMVar semaphore ()
-
-terminateHandler :: MVar () -> Handler
-terminateHandler semaphore = Catch $ do
-    hPutStrLn stdout "Terminating"
-    hFlush stdout
-    putMVar semaphore ()
-
-quitHandler :: Handler
-quitHandler = Catch $ do
-    hPutStrLn stdout ""
-    hFlush stdout
-    logger <- getLogger rootLoggerName
-    let level   = getLevel logger
-        level'  = case level of
-                    Just DEBUG  -> INFO
-                    Just INFO   -> DEBUG
-                    _           -> DEBUG
-        logger' = setLevel level' logger
-    saveGlobalLogger logger'
-    infoM "Main.quitHandler" ("Change log level to " ++ show level')
-
 main :: IO ()
 main = do
-    -- command line +RTS -Nn -RTS value
-    when (numCapabilities == 1) (getNumProcessors >>= setNumCapabilities)
-
-    quit <- newEmptyMVar
-
-    _ <- installHandler sigINT  (interruptHandler quit) Nothing
-    _ <- installHandler sigTERM (terminateHandler quit) Nothing
-    _ <- installHandler sigQUIT (quitHandler) Nothing
-
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
-    -- Start and configure logger, deleting the default handler in favour of
-    -- our own formatter with timestamps to stdout.
+    let level = if debug
+        then Debug
+        else if quiet
+            then Quiet
+            else Normal
 
-    let level = if debug then DEBUG else INFO
-
-    logger  <- getRootLogger
-    handler <- streamHandler stdout DEBUG
-    let handler' = setFormatter handler (tfLogFormatter "%e %b %y, %H:%M:%S" "$time  $msg")
-    let logger' = (setHandlers [handler'] . setLevel level) logger
-    saveGlobalLogger logger'
-
-
-    debugM "Main.main" "Logger initialized, starting component"
+    quit <- initializeProgram "vaultaire 2.0.4" level
 
     -- Run daemons and/or commands. These are all expected to fork threads and
     -- return. If termination is requested, then they have to put unit into the
     -- shutdown MVar.
+    debugM "Main.main" "Starting component"
 
     case component of
         Broker ->
