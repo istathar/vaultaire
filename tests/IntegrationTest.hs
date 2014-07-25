@@ -26,9 +26,9 @@ import Test.Hspec hiding (pending)
 
 import CommandRunners
 import DaemonRunners
-import Vaultaire.Daemon
 import Marquise.Client
 import TestHelpers (cleanup)
+import Vaultaire.Daemon
 
 pool :: String
 pool = "test"
