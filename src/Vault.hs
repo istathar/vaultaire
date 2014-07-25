@@ -29,6 +29,7 @@ import System.Log.Formatter
 import System.Log.Handler (setFormatter)
 import System.Log.Handler.Simple
 import System.Log.Logger
+import System.Posix.Env
 import System.Posix.Signals
 import Text.Trifecta
 
@@ -307,13 +308,14 @@ main = do
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
     -- Start and configure logger, deleting the default handler in favour of
-    -- our own formatter with timestamps to stdout.
+    -- our own formatter with timestamps to stdout. Run in Zulu time.
+    setEnv "TZ" "UTC" True
 
     let level = if debug then DEBUG else INFO
 
     logger  <- getRootLogger
     handler <- streamHandler stdout DEBUG
-    let handler' = setFormatter handler (tfLogFormatter "%e %b %y, %H:%M:%S" "$time  $msg")
+    let handler' = setFormatter handler (tfLogFormatter "%Y-%m-%dT%H:%M:%SZ" "$time  $msg")
     let logger' = (setHandlers [handler'] . setLevel level) logger
     saveGlobalLogger logger'
 
