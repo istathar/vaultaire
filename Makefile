@@ -6,7 +6,6 @@ all: build
 #
 
 vault: dist/build/vault/vault
-marquised: dist/build/marquised/marquised
 demowave: dist/build/demowave/demowave
 reader-test: dist/build/reader-test/reader-test
 reader-algorithms: dist/build/reader-algorithms/reader-algorithms
@@ -47,7 +46,7 @@ test: dist/setup-config tags
 	@/bin/echo -e "CABAL\ttest"
 	cabal test
 
-dist/setup-config: vaultaire.cabal
+dist/setup-config: vaultaire.cabal Setup.hs
 	cabal configure \
 		--enable-tests \
 		--enable-benchmarks \
@@ -90,6 +89,7 @@ clean:
 	@/bin/echo -e "RM\ttemporary files"
 	-rm -f tags
 	-rm -f *.prof
+	-rm -f src/Package.hs
 
 doc:
 	cabal haddock

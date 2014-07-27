@@ -10,7 +10,7 @@ category:            Other
 tested-with:         GHC == 7.6
 stability:           experimental
 
-build-type:          Simple
+build-type:          Custom
 
 source-repository    head
   type:              git
