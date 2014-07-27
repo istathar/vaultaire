@@ -77,7 +77,7 @@ executable vault
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise,
+                     marquise >= 2.1.0,
                      containers,
                      vaultaire-common >= 2.1.0,
                      pipes,
