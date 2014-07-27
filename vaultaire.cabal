@@ -1,13 +1,13 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.1.0
+version:             2.1.1
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
 maintainer:          Anchor Engineering <engineering@anchor.com.au>
 copyright:           © 2013-2014 Anchor Systems, Pty Ltd and Others
 category:            Other
-tested-with:         GHC == 7.6
+tested-with:         GHC == 7.8.3
 stability:           experimental
 
 build-type:          Custom
@@ -32,7 +32,7 @@ library
                      Vaultaire.InternalStore,
                      Vaultaire.Contents
 
-  build-depends:     base >=3 && <5,
+  build-depends:     base >=4.7.0.1 && <5,
                      bytestring,
                      random,
                      zeromq4-haskell,
