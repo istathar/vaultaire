@@ -22,8 +22,7 @@ module DaemonRunners
    runBrokerDaemon,
    runWriterDaemon,
    runReaderDaemon,
-   runContentsDaemon,
-   runMarquiseDaemon
+   runContentsDaemon
 )
 where
 
@@ -35,8 +34,6 @@ import Pipes
 import System.Log.Logger
 import System.ZMQ4.Monadic
 
-import Marquise.Client
-import Marquise.Server (marquiseServer)
 import Vaultaire.Broker
 import Vaultaire.Contents
 import Vaultaire.Reader (startReader)
@@ -89,9 +86,4 @@ runContentsDaemon pool user broker shutdown =
                 (Just $ S.pack user)
                 (S.pack pool)
                 shutdown
-
--- | Convenience wrapper around Marquise.Server
-runMarquiseDaemon :: String -> Origin -> String -> MVar () -> IO ()
-runMarquiseDaemon broker origin namespace shutdown = do
-    forkThread $ marquiseServer broker origin namespace shutdown
 

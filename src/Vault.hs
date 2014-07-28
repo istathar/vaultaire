@@ -16,7 +16,6 @@ module Main where
 
 import Control.Concurrent.MVar
 import Control.Monad
-import qualified Data.ByteString.Char8 as S
 import Data.Maybe (fromJust)
 import Data.Word (Word64)
 import Options.Applicative hiding (Parser, option)
@@ -26,7 +25,6 @@ import System.Log.Logger
 import Text.Trifecta
 
 import DaemonRunners
-import Marquise.Client
 import Package (package, version)
 import Vaultaire.Program
 
@@ -42,7 +40,6 @@ data Options = Options
 data Component = Broker
                | Reader
                | Writer { bucketSize :: Word64 }
-               | Marquise { origin :: Origin, namespace :: String }
                | Contents
 
 -- | Command line option parsing
@@ -96,7 +93,6 @@ optionsParser Options{..} = Options <$> parsePool
        (  parseBrokerComponent
        <> parseReaderComponent
        <> parseWriterComponent
-       <> parseMarquiseComponent
        <> parseContentsComponent )
 
     parseBrokerComponent =
@@ -108,19 +104,11 @@ optionsParser Options{..} = Options <$> parsePool
     parseWriterComponent =
         componentHelper "writer" writerOptionsParser "Start a writer daemon"
 
-    parseMarquiseComponent =
-        componentHelper "marquise" marquiseOptionsParser "Start a marquise daemon"
-
     parseContentsComponent =
         componentHelper "contents" (pure Contents) "Start a contents daemon"
 
     componentHelper cmd_name parser desc =
         command cmd_name (info (helper <*> parser) (progDesc desc))
-
-parseOrigin :: O.Parser Origin
-parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
-  where
-    mkOrigin = Origin . S.pack
 
 
 writerOptionsParser :: O.Parser Component
@@ -133,14 +121,6 @@ writerOptionsParser = Writer <$> parseBucketSize
         <> showDefault
         <> help "Maximum bytes in any given bucket before rollover"
 
-marquiseOptionsParser :: O.Parser Component
-marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
-  where
-    parseNameSpace = strOption $
-        long "namespace"
-        <> short 'n'
-        <> metavar "NAMESPACE"
-        <> help "NameSpace to look for data in"
 
 -- | Config file parsing
 parseConfig :: FilePath -> IO Options
@@ -206,8 +186,6 @@ main = do
             runReaderDaemon pool user broker quit
         Writer roll_over_size ->
             runWriterDaemon pool user broker roll_over_size quit
-        Marquise origin namespace ->
-            runMarquiseDaemon broker origin namespace quit
         Contents ->
             runContentsDaemon pool user broker quit
 

@@ -27,6 +27,7 @@ import Test.Hspec hiding (pending)
 import CommandRunners
 import DaemonRunners
 import Marquise.Client
+import Marquise.Server
 import TestHelpers (cleanup)
 import Vaultaire.Daemon
 
@@ -55,8 +56,7 @@ startServerDaemons shutdown =
     runReaderDaemon pool user broker shutdown
     runContentsDaemon pool user broker shutdown
     runMarquiseDaemon broker origin namespace shutdown
-    junk <- newEmptyMVar -- FIXME get the MVar out of commands
-    runRegisterOrigin pool user origin num_buckets step_size 0 0 junk
+    runRegisterOrigin pool user origin num_buckets step_size 0 0
 
 setupClientSide :: IO SpoolFiles
 setupClientSide = do
