@@ -18,11 +18,11 @@
 --
 module DaemonRunners
 (
+   forkThread,
    runBrokerDaemon,
    runWriterDaemon,
    runReaderDaemon,
-   runContentsDaemon,
-   runMarquiseDaemon
+   runContentsDaemon
 )
 where
 
@@ -34,8 +34,6 @@ import Pipes
 import System.Log.Logger
 import System.ZMQ4.Monadic
 
-import Marquise.Client
-import Marquise.Server (marquiseServer)
 import Vaultaire.Broker
 import Vaultaire.Contents
 import Vaultaire.Reader (startReader)
@@ -65,7 +63,7 @@ runBrokerDaemon _ = runZMQ $ do
                               (Dealer,"tcp://*:5581")
                               "tcp://*:5002"
 
-    liftIO $ debugM "Main.runBroker" "Proxies started"
+    liftIO $ debugM "Daemons.runBroker" "Proxies started"
 
 runReaderDaemon :: String -> String -> String -> MVar () -> IO ()
 runReaderDaemon pool user broker shutdown =
@@ -88,9 +86,4 @@ runContentsDaemon pool user broker shutdown =
                 (Just $ S.pack user)
                 (S.pack pool)
                 shutdown
-
--- | Convenience wrapper around Marquise.Server
-runMarquiseDaemon :: String -> Origin -> String -> MVar () -> IO ()
-runMarquiseDaemon broker origin namespace _ = do
-    forkThread $ marquiseServer broker origin namespace
 

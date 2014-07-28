@@ -5,6 +5,7 @@ dist/
 *.prof
 *.mem
 *.hp
+src/Package.hs
 
 # real binaries
 bufferd

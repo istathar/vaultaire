@@ -30,7 +30,7 @@ startReader :: String           -- ^ Broker
             -> MVar ()
             -> IO ()
 startReader broker user pool shutdown = do
-    liftIO $ infoM "Reader.startReader" "Reader daemon starting"
+    liftIO $ infoM "Reader.startReader" "Reader daemon started"
     handleMessages broker user pool shutdown handleRequest
 
 handleRequest :: Message -> Daemon ()

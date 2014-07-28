@@ -44,6 +44,7 @@ import Control.Applicative
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.MVar
 import Control.Exception
+import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
@@ -116,10 +117,8 @@ handleMessages broker ceph_user pool shutdown f =
     -- it was causing non-deterministic asynchronous delayed hangs. We'll come
     -- back to this question.
     loop = do
-        done <- isJust <$> liftIO (tryTakeMVar shutdown)
-        if done
-            then liftIO (putMVar shutdown ())
-            else do
+        done <- isJust <$> liftIO (tryReadMVar shutdown)
+        unless done $ do
                 maybe_next <- nextMessage
                 case maybe_next of
                     Nothing -> loop

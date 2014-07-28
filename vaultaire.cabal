@@ -1,16 +1,16 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.0.4
+version:             2.1.1
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
 maintainer:          Anchor Engineering <engineering@anchor.com.au>
 copyright:           © 2013-2014 Anchor Systems, Pty Ltd and Others
 category:            Other
-tested-with:         GHC == 7.6
+tested-with:         GHC == 7.8.3
 stability:           experimental
 
-build-type:          Simple
+build-type:          Custom
 
 source-repository    head
   type:              git
@@ -32,7 +32,7 @@ library
                      Vaultaire.InternalStore,
                      Vaultaire.Contents
 
-  build-depends:     base >=3 && <5,
+  build-depends:     base >=4.7.0.1 && <5,
                      bytestring,
                      random,
                      zeromq4-haskell,
@@ -52,7 +52,7 @@ library
                      stm,
                      semigroups,
                      hslogger >= 1.2.4,
-                     vaultaire-common >= 2.0.3,
+                     vaultaire-common >= 2.1.0,
                      text,
                      rados-haskell >= 3.0.3
 
@@ -70,16 +70,45 @@ executable vault
   main-is:           Vault.hs
   default-language:  Haskell2010
 
-  build-depends:     base >=3 && <5,
+  build-depends:     base >= 4.7.0.1 && <5,
                      bytestring,
                      rados-haskell,
                      zeromq4-haskell,
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise,
+                     marquise >= 2.1.0,
                      containers,
-                     vaultaire-common,
+                     vaultaire-common >= 2.1.0,
+                     pipes,
+                     hslogger >= 1.2.4,
+                     async,
+                     unix,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
+  ghc-prof-options:  -fprof-auto
+
+executable inspect
+  hs-source-dirs:    src
+  main-is:           Inspect.hs
+  default-language:  Haskell2010
+
+  build-depends:     base >= 4.7.0.1 && <5,
+                     bytestring,
+                     rados-haskell,
+                     zeromq4-haskell,
+                     optparse-applicative,
+                     trifecta >= 1.4.3,
+                     directory,
+                     marquise >= 2.1.0,
+                     containers,
+                     vaultaire-common >= 2.1.0,
                      pipes,
                      hslogger >= 1.2.4,
                      async,
@@ -108,7 +137,7 @@ executable demowave
                      directory,
                      marquise,
                      containers,
-                     vaultaire-common >= 2.0.4,
+                     vaultaire-common,
                      pipes,
                      hslogger,
                      time,
