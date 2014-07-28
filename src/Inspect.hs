@@ -18,6 +18,7 @@ import Control.Concurrent.MVar
 import Control.Monad
 import qualified Data.ByteString.Char8 as S
 import Data.Maybe (fromJust)
+import Data.String
 import Data.Word (Word64)
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
@@ -25,7 +26,8 @@ import System.Directory
 import System.Log.Logger
 import Text.Trifecta
 
-import DaemonRunners
+import CommandRunners
+import DaemonRunners (forkThread)
 import Marquise.Client
 import Package (package, version)
 import Vaultaire.Program
@@ -39,11 +41,19 @@ data Options = Options
   , quiet     :: Bool
   , component :: Component }
 
-data Component = Broker
-               | Reader
-               | Writer { bucketSize :: Word64 }
-               | Marquise { origin :: Origin, namespace :: String }
-               | Contents
+data Component = 
+                 None
+               | RegisterOrigin { origin  :: Origin
+                                , buckets :: Word64
+                                , step    :: Word64
+                                , begin   :: Word64
+                                , end     :: Word64 }
+               | Read { origin  :: Origin
+                      , address :: Address
+                      , start   :: Word64
+                      , end     :: Word64 }
+               | List { origin :: Origin }
+               | DumpDays { origin :: Origin }
 
 -- | Command line option parsing
 
@@ -93,26 +103,22 @@ optionsParser Options{..} = Options <$> parsePool
         <> help "Only emit warnings or fatal messages"
 
     parseComponents = subparser
-       (  parseBrokerComponent
-       <> parseReaderComponent
-       <> parseWriterComponent
-       <> parseMarquiseComponent
-       <> parseContentsComponent )
+       (  parseRegisterOriginComponent
+       <> parseReadComponent
+       <> parseListComponent
+       <> parseDumpDaysComponent )
 
-    parseBrokerComponent =
-        componentHelper "broker" (pure Broker) "Start a broker daemon"
+    parseRegisterOriginComponent =
+        componentHelper "register" registerOriginParser "Register a new origin"
 
-    parseReaderComponent =
-        componentHelper "reader" (pure Reader) "Start a reader daemon"
+    parseReadComponent =
+        componentHelper "read" readOptionsParser "Read points"
 
-    parseWriterComponent =
-        componentHelper "writer" writerOptionsParser "Start a writer daemon"
+    parseListComponent =
+        componentHelper "list" listOptionsParser "List addresses and metadata in origin"
 
-    parseMarquiseComponent =
-        componentHelper "marquise" marquiseOptionsParser "Start a marquise daemon"
-
-    parseContentsComponent =
-        componentHelper "contents" (pure Contents) "Start a contents daemon"
+    parseDumpDaysComponent =
+        componentHelper "days" dumpDaysParser "Display the current day map contents"
 
     componentHelper cmd_name parser desc =
         command cmd_name (info (helper <*> parser) (progDesc desc))
@@ -122,25 +128,67 @@ parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
   where
     mkOrigin = Origin . S.pack
 
-
-writerOptionsParser :: O.Parser Component
-writerOptionsParser = Writer <$> parseBucketSize
+readOptionsParser :: O.Parser Component
+readOptionsParser = Read <$> parseOrigin
+                         <*> parseAddress
+                         <*> parseStart
+                         <*> parseEnd
   where
-    parseBucketSize = O.option $
-        long "roll_over_size"
-        <> short 'r'
-        <> value 4194304
+    parseAddress = argument (fmap fromString . str) (metavar "ADDRESS")
+    parseStart = O.option $
+        long "start"
+        <> short 's'
+        <> value 0
         <> showDefault
-        <> help "Maximum bytes in any given bucket before rollover"
+        <> help "Start time in nanoseconds since epoch"
 
-marquiseOptionsParser :: O.Parser Component
-marquiseOptionsParser = Marquise <$> parseOrigin <*> parseNameSpace
+    parseEnd = O.option $
+        long "end"
+        <> short 'e'
+        <> value maxBound
+        <> showDefault
+        <> help "End time in nanoseconds since epoch"
+
+listOptionsParser :: O.Parser Component
+listOptionsParser = List <$> parseOrigin
+
+dumpDaysParser :: O.Parser Component
+dumpDaysParser = DumpDays <$> parseOrigin
+
+registerOriginParser :: O.Parser Component
+registerOriginParser = RegisterOrigin <$> parseOrigin
+                                      <*> parseBuckets
+                                      <*> parseStep
+                                      <*> parseBegin
+                                      <*> parseEnd
   where
-    parseNameSpace = strOption $
-        long "namespace"
+    parseBuckets = O.option $
+        long "buckets"
         <> short 'n'
-        <> metavar "NAMESPACE"
-        <> help "NameSpace to look for data in"
+        <> value 128
+        <> showDefault
+        <> help "Number of buckets to distribute writes over"
+
+    parseStep = O.option $
+        long "step"
+        <> short 's'
+        <> value 14400000000000
+        <> showDefault
+        <> help "Back-dated rollover period (see documentation: TODO)"
+
+    parseBegin = O.option $
+        long "begin"
+        <> short 'b'
+        <> value 0
+        <> showDefault
+        <> help "Back-date begin time (default is no backdating)"
+
+    parseEnd = O.option $
+        long "end"
+        <> short 'e'
+        <> value 0
+        <> showDefault
+        <> help "Back-date end time"
 
 -- | Config file parsing
 parseConfig :: FilePath -> IO Options
@@ -154,14 +202,14 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False Broker
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False None
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
                 <*> lookup "broker" ls `mplus` pure broker
                 <*> pure debug
                 <*> pure quiet
-                <*> pure Broker
+                <*> pure None
 
 configParser :: Parser [(String, String)]
 configParser = some $ liftA2 (,)
@@ -193,26 +241,26 @@ main = do
 
     quit <- initializeProgram (package ++ "-" ++ version) level
 
-    -- Run daemon(s). These are all expected to fork threads and return. If
-    -- they wish to requeust termination they have to put unit into the
-    -- shutdown MVar.
+    -- Run selected command.
+    debugM "Main.main" "Starting command"
 
-    debugM "Main.main" "Starting component"
+    -- Although none of the commands are running in the background, we get off
+    -- of the main thread so that we can block the main thread on the quit
+    -- semaphore, such that a user interrupt will kill the program.
 
-    case component of
-        Broker ->
-            runBrokerDaemon quit
-        Reader ->
-            runReaderDaemon pool user broker quit
-        Writer roll_over_size ->
-            runWriterDaemon pool user broker roll_over_size quit
-        Marquise origin namespace ->
-            runMarquiseDaemon broker origin namespace quit
-        Contents ->
-            runContentsDaemon pool user broker quit
+    forkThread $ do
+        case component of
+            None -> return ()
+            RegisterOrigin origin buckets step begin end ->
+                runRegisterOrigin pool user origin buckets step begin end
+            Read origin addr start end ->
+                runReadPoints broker origin addr start end
+            List origin ->
+                runListContents broker origin
+            DumpDays origin ->
+                runDumpDayMap pool user origin
+        putMVar quit ()
 
-    -- Block until shutdown triggered
-    debugM "Main.main" "Running until shutdown"
-    _ <- readMVar quit
+    takeMVar quit
     debugM "Main.main" "End"
 

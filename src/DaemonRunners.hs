@@ -18,6 +18,7 @@
 --
 module DaemonRunners
 (
+   forkThread,
    runBrokerDaemon,
    runWriterDaemon,
    runReaderDaemon,
