@@ -1,6 +1,5 @@
 language: haskell
 env:
-  - 'UBUNTU_RELEASE=saucy GHCVER=7.8.2 CABALVER=1.20'
   - 'UBUNTU_RELEASE=saucy GHCVER=7.8.3 CABALVER=1.20'
 
 before_install:
@@ -31,7 +30,7 @@ install:
   - 'cabal-$CABALVER install --only-dependencies --enable-tests --enable-benchmarks'
 
 script:
-  - 'cabal-$CABALVER configure'
+  - 'cabal-$CABALVER configure --enable-tests'
   - 'cabal-$CABALVER build'
   - 'cabal-$CABALVER sdist'
   - 'cabal-$CABALVER test daymap-test'
