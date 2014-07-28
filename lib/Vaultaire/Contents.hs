@@ -40,7 +40,7 @@ startContents
     -> MVar ()
     -> IO ()
 startContents broker user pool shutdown = do
-    liftIO $ infoM "Contents.startContents" "Contents daemon starting"
+    liftIO $ infoM "Contents.startContents" "Contents daemon started"
     handleMessages broker user pool shutdown handleRequest
 
 handleRequest :: Message -> Daemon ()

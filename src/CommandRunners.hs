@@ -20,7 +20,6 @@ module CommandRunners
     runRegisterOrigin
 ) where
 
-import Control.Concurrent.MVar
 import Control.Exception (throw)
 import Control.Monad
 import qualified Data.ByteString.Char8 as S
@@ -35,21 +34,19 @@ import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
 import Vaultaire.Types
 
 
-runReadPoints :: String -> Origin -> Address -> Word64 -> Word64 -> MVar () -> IO ()
-runReadPoints broker origin addr start end shutdown = do
+runReadPoints :: String -> Origin -> Address -> Word64 -> Word64 -> IO ()
+runReadPoints broker origin addr start end = do
     withReaderConnection broker $ \c ->
         runEffect $ for (readSimple addr start end origin c >-> decodeSimple)
                         (lift . print)
-    putMVar shutdown ()
 
-runListContents :: String -> Origin -> MVar () -> IO ()
-runListContents broker origin shutdown = do
+runListContents :: String -> Origin -> IO ()
+runListContents broker origin = do
     withContentsConnection broker $ \c ->
         runEffect $ for (enumerateOrigin origin c) (lift . print)
-    putMVar shutdown ()
 
-runDumpDayMap :: String -> String -> Origin -> MVar () -> IO ()
-runDumpDayMap pool user origin shutdown =  do
+runDumpDayMap :: String -> String -> Origin -> IO ()
+runDumpDayMap pool user origin =  do
     let user' = Just (S.pack user)
     let pool' = S.pack pool
 
@@ -61,16 +58,14 @@ runDumpDayMap pool user origin shutdown =  do
             print simple
             putStrLn "Extended day map:"
             print extended
-    putMVar shutdown ()
 
-runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> MVar () -> IO ()
-runRegisterOrigin pool user origin buckets step begin end shutdown = do
+runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> IO ()
+runRegisterOrigin pool user origin buckets step begin end = do
     let targets = [simpleDayOID origin, extendedDayOID origin]
     let user' = Just (S.pack user)
     let pool' = S.pack pool
 
     withPool user' pool' (forM_ targets initializeDayMap)
-    putMVar shutdown ()
   where
     initializeDayMap target =
         runObject target $ do
