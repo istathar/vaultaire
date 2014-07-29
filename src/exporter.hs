@@ -116,7 +116,7 @@ formatTimestamp x = formatTime defaultTimeLocale "%e %b %y, %H:%M:%S" x
 
 withPool :: Rados.Pool a -> IO a
 withPool action = Rados.runConnect (Just "vaultaire") (Rados.parseConfig "/etc/ceph/ceph.conf")
-                    (Rados.runPool "vaultaire" action)
+                    (Rados.runPool "vaultaire-v1" action)
 
 forkThread :: IO a -> IO ()
 forkThread = A.async >=> A.link
