@@ -64,7 +64,6 @@ startWriter :: String           -- ^ Broker
             -> MVar ()          -- ^ Shutdown signal
             -> IO ()
 startWriter broker user pool bucket_size shutdown = do
-    liftIO $ infoM "Writer.startWriter" "Writer daemon started"
     handleMessages broker user pool shutdown (processBatch bucket_size)
 
 batchStateNow :: Word64 -> (DayMap, DayMap) -> IO BatchState

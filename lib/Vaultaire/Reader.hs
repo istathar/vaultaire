@@ -30,13 +30,13 @@ startReader :: String           -- ^ Broker
             -> MVar ()
             -> IO ()
 startReader broker user pool shutdown = do
-    liftIO $ infoM "Reader.startReader" "Reader daemon started"
     handleMessages broker user pool shutdown handleRequest
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =
     case fromWire payload' of
         Right req -> do
+            liftIO $ debugM "Reader.handleRequest" (display req)
             case req of
                 SimpleReadRequest addr start end ->
                     processSimple addr start end origin' reply_f
@@ -46,6 +46,10 @@ handleRequest (Message reply_f origin' payload') =
         Left e ->
             liftIO . errorM "Reader.handleRequest" $
                             "failed to decode request: " ++ show e
+  where
+    display (SimpleReadRequest addr start end)   = "Read " ++ show addr ++ " (s) " ++ format start ++ " to " ++ format end
+    display (ExtendedReadRequest addr start end) = "Read " ++ show addr ++ " (e) " ++ format start ++ " to " ++ format end
+    format time = show $ (time `div` 1000000000)
 
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)
