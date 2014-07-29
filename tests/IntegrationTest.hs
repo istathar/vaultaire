@@ -103,6 +103,12 @@ suite spool =
         timestamp = 1406078299651575183
         payload   = 42
       in do
+        it "registers address" $ do
+            withContentsConnection "localhost" $ \c -> do
+                let meta = listToDict [("name", "nursery-rhyme")]
+                updateSourceDict address meta origin c
+            pass
+
         it "sends point, via marquise" $ do
             queueSimple spool address timestamp payload
             flush spool
