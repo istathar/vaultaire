@@ -34,6 +34,7 @@ import Data.Traversable (for)
 import Data.Word (Word64)
 import System.Log.Logger
 import System.Rados.Monadic hiding (async)
+import Text.Printf
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.RollOver
@@ -80,7 +81,7 @@ processBatch bucket_size (Message reply origin payload) = do
             Nothing -> return Nothing
             Just dms -> do
                 liftIO $ debugM "Writer.processBatch" $
-                                "Processing message (payload " ++ show (S.length payload) ++ " bytes)"
+                                "Processing " ++ printf "%9d" (S.length payload) ++ " bytes"
 
                 -- Most messages simply need to be placed into the correct epoch
                 -- and bucket, extended ones are a little more complex in that they
