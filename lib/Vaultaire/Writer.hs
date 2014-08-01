@@ -22,7 +22,7 @@ import Control.Concurrent (MVar)
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as S
 import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import Data.HashMap.Strict (HashMap)
@@ -80,7 +80,7 @@ processBatch bucket_size (Message reply origin payload) = do
             Nothing -> return Nothing
             Just dms -> do
                 liftIO $ debugM "Writer.processEvents" $
-                                "Processing payload (" ++ show (BS.length payload)
+                                "Processing payload (" ++ show (S.length payload)
                                 ++ " bytes)"
 
                 -- Most messages simply need to be placed into the correct epoch
@@ -101,7 +101,7 @@ processBatch bucket_size (Message reply origin payload) = do
 processPoints :: MonadState BatchState m
               => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
 processPoints offset message day_maps origin latest_simple latest_ext
-    | fromIntegral offset >= BS.length message = modify (\s -> s{ latestSimple = latest_simple
+    | fromIntegral offset >= S.length message = modify (\s -> s{ latestSimple = latest_simple
                                                                 , latestExtended = latest_ext })
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
@@ -323,4 +323,4 @@ writeSimple o e b payload =
 
 writeLockOID :: Origin -> ByteString
 writeLockOID (Origin o') =
-    "02_" `BS.append` o' `BS.append` "_write_lock"
+    "02_" `S.append` o' `S.append` "_write_lock"
