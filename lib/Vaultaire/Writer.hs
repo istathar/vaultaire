@@ -22,7 +22,7 @@ import Control.Concurrent (MVar)
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as S
 import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import Data.HashMap.Strict (HashMap)
@@ -34,6 +34,7 @@ import Data.Traversable (for)
 import Data.Word (Word64)
 import System.Log.Logger
 import System.Rados.Monadic hiding (async)
+import Text.Printf
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.RollOver
@@ -47,8 +48,8 @@ data BatchState = BatchState
     { simple         :: !(EpochMap (BucketMap Builder))
     , extended       :: !(EpochMap (BucketMap Builder))
     , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
-    , latestSimple   :: !Time
-    , latestExtended :: !Time
+    , latestSimple   :: !TimeStamp
+    , latestExtended :: !TimeStamp
     , dayMaps        :: !(DayMap, DayMap) -- Simple, extended
     , bucketSize     :: !Word64
     , start          :: !UTCTime
@@ -64,7 +65,6 @@ startWriter :: String           -- ^ Broker
             -> MVar ()          -- ^ Shutdown signal
             -> IO ()
 startWriter broker user pool bucket_size shutdown = do
-    liftIO $ infoM "Writer.startWriter" "Writer daemon started"
     handleMessages broker user pool shutdown (processBatch bucket_size)
 
 batchStateNow :: Word64 -> (DayMap, DayMap) -> IO BatchState
@@ -80,9 +80,8 @@ processBatch bucket_size (Message reply origin payload) = do
         case (,) <$> simple_dm <*> extended_dm of
             Nothing -> return Nothing
             Just dms -> do
-                liftIO $ debugM "Writer.processEvents" $
-                                "Processing payload (" ++ show (BS.length payload)
-                                ++ " bytes)"
+                liftIO $ debugM "Writer.processBatch" $
+                                "Processing " ++ printf "%9d" (S.length payload) ++ " bytes"
 
                 -- Most messages simply need to be placed into the correct epoch
                 -- and bucket, extended ones are a little more complex in that they
@@ -100,9 +99,9 @@ processBatch bucket_size (Message reply origin payload) = do
             reply OnDisk
 
 processPoints :: MonadState BatchState m
-              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> Time -> Time -> m ()
+              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
 processPoints offset message day_maps origin latest_simple latest_ext
-    | fromIntegral offset >= BS.length message = modify (\s -> s{ latestSimple = latest_simple
+    | fromIntegral offset >= S.length message = modify (\s -> s{ latestSimple = latest_simple
                                                                 , latestExtended = latest_ext })
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
@@ -130,10 +129,10 @@ processPoints offset message day_maps origin latest_simple latest_ext
                        | otherwise            = latest_simple
                 processPoints (offset + 24) message day_maps origin t latest_ext
 
-parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
+parseMessageAt :: Word64 -> Unpacking (Address, TimeStamp, Payload)
 parseMessageAt offset = do
     unpackSetPosition (fromIntegral offset)
-    (,,) <$> (Address <$> getWord64LE) <*> getWord64LE <*> getWord64LE
+    (,,) <$> (Address <$> getWord64LE) <*> (TimeStamp <$> getWord64LE) <*> getWord64LE
 
 
 getBytesAt :: Word64 -> Word64 -> Unpacking ByteString
@@ -155,8 +154,8 @@ appendSimple epoch bucket bytes = do
     put $ s { simple = simple' }
 
 appendExtended :: MonadState BatchState m
-               => Epoch -> Bucket -> Address -> Time -> Word64 -> ByteString -> m ()
-appendExtended epoch bucket (Address address) time len string = do
+               => Epoch -> Bucket -> Address -> TimeStamp -> Word64 -> ByteString -> m ()
+appendExtended epoch bucket (Address address) (TimeStamp time) len string = do
     s <- get
 
     -- First we write to the simple bucket, inserting a closure that will
@@ -249,7 +248,7 @@ write origin do_rollovers s = do
                             return 0
                         Left e ->
                             fatal "Writer.writeExtendedBuckets" $
-                                "extended bucket read: " ++ show e
+                                "extended bucket stat: " ++ show e
                         Right st ->
                             return $ fileSize st
 
@@ -324,4 +323,4 @@ writeSimple o e b payload =
 
 writeLockOID :: Origin -> ByteString
 writeLockOID (Origin o') =
-    "02_" `BS.append` o' `BS.append` "_write_lock"
+    "02_" `S.append` o' `S.append` "_write_lock"
