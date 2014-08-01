@@ -50,7 +50,7 @@ handleRequest (Message reply_f origin' payload') =
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)
 
-processSimple :: Address -> Time -> Time -> Origin -> ReplyF -> Daemon ()
+processSimple :: Address -> TimeStamp -> TimeStamp -> Origin -> ReplyF -> Daemon ()
 processSimple addr start end origin' reply_f = do
     refreshOriginDays origin'
     maybe_range <- withSimpleDayMap origin' (lookupRange start end)
@@ -61,7 +61,7 @@ processSimple addr start end origin' reply_f = do
                             (lift . reply_f . SimpleStream . SimpleBurst)
         Nothing -> reply_f InvalidReadOrigin
 
-readSimple :: Origin -> Address -> Time -> Time
+readSimple :: Origin -> Address -> TimeStamp -> TimeStamp
            -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readSimple origin' addr start end = forever $ do
     (epoch, num_buckets) <- await
@@ -76,7 +76,7 @@ readSimple origin' addr start end = forever $ do
         Right unprocessed -> yieldNotNull $ runST $
             processBucket unprocessed addr start end
 
-processExtended :: Address -> Time -> Time -> Origin -> ReplyF -> Daemon ()
+processExtended :: Address -> TimeStamp -> TimeStamp -> Origin -> ReplyF -> Daemon ()
 processExtended addr start end origin' reply_f = do
     refreshOriginDays origin'
     maybe_range <- withExtendedDayMap origin' (lookupRange start end)
@@ -86,7 +86,7 @@ processExtended addr start end origin' reply_f = do
                             (lift . reply_f . ExtendedStream . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
-readExtended :: Origin -> Address -> Time -> Time
+readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readExtended origin addr start end = forever $ do
     (epoch, num_buckets) <- await
