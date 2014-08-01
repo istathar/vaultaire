@@ -57,7 +57,7 @@ data BatchState = BatchState
 
 data Event = Msg Message | Tick
 
--- | Start a writer daemon, never returns.
+-- | Start a writer daemon, runs until shutdown.
 startWriter :: String           -- ^ Broker
             -> Maybe ByteString -- ^ Username for Ceph
             -> ByteString       -- ^ Pool name for Ceph

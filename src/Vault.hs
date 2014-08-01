@@ -14,7 +14,7 @@
 
 module Main where
 
-import Control.Concurrent.MVar
+import Control.Concurrent.Async
 import Control.Monad
 import Data.Maybe (fromJust)
 import Data.Word (Word64)
@@ -173,13 +173,15 @@ main = do
 
     quit <- initializeProgram (package ++ "-" ++ version) level
 
-    -- Run daemon(s). These are all expected to fork threads and return. If
-    -- they wish to requeust termination they have to put unit into the
-    -- shutdown MVar.
+    -- Run daemon(s, at present just one). These are all expected to fork
+    -- threads and return the Async representing them. If they wish to
+    -- requeust termination they have to put unit into the shutdown MVar and
+    -- then return; they need to finish up and return if something else puts
+    -- unit into the MVar.
 
     debugM "Main.main" "Starting component"
 
-    case component of
+    a <- case component of
         Broker ->
             runBrokerDaemon quit
         Reader ->
@@ -191,6 +193,6 @@ main = do
 
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"
-    _ <- readMVar quit
+    _ <- wait a
     debugM "Main.main" "End"
 
