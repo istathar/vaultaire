@@ -51,7 +51,7 @@ handleRequest (Message reply_f origin' payload') =
   where
     display (SimpleReadRequest addr start end)   = "Read " ++ show addr ++ " (s) " ++ format start ++ " to " ++ format end
     display (ExtendedReadRequest addr start end) = "Read " ++ show addr ++ " (e) " ++ format start ++ " to " ++ format end
-    format time = printf "%010d" (time `div` 1000000000)
+    format (TimeStamp t) = printf "%010d" (t `div` 1000000000)
 
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)

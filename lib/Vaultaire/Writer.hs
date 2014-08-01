@@ -79,9 +79,8 @@ processBatch bucket_size (Message reply origin payload) = do
         case (,) <$> simple_dm <*> extended_dm of
             Nothing -> return Nothing
             Just dms -> do
-                liftIO $ debugM "Writer.processEvents" $
-                                "Processing payload (" ++ show (S.length payload)
-                                ++ " bytes)"
+                liftIO $ debugM "Writer.processBatch" $
+                                "Processing message (payload " ++ show (S.length payload) ++ " bytes)"
 
                 -- Most messages simply need to be placed into the correct epoch
                 -- and bucket, extended ones are a little more complex in that they
@@ -248,7 +247,7 @@ write origin do_rollovers s = do
                             return 0
                         Left e ->
                             fatal "Writer.writeExtendedBuckets" $
-                                "extended bucket read: " ++ show e
+                                "extended bucket stat: " ++ show e
                         Right st ->
                             return $ fileSize st
 
