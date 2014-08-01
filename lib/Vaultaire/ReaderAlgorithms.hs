@@ -32,7 +32,7 @@ import Foreign.Storable
 import Pipes
 import Prelude hiding (filter)
 
-import Vaultaire.Types (Address (..))
+import Vaultaire.Types
 
 data Point = Point { address :: !Word64
                    , time    :: !Word64
@@ -124,8 +124,8 @@ deDuplicateLast cmp input
 -- | Filter and de-duplicate a bucket in-place. The original bytestring will be
 -- garbage after completion.
 processBucket :: (PrimMonad m)
-              => ByteString -> Address -> Word64 -> Word64 -> m ByteString
-processBucket bucket (Address addr) start end = do
+              => ByteString -> Address -> TimeStamp -> TimeStamp -> m ByteString
+processBucket bucket (Address addr) (TimeStamp start) (TimeStamp end) = do
     let v  = byteStringToVector bucket
     let v' = V.filter (\p -> address p == addr && time p >= start && time p <= end) v
     mv <- V.thaw v'
@@ -137,7 +137,7 @@ processBucket bucket (Address addr) start end = do
 -- transfer.
 mergeSimpleExtended :: (PrimMonad m)
                     => ByteString -> ByteString
-                    -> Address -> Word64 -> Word64
+                    -> Address -> TimeStamp -> TimeStamp
                     -> m ByteString
 mergeSimpleExtended simple extended addr start end = do
     de_duped <- byteStringToVector `liftM` processBucket simple addr start end

@@ -46,12 +46,12 @@ data Component =
                | RegisterOrigin { origin  :: Origin
                                 , buckets :: Word64
                                 , step    :: Word64
-                                , begin   :: Word64
-                                , end     :: Word64 }
+                                , start   :: TimeStamp
+                                , end     :: TimeStamp }
                | Read { origin  :: Origin
                       , address :: Address
-                      , start   :: Word64
-                      , end     :: Word64 }
+                      , start   :: TimeStamp
+                      , end     :: TimeStamp }
                | List { origin :: Origin }
                | DumpDays { origin :: Origin }
 

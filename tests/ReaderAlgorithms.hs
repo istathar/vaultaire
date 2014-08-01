@@ -15,16 +15,15 @@ import Data.Vector.Generic.Mutable (MVector)
 import Data.Vector.Storable (Vector)
 import qualified Data.Vector.Storable as V
 import Data.Vector.Storable.ByteString
-import Data.Word
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
 import Vaultaire.ReaderAlgorithms (Point (..))
 import qualified Vaultaire.ReaderAlgorithms as A
-import Vaultaire.Types (Address (..))
+import Vaultaire.Types
 
-data AddrStartEnd = AddrStartEnd Address Word64 Word64
+data AddrStartEnd = AddrStartEnd Address TimeStamp TimeStamp
   deriving Show
 
 instance Arbitrary AddrStartEnd where
@@ -109,10 +108,10 @@ propNoDuplicates f v =
 
 propFilterNoLater :: AddrStartEnd -> Vector Point -> Bool
 propFilterNoLater (AddrStartEnd addr start end) v =
-    let v' = byteStringToVector $ runST $ A.processBucket (vectorToByteString v)addr start end
-    in V.null $ V.filter ((> end) . A.time) v'
+    let v' = byteStringToVector $ runST $ A.processBucket (vectorToByteString v) addr start end
+    in V.null $ V.filter ((> end) . TimeStamp . A.time) v'
 
 propFilterNoEarlier :: AddrStartEnd -> Vector Point -> Bool
 propFilterNoEarlier (AddrStartEnd addr start end) v =
     let v' = byteStringToVector $ runST $ A.processBucket (vectorToByteString v) addr start end
-    in V.null $ V.filter ((< start) . A.time) v'
+    in V.null $ V.filter ((< start) . TimeStamp . A.time) v'

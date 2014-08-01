@@ -47,8 +47,8 @@ data BatchState = BatchState
     { simple         :: !(EpochMap (BucketMap Builder))
     , extended       :: !(EpochMap (BucketMap Builder))
     , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
-    , latestSimple   :: !Time
-    , latestExtended :: !Time
+    , latestSimple   :: !TimeStamp
+    , latestExtended :: !TimeStamp
     , dayMaps        :: !(DayMap, DayMap) -- Simple, extended
     , bucketSize     :: !Word64
     , start          :: !UTCTime
@@ -99,7 +99,7 @@ processBatch bucket_size (Message reply origin payload) = do
             reply OnDisk
 
 processPoints :: MonadState BatchState m
-              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> Time -> Time -> m ()
+              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
 processPoints offset message day_maps origin latest_simple latest_ext
     | fromIntegral offset >= BS.length message = modify (\s -> s{ latestSimple = latest_simple
                                                                 , latestExtended = latest_ext })
@@ -129,10 +129,10 @@ processPoints offset message day_maps origin latest_simple latest_ext
                        | otherwise            = latest_simple
                 processPoints (offset + 24) message day_maps origin t latest_ext
 
-parseMessageAt :: Word64 -> Unpacking (Address, Time, Payload)
+parseMessageAt :: Word64 -> Unpacking (Address, TimeStamp, Payload)
 parseMessageAt offset = do
     unpackSetPosition (fromIntegral offset)
-    (,,) <$> (Address <$> getWord64LE) <*> getWord64LE <*> getWord64LE
+    (,,) <$> (Address <$> getWord64LE) <*> (TimeStamp <$> getWord64LE) <*> getWord64LE
 
 
 getBytesAt :: Word64 -> Word64 -> Unpacking ByteString
@@ -154,8 +154,8 @@ appendSimple epoch bucket bytes = do
     put $ s { simple = simple' }
 
 appendExtended :: MonadState BatchState m
-               => Epoch -> Bucket -> Address -> Time -> Word64 -> ByteString -> m ()
-appendExtended epoch bucket (Address address) time len string = do
+               => Epoch -> Bucket -> Address -> TimeStamp -> Word64 -> ByteString -> m ()
+appendExtended epoch bucket (Address address) (TimeStamp time) len string = do
     s <- get
 
     -- First we write to the simple bucket, inserting a closure that will

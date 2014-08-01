@@ -38,16 +38,16 @@ rollOverExtendedDay origin' =
 -- You should only call this once with the maximum time of whatever data set
 -- you are writing down. This should be done within the same lock as that
 -- write.
-updateSimpleLatest :: Origin -> Time -> Daemon ()
+updateSimpleLatest :: Origin -> TimeStamp -> Daemon ()
 updateSimpleLatest origin' = updateLatest (simpleLatestOID origin')
 
-updateExtendedLatest :: Origin -> Time -> Daemon ()
+updateExtendedLatest :: Origin -> TimeStamp -> Daemon ()
 updateExtendedLatest origin' = updateLatest (extendedLatestOID origin')
 
 -- Internal
 
-updateLatest :: ByteString -> Time -> Daemon ()
-updateLatest oid time = withExLock oid . liftPool $ do
+updateLatest :: ByteString -> TimeStamp -> Daemon ()
+updateLatest oid (TimeStamp time) = withExLock oid . liftPool $ do
     result <- runObject oid readFull
     case result of
         Right v           -> when (parse v < time) doWrite
