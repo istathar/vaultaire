@@ -233,31 +233,74 @@ refreshOriginDays origin' = do
             Left e -> liftIO $ putStrLn e
             Right day_map -> put $ originInsert origin' day_map om
 
--- | Read this:
---
--- This function a little odd, due to my hesitancy adopting something cool like
--- layers, or even MonadCatchIO.
---
--- In order to grab a shared lock, we lift to the Pool monad, but to run the
--- user's action we must re-wrap the state.
---
--- TLDR: Daemon state within will not be updated within the 'outer' monad until
--- the entire action completes. You will probably never even notice this.
-withLockShared :: ByteString -> Daemon a -> Daemon a
-withLockShared oid = wrapPool (withSharedLock oid "lock" "lock" "daemon" Nothing)
+{-
+    Lock management
+-}
 
--- | Same pitfalls as withLock, this one acquires an exclusive lock.
+timeout :: Int 
+timeout = 600 -- 10 minutes
+
+release :: Double
+release = fromIntegral $ timeout + 5
+
+--
+-- | Take a shared lock on the specified object. Others can concurrently take
+-- shared locks, someone wanting an exclusive lock waits until current shared
+-- lockers are finished.
+--
+withLockShared :: ByteString -> Daemon a -> Daemon a
+withLockShared oid daemon = do
+    liftIO $ debugM "Daemon.withLockShared" ("Taking lock (shared)    on " ++ BS.unpack oid)
+    wrapPool (withSharedLock oid "lock" "lock" "daemon" (Just release)) daemon
+
+
+--
+-- | Take a exclusive lock on the specified object. Waits for current shared
+-- lockers to release while inhibiting new shared locks by others. Then locks
+-- exclusively, preventing other shared or exclusive locks until finished.
+--
 withLockExclusive :: ByteString -> Daemon a -> Daemon a
-withLockExclusive oid = wrapPool (withExclusiveLock oid "lock" "lock" Nothing)
+withLockExclusive oid daemon = do
+    liftIO $ debugM "Daemon.withLockExclusive" ("Taking lock (exclusive) on " ++ BS.unpack oid)
+    wrapPool (withExclusiveLock oid "lock" "lock" (Just release)) daemon
+
+
+{-
+    In order to grab a shared lock, we lift to the Pool monad, but to run the
+    user's action we must re-wrap the state. Daemon state within will not be
+    updated within the 'outer' monad until the entire action completes. You
+    will probably never even notice this.
+-}
 
 wrapPool :: (Pool (a, OriginDays) -> Pool (b, OriginDays))
          -> Daemon a -> Daemon b
-wrapPool pool_a (Daemon a) = do
-    conf <- ask
-    st   <- get
-    (r,s) <- liftPool $ pool_a (runReaderT (runStateT a st) conf)
-    put s
-    return r
+wrapPool pool_action (Daemon r) = do
+    conf  <- ask
+    state <- get
+
+    -- Start timer
+    a <- liftIO $ async watchdog
+
+    -- Carry out action with librados
+    (r',state') <- liftPool $ pool_action (runReaderT (runStateT r state) conf)
+
+    -- Completed! Don't need the watchdog anymore.
+    liftIO $ cancel a
+
+    -- Wrap up and return
+    put state'
+    return r'
+  where
+    milliseconds = 1000000
+
+    watchdog :: IO ()
+    watchdog = do
+        liftIO $ debugM "Daemon.watchdog" "Watchdog running"
+        threadDelay $ timeout * milliseconds
+        liftIO $ criticalM "Daemon.watchdog" "WATCHDOG TIMER ELAPSED"
+        raiseSignal sigABRT -- or KILL, depending on zmq
+
+
 
 -- Internal
 
