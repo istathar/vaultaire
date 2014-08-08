@@ -73,7 +73,7 @@ batchStateNow bucket_size dms =
 
 processBatch :: Word64 -> Message -> Daemon ()
 processBatch bucket_size (Message reply origin payload) = do
-    write_state <- withLock (originLockOID origin) $ do
+    write_state <- withLockShared (originLockOID origin) $ do
         refreshOriginDays origin
         simple_dm <- withSimpleDayMap origin id
         extended_dm  <- withExtendedDayMap origin id
@@ -232,7 +232,7 @@ write origin do_rollovers s = do
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.
     writeExtendedBuckets =
-        withExLock (writeLockOID origin) $ liftPool $ do
+        withLockExclusive (writeLockOID origin) $ liftPool $ do
             -- First pass to get current offsets
             offsets <- forWithKey (extended s) $ \epoch buckets -> do
 

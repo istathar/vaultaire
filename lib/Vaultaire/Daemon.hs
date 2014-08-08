@@ -25,12 +25,12 @@ module Vaultaire.Daemon
     handleMessages,
     liftPool,
     nextMessage,
-    async,
+    asyncCustom,
     refreshOriginDays,
     withSimpleDayMap,
     withExtendedDayMap,
-    withLock,
-    withExLock,
+    withLockShared,
+    withLockExclusive,
     cacheExpired,
     -- * Helpers
     dayMapsFromCeph,
@@ -41,7 +41,8 @@ module Vaultaire.Daemon
 ) where
 
 import Control.Applicative
-import Control.Concurrent.Async (Async)
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
@@ -56,6 +57,7 @@ import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
                              withExclusiveLock, withSharedLock)
+import System.Posix.Signals
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4 as ZMQ
 import Text.Printf
@@ -198,8 +200,8 @@ nextMessage = do
 --
 -- You do however have access to the same messaging channels, so sending and
 -- receiving messages will work fine and is thread safe.
-async :: Daemon a -> Daemon (Async a)
-async (Daemon a) = do
+asyncCustom :: Daemon a -> Daemon (Async a)
+asyncCustom (Daemon a) = do
     -- TODO: Handle waiting for any 'child' threads created, as the underlying
     --       connection is now shared.
     conf <- ask
@@ -241,12 +243,12 @@ refreshOriginDays origin' = do
 --
 -- TLDR: Daemon state within will not be updated within the 'outer' monad until
 -- the entire action completes. You will probably never even notice this.
-withLock :: ByteString -> Daemon a -> Daemon a
-withLock oid = wrapPool (withSharedLock oid "lock" "lock" "daemon" Nothing)
+withLockShared :: ByteString -> Daemon a -> Daemon a
+withLockShared oid = wrapPool (withSharedLock oid "lock" "lock" "daemon" Nothing)
 
 -- | Same pitfalls as withLock, this one acquires an exclusive lock.
-withExLock :: ByteString -> Daemon a -> Daemon a
-withExLock oid = wrapPool (withExclusiveLock oid "lock" "lock" Nothing)
+withLockExclusive :: ByteString -> Daemon a -> Daemon a
+withLockExclusive oid = wrapPool (withExclusiveLock oid "lock" "lock" Nothing)
 
 wrapPool :: (Pool (a, OriginDays) -> Pool (b, OriginDays))
          -> Daemon a -> Daemon b

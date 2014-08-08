@@ -47,7 +47,7 @@ updateExtendedLatest origin' = updateLatest (extendedLatestOID origin')
 -- Internal
 
 updateLatest :: ByteString -> TimeStamp -> Daemon ()
-updateLatest oid (TimeStamp time) = withExLock oid . liftPool $ do
+updateLatest oid (TimeStamp time) = withLockExclusive oid . liftPool $ do
     result <- runObject oid readFull
     case result of
         Right v           -> when (parse v < time) doWrite
@@ -62,7 +62,7 @@ updateLatest oid (TimeStamp time) = withExLock oid . liftPool $ do
 
 rollOver :: Origin -> ByteString -> ByteString -> NumBuckets -> Daemon ()
 rollOver origin day_file latest_file buckets =
-    withExLock (originLockOID origin) $ do
+    withLockExclusive (originLockOID origin) $ do
         om <- get
         expired <- cacheExpired om origin
         unless expired $ do

@@ -54,6 +54,7 @@ library
                      hslogger >= 1.2.4,
                      vaultaire-common >= 2.4.1,
                      text,
+                     unix,
                      rados-haskell >= 3.0.3
 
   ghc-options:       -O2
