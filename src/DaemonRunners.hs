@@ -51,7 +51,7 @@ linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
 linkThreadZMQ a = (liftIO . link) =<< Z.async a
 
 runBrokerDaemon :: MVar () -> IO (Async ())
-runBrokerDaemon _ =
+runBrokerDaemon shutdown =
     forkThread $ do
         infoM "Daemons.runBrokerDaemon" "Broker daemon started"
         runZMQ $ do
@@ -66,6 +66,7 @@ runBrokerDaemon _ =
             -- Contents proxy.
             linkThreadZMQ $ startProxy
                 (Router,"tcp://*:5580") (Dealer,"tcp://*:5581") "tcp://*:5002"
+        readMVar shutdown
 
 runReaderDaemon :: String -> String -> String -> MVar () -> IO (Async ())
 runReaderDaemon pool user broker shutdown =
