@@ -43,7 +43,6 @@ module Vaultaire.Daemon
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
 import Control.Monad.Reader
@@ -274,19 +273,19 @@ wrapPool :: (Pool (a, OriginDays) -> Pool (b, OriginDays))
          -> Daemon a -> Daemon b
 wrapPool pool_action (Daemon r) = do
     conf  <- ask
-    state <- get
+    s <- get
 
     -- Start timer
     a <- liftIO $ async watchdog
 
     -- Carry out action with librados
-    (r',state') <- liftPool $ pool_action (runReaderT (runStateT r state) conf)
+    (r',s') <- liftPool $ pool_action (runReaderT (runStateT r s) conf)
 
     -- Completed! Don't need the watchdog anymore.
     liftIO $ cancel a
 
     -- Wrap up and return
-    put state'
+    put s'
     return r'
   where
     milliseconds = 1000000
