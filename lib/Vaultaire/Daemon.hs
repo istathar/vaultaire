@@ -250,7 +250,6 @@ release = fromIntegral $ timeout + 5
 --
 withLockShared :: ByteString -> Daemon a -> Daemon a
 withLockShared oid daemon = do
-    liftIO $ debugM "Daemon.withLockShared" ("Taking lock (shared)    on " ++ BS.unpack oid)
     wrapPool (withSharedLock oid "lock" "lock" "daemon" (Just release)) daemon
 
 
@@ -261,7 +260,6 @@ withLockShared oid daemon = do
 --
 withLockExclusive :: ByteString -> Daemon a -> Daemon a
 withLockExclusive oid daemon = do
-    liftIO $ debugM "Daemon.withLockExclusive" ("Taking lock (exclusive) on " ++ BS.unpack oid)
     wrapPool (withExclusiveLock oid "lock" "lock" (Just release)) daemon
 
 
@@ -295,7 +293,6 @@ wrapPool pool_action (Daemon r) = do
 
     watchdog :: IO ()
     watchdog = do
-        liftIO $ debugM "Daemon.watchdog" "Watchdog running"
         threadDelay $ timeout * milliseconds
         liftIO $ criticalM "Daemon.watchdog" "WATCHDOG TIMER ELAPSED"
         raiseSignal sigABRT -- or KILL, depending on zmq
