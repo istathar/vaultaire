@@ -17,6 +17,7 @@ module Main where
 
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import qualified Data.ByteString.Char8 as S
 import Data.HashMap.Strict (fromList)
 import Data.Text
@@ -51,11 +52,12 @@ startServerDaemons shutdown =
     origin = Origin "ZZZZZZ"
     namespace = "integration"
   in do
-    runBrokerDaemon shutdown
-    runWriterDaemon pool user broker bucket_size shutdown
-    runReaderDaemon pool user broker shutdown
-    runContentsDaemon pool user broker shutdown
-    runMarquiseDaemon broker origin namespace shutdown
+    a1 <- runBrokerDaemon shutdown
+    a2 <- runWriterDaemon pool user broker bucket_size shutdown
+    a3 <- runReaderDaemon pool user broker shutdown
+    a4 <- runContentsDaemon pool user broker shutdown
+    a5 <- runMarquiseDaemon broker origin namespace shutdown
+    mapM_ link [a1,a2,a3,a4,a5]
     runRegisterOrigin pool user origin num_buckets step_size 0 0
 
 setupClientSide :: IO SpoolFiles
