@@ -17,7 +17,6 @@
 --
 module DaemonRunners
 (
-   async,
    runBrokerDaemon,
    runWriterDaemon,
    runReaderDaemon,
