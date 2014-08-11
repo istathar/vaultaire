@@ -17,7 +17,7 @@
 --
 module DaemonRunners
 (
-   forkThread,
+   async,
    runBrokerDaemon,
    runWriterDaemon,
    runReaderDaemon,
@@ -39,20 +39,12 @@ import Vaultaire.Contents (startContents)
 import Vaultaire.Reader (startReader)
 import Vaultaire.Writer (startWriter)
 
-
-forkThread :: IO a -> IO (Async a)
-forkThread action = do
-    a <- async action
---  link a
-    return a
-
-
 linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
 linkThreadZMQ a = (liftIO . link) =<< Z.async a
 
 runBrokerDaemon :: MVar () -> IO (Async ())
 runBrokerDaemon shutdown =
-    forkThread $ do
+    async $ do
         infoM "Daemons.runBrokerDaemon" "Broker daemon started"
         runZMQ $ do
             -- Writer proxy.
@@ -70,7 +62,7 @@ runBrokerDaemon shutdown =
 
 runReaderDaemon :: String -> String -> String -> MVar () -> IO (Async ())
 runReaderDaemon pool user broker shutdown =
-    forkThread $ do
+    async $ do
         infoM "Daemons.runReaderDaemon" "Reader daemon started"
         startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
@@ -79,7 +71,7 @@ runReaderDaemon pool user broker shutdown =
 
 runWriterDaemon :: String -> String -> String -> Word64 -> MVar () -> IO (Async ())
 runWriterDaemon pool user broker bucket_size shutdown =
-    forkThread $ do
+    async $ do
         infoM "Daemons.runWriterDaemon" "Writer daemon started"
         startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
@@ -89,10 +81,9 @@ runWriterDaemon pool user broker bucket_size shutdown =
 
 runContentsDaemon :: String -> String -> String -> MVar () -> IO (Async ())
 runContentsDaemon pool user broker shutdown =
-    forkThread $ do
+    async $ do
         infoM "Daemons.runContentsDaemon" "Contents daemon started"
         startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)
                 (S.pack pool)
                 shutdown
-
