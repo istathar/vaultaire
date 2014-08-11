@@ -25,12 +25,12 @@ module Vaultaire.Daemon
     handleMessages,
     liftPool,
     nextMessage,
-    async,
+    asyncCustom,
     refreshOriginDays,
     withSimpleDayMap,
     withExtendedDayMap,
-    withLock,
-    withExLock,
+    withLockShared,
+    withLockExclusive,
     cacheExpired,
     -- * Helpers
     dayMapsFromCeph,
@@ -41,8 +41,8 @@ module Vaultaire.Daemon
 ) where
 
 import Control.Applicative
-import Control.Concurrent.Async (Async)
-import Control.Concurrent.MVar
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Control.Monad.Reader
@@ -56,6 +56,7 @@ import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
                              withExclusiveLock, withSharedLock)
+import System.Posix.Signals
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4 as ZMQ
 import Text.Printf
@@ -198,8 +199,8 @@ nextMessage = do
 --
 -- You do however have access to the same messaging channels, so sending and
 -- receiving messages will work fine and is thread safe.
-async :: Daemon a -> Daemon (Async a)
-async (Daemon a) = do
+asyncCustom :: Daemon a -> Daemon (Async a)
+asyncCustom (Daemon a) = do
     -- TODO: Handle waiting for any 'child' threads created, as the underlying
     --       connection is now shared.
     conf <- ask
@@ -231,31 +232,71 @@ refreshOriginDays origin' = do
             Left e -> liftIO $ putStrLn e
             Right day_map -> put $ originInsert origin' day_map om
 
--- | Read this:
---
--- This function a little odd, due to my hesitancy adopting something cool like
--- layers, or even MonadCatchIO.
---
--- In order to grab a shared lock, we lift to the Pool monad, but to run the
--- user's action we must re-wrap the state.
---
--- TLDR: Daemon state within will not be updated within the 'outer' monad until
--- the entire action completes. You will probably never even notice this.
-withLock :: ByteString -> Daemon a -> Daemon a
-withLock oid = wrapPool (withSharedLock oid "lock" "lock" "daemon" Nothing)
+{-
+    Lock management
+-}
 
--- | Same pitfalls as withLock, this one acquires an exclusive lock.
-withExLock :: ByteString -> Daemon a -> Daemon a
-withExLock oid = wrapPool (withExclusiveLock oid "lock" "lock" Nothing)
+timeout :: Int 
+timeout = 600 -- 10 minutes
+
+release :: Double
+release = fromIntegral $ timeout + 5
+
+--
+-- | Take a shared lock on the specified object. Others can concurrently take
+-- shared locks, someone wanting an exclusive lock waits until current shared
+-- lockers are finished.
+--
+withLockShared :: ByteString -> Daemon a -> Daemon a
+withLockShared oid daemon = do
+    wrapPool (withSharedLock oid "lock" "lock" "daemon" (Just release)) daemon
+
+
+--
+-- | Take a exclusive lock on the specified object. Waits for current shared
+-- lockers to release while inhibiting new shared locks by others. Then locks
+-- exclusively, preventing other shared or exclusive locks until finished.
+--
+withLockExclusive :: ByteString -> Daemon a -> Daemon a
+withLockExclusive oid daemon = do
+    wrapPool (withExclusiveLock oid "lock" "lock" (Just release)) daemon
+
+
+{-
+    In order to grab a shared lock, we lift to the Pool monad, but to run the
+    user's action we must re-wrap the state. Daemon state within will not be
+    updated within the 'outer' monad until the entire action completes. You
+    will probably never even notice this.
+-}
 
 wrapPool :: (Pool (a, OriginDays) -> Pool (b, OriginDays))
          -> Daemon a -> Daemon b
-wrapPool pool_a (Daemon a) = do
-    conf <- ask
-    st   <- get
-    (r,s) <- liftPool $ pool_a (runReaderT (runStateT a st) conf)
-    put s
-    return r
+wrapPool pool_action (Daemon r) = do
+    conf  <- ask
+    s <- get
+
+    -- Start timer
+    a <- liftIO $ async watchdog
+
+    -- Carry out action with librados
+    (r',s') <- liftPool $ pool_action (runReaderT (runStateT r s) conf)
+
+    -- Completed! Don't need the watchdog anymore.
+    liftIO $ cancel a
+
+    -- Wrap up and return
+    put s'
+    return r'
+  where
+    milliseconds = 1000000
+
+    watchdog :: IO ()
+    watchdog = do
+        threadDelay $ timeout * milliseconds
+        liftIO $ criticalM "Daemon.watchdog" "WATCHDOG TIMER ELAPSED"
+        raiseSignal sigABRT -- or KILL, depending on zmq
+
+
 
 -- Internal
 
