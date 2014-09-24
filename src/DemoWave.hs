@@ -75,14 +75,11 @@ main = do
 loop :: MVar () -> SpoolFiles -> Address -> Bool -> IO ()
 loop _        _     _       True  = return ()
 loop shutdown spool address False = do
---  done <- isJust <$> tryReadMVar shutdown
---  unless done $ do
     i <- getCurrentTimeNanoseconds
     let v = demoWaveAt i
     let msg = printf "%s\t%d\t% 9.6f" (show address) (unTimeStamp i) (wordToDouble v)
     logM "Main.loop" DEBUG msg
     queueSimple spool address i v
---      threadDelay (5 * 1000000)   -- every 5 s
 
     a1 <- async (do
         readMVar shutdown
