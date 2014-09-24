@@ -143,6 +143,7 @@ executable demowave
                      hslogger,
                      time,
                      data-binary-ieee754,
+                     async,
                      vaultaire
 
   ghc-options:       -O2

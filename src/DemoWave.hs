@@ -14,17 +14,18 @@
 
 module Main where
 import Control.Concurrent
-import Control.Monad
+import Control.Concurrent.Async
 import Data.Binary.IEEE754 (doubleToWord, wordToDouble)
 import qualified Data.ByteString.Char8 as S
 import Data.Word
-import GHC.Conc
-import Marquise.Client
 import Options.Applicative hiding (Parser, option)
 import Options.Applicative
-import System.Log.Handler.Syslog
 import System.Log.Logger
 import Text.Printf
+
+import Marquise.Client
+import Package
+import Vaultaire.Program
 import Vaultaire.Types
 
 data Options = Options {
@@ -53,29 +54,46 @@ parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
 
 main :: IO ()
 main = do
-    -- command line +RTS -Nn -RTS value
-    when (numCapabilities == 1) (getNumProcessors >>= setNumCapabilities)
-
     Options{..} <- execParser helpfulParser
 
-    -- Start and configure logger
-    let log_level = if debug then DEBUG else WARNING
-    logger <- openlog "vaultaire" [PID] USER log_level
-    updateGlobalLogger rootLoggerName (addHandler logger . setLevel log_level)
+    let level = if debug
+        then Debug
+        else Normal
 
-    logM "Main.main" DEBUG "Starting"
+    quit <- initializeProgram (package ++ "-" ++ version) level
+
+    logM "Main.main" DEBUG "Starting generator"
 
     spool <- createSpoolFiles "demowave"
 
     let a = hashIdentifier "This is a test of the emergency broadcast system"
+    loop quit spool a False
 
-    forever $ do
-        i <- getCurrentTimeNanoseconds
-        let v = demoWaveAt i
-        let msg = printf "%s\t%d\t% 9.6f" (show a) (unTimeStamp i) (wordToDouble v)
-        logM "Main.loop" DEBUG msg
-        queueSimple spool a i v
+    logM "Main.main" DEBUG "End"
+
+
+loop :: MVar () -> SpoolFiles -> Address -> Bool -> IO ()
+loop _        _     _       True  = return ()
+loop shutdown spool address False = do
+--  done <- isJust <$> tryReadMVar shutdown
+--  unless done $ do
+    i <- getCurrentTimeNanoseconds
+    let v = demoWaveAt i
+    let msg = printf "%s\t%d\t% 9.6f" (show address) (unTimeStamp i) (wordToDouble v)
+    logM "Main.loop" DEBUG msg
+    queueSimple spool address i v
+--      threadDelay (5 * 1000000)   -- every 5 s
+
+    a1 <- async (do
+        readMVar shutdown
+        return True)
+
+    a2 <- async (do
         threadDelay (5 * 1000000)   -- every 5 s
+        return False)
+
+    (_,done) <- waitAny [a1,a2]
+    loop shutdown spool address done
 
 demoWaveAt :: TimeStamp -> Word64
 demoWaveAt (TimeStamp x) =
