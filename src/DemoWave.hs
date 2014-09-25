@@ -15,6 +15,7 @@
 module Main where
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Monad
 import Data.Binary.IEEE754 (doubleToWord, wordToDouble)
 import qualified Data.ByteString.Char8 as S
 import Data.Word
@@ -67,14 +68,13 @@ main = do
     spool <- createSpoolFiles "demowave"
 
     let a = hashIdentifier "This is a test of the emergency broadcast system"
-    loop quit spool a False
+    loop quit spool a
 
     logM "Main.main" DEBUG "End"
 
 
-loop :: MVar () -> SpoolFiles -> Address -> Bool -> IO ()
-loop _        _     _       True  = return ()
-loop shutdown spool address False = do
+loop :: MVar () -> SpoolFiles -> Address -> IO ()
+loop shutdown spool address = do
     i <- getCurrentTimeNanoseconds
     let v = demoWaveAt i
     let msg = printf "%s\t%d\t% 9.6f" (show address) (unTimeStamp i) (wordToDouble v)
@@ -90,7 +90,7 @@ loop shutdown spool address False = do
         return False)
 
     (_,done) <- waitAny [a1,a2]
-    loop shutdown spool address done
+    unless done $ loop shutdown spool address
 
 demoWaveAt :: TimeStamp -> Word64
 demoWaveAt (TimeStamp x) =
