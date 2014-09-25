@@ -352,6 +352,7 @@ test-suite           integration-test
                      hslogger >= 1.2.4,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
+                     directory,
                      vaultaire-common,
                      vaultaire
 
