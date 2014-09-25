@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.5.0
+version:             2.5.1
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
@@ -143,6 +143,7 @@ executable demowave
                      hslogger,
                      time,
                      data-binary-ieee754,
+                     async,
                      vaultaire
 
   ghc-options:       -O2
@@ -351,6 +352,7 @@ test-suite           integration-test
                      hslogger >= 1.2.4,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
+                     directory,
                      vaultaire-common,
                      vaultaire
 

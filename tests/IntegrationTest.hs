@@ -23,6 +23,8 @@ import Data.HashMap.Strict (fromList)
 import Data.Text
 import Pipes
 import qualified Pipes.Prelude as P
+import System.Directory
+import System.IO
 import Test.Hspec hiding (pending)
 
 import CommandRunners
@@ -42,8 +44,8 @@ destroyExistingVault :: IO ()
 destroyExistingVault =
     runDaemon "inproc://1" (Just (S.pack user)) (S.pack pool) cleanup
 
-startServerDaemons :: MVar () -> IO ()
-startServerDaemons shutdown =
+startServerDaemons :: FilePath -> MVar () -> IO ()
+startServerDaemons tmp shutdown =
   let
     broker = "localhost"
     bucket_size = 4194304
@@ -56,7 +58,7 @@ startServerDaemons shutdown =
     a2 <- runWriterDaemon pool user broker bucket_size shutdown
     a3 <- runReaderDaemon pool user broker shutdown
     a4 <- runContentsDaemon pool user broker shutdown
-    a5 <- runMarquiseDaemon broker origin namespace shutdown
+    a5 <- runMarquiseDaemon broker origin namespace shutdown tmp 60
     mapM_ link [a1,a2,a3,a4,a5]
     runRegisterOrigin pool user origin num_buckets step_size 0 0
 
@@ -64,19 +66,31 @@ setupClientSide :: IO SpoolFiles
 setupClientSide = do
     createSpoolFiles "integration"
 
+--
+-- Sadly, the smazing standard library lacks a standardized way to create a
+-- temporary file. You'll need to remove this file when it's done.
+--
+
+createTempFile :: IO (FilePath)
+createTempFile = do
+    (name,h) <- openTempFile "." "cache_file-.tmp"
+    hClose h
+    return name
 
 main :: IO ()
 main = do
     quit <- newEmptyMVar
 
     destroyExistingVault
-    startServerDaemons quit
+    tmp <- createTempFile
+    startServerDaemons tmp quit
 
     spool <- setupClientSide
 
     hspec (suite spool)
 
     putMVar quit ()
+    removeFile tmp
 
 
 suite :: SpoolFiles -> Spec
