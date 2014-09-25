@@ -58,7 +58,7 @@ startServerDaemons tmp shutdown =
     a2 <- runWriterDaemon pool user broker bucket_size shutdown
     a3 <- runReaderDaemon pool user broker shutdown
     a4 <- runContentsDaemon pool user broker shutdown
-    a5 <- runMarquiseDaemon broker origin namespace shutdown tmp
+    a5 <- runMarquiseDaemon broker origin namespace shutdown tmp 60
     mapM_ link [a1,a2,a3,a4,a5]
     runRegisterOrigin pool user origin num_buckets step_size 0 0
 
