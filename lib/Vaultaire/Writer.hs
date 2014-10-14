@@ -104,10 +104,10 @@ processBatch bucket_size (Message reply origin payload) = do
 
     t2 <- liftIO getCurrentTime
     let delta = diffUTCTime t2 t1
-    let deltaFloat = (fromRational . toRational) bytes / (fromRational . toRational) delta / 1000 :: Float
-    let deltaPadded = printf "%9.1f" deltaFloat
+    let delta_float = (fromRational . toRational) bytes / (fromRational . toRational) delta / 1000 :: Float
+    let delta_padded = printf "%9.1f" delta_float
     liftIO $ infoM "Writer.processBatch" $
-                                "Finished   " ++ deltaPadded ++ " kB/s"
+                                "Finished   " ++ delta_padded ++ " kB/s"
     return result
 
 processPoints :: MonadState BatchState m
