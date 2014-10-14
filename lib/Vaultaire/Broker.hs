@@ -3,6 +3,7 @@ module Vaultaire.Broker
     startProxy,
 ) where
 
+import System.Log.Logger
 import System.ZMQ4.Monadic
 
 -- | Start a ZMQ proxy, capture is always a Pub socket.
@@ -22,4 +23,5 @@ startProxy (front_type, front_addr) (back_type, back_addr) cap_addr = do
     bind back_s back_addr
     bind cap_s cap_addr
 
+    liftIO $ infoM "Broker.startProxy" ("Broker started on " ++ front_addr)
     proxy front_s back_s (Just cap_s)

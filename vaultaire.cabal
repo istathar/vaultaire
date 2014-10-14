@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.1.1
+version:             2.5.1
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
@@ -52,8 +52,9 @@ library
                      stm,
                      semigroups,
                      hslogger >= 1.2.4,
-                     vaultaire-common >= 2.1.0,
+                     vaultaire-common >= 2.4.1,
                      text,
+                     unix,
                      rados-haskell >= 3.0.3
 
   ghc-options:       -O2
@@ -77,9 +78,9 @@ executable vault
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 2.1.0,
+                     marquise >= 2.5.0,
                      containers,
-                     vaultaire-common >= 2.1.0,
+                     vaultaire-common >= 2.4.1,
                      pipes,
                      hslogger >= 1.2.4,
                      async,
@@ -106,9 +107,9 @@ executable inspect
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 2.1.0,
+                     marquise >= 2.4.1,
                      containers,
-                     vaultaire-common >= 2.1.0,
+                     vaultaire-common >= 2.4.1,
                      pipes,
                      hslogger >= 1.2.4,
                      async,
@@ -142,6 +143,7 @@ executable demowave
                      hslogger,
                      time,
                      data-binary-ieee754,
+                     async,
                      vaultaire
 
   ghc-options:       -O2
@@ -342,7 +344,7 @@ test-suite           integration-test
                      unordered-containers,
                      text,
                      QuickCheck,
-                     marquise,
+                     marquise >= 2.5.0,
                      bytestring,
                      pipes,
                      semigroups,
@@ -350,6 +352,7 @@ test-suite           integration-test
                      hslogger >= 1.2.4,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
+                     directory,
                      vaultaire-common,
                      vaultaire
 

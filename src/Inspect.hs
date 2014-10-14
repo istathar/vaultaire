@@ -14,6 +14,7 @@
 
 module Main where
 
+import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import Control.Monad
 import qualified Data.ByteString.Char8 as S
@@ -46,12 +47,12 @@ data Component =
                | RegisterOrigin { origin  :: Origin
                                 , buckets :: Word64
                                 , step    :: Word64
-                                , begin   :: Word64
-                                , end     :: Word64 }
+                                , start   :: TimeStamp
+                                , end     :: TimeStamp }
                | Read { origin  :: Origin
                       , address :: Address
-                      , start   :: Word64
-                      , end     :: Word64 }
+                      , start   :: TimeStamp
+                      , end     :: TimeStamp }
                | List { origin :: Origin }
                | DumpDays { origin :: Origin }
 
@@ -248,7 +249,7 @@ main = do
     -- of the main thread so that we can block the main thread on the quit
     -- semaphore, such that a user interrupt will kill the program.
 
-    forkThread $ do
+    a <- forkThread $ do
         case component of
             None -> return ()
             RegisterOrigin origin buckets step begin end ->
@@ -261,6 +262,6 @@ main = do
                 runDumpDayMap pool user origin
         putMVar quit ()
 
-    takeMVar quit
+    wait a
     debugM "Main.main" "End"
 

@@ -18,6 +18,8 @@ import qualified Data.ByteString as S
 import Pipes
 import System.Log.Logger
 import System.Rados.Monadic
+import Text.Printf
+
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
@@ -30,13 +32,13 @@ startReader :: String           -- ^ Broker
             -> MVar ()
             -> IO ()
 startReader broker user pool shutdown = do
-    liftIO $ infoM "Reader.startReader" "Reader daemon started"
     handleMessages broker user pool shutdown handleRequest
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =
     case fromWire payload' of
         Right req -> do
+            liftIO $ debugM "Reader.handleRequest" (display req)
             case req of
                 SimpleReadRequest addr start end ->
                     processSimple addr start end origin' reply_f
@@ -46,11 +48,15 @@ handleRequest (Message reply_f origin' payload') =
         Left e ->
             liftIO . errorM "Reader.handleRequest" $
                             "failed to decode request: " ++ show e
+  where
+    display (SimpleReadRequest addr start end)   = "Read " ++ show addr ++ " (s) " ++ format start ++ " to " ++ format end
+    display (ExtendedReadRequest addr start end) = "Read " ++ show addr ++ " (e) " ++ format start ++ " to " ++ format end
+    format (TimeStamp t) = printf "%010d" (t `div` 1000000000)
 
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)
 
-processSimple :: Address -> Time -> Time -> Origin -> ReplyF -> Daemon ()
+processSimple :: Address -> TimeStamp -> TimeStamp -> Origin -> ReplyF -> Daemon ()
 processSimple addr start end origin' reply_f = do
     refreshOriginDays origin'
     maybe_range <- withSimpleDayMap origin' (lookupRange start end)
@@ -61,7 +67,7 @@ processSimple addr start end origin' reply_f = do
                             (lift . reply_f . SimpleStream . SimpleBurst)
         Nothing -> reply_f InvalidReadOrigin
 
-readSimple :: Origin -> Address -> Time -> Time
+readSimple :: Origin -> Address -> TimeStamp -> TimeStamp
            -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readSimple origin' addr start end = forever $ do
     (epoch, num_buckets) <- await
@@ -76,7 +82,7 @@ readSimple origin' addr start end = forever $ do
         Right unprocessed -> yieldNotNull $ runST $
             processBucket unprocessed addr start end
 
-processExtended :: Address -> Time -> Time -> Origin -> ReplyF -> Daemon ()
+processExtended :: Address -> TimeStamp -> TimeStamp -> Origin -> ReplyF -> Daemon ()
 processExtended addr start end origin' reply_f = do
     refreshOriginDays origin'
     maybe_range <- withExtendedDayMap origin' (lookupRange start end)
@@ -86,7 +92,7 @@ processExtended addr start end origin' reply_f = do
                             (lift . reply_f . ExtendedStream . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
-readExtended :: Origin -> Address -> Time -> Time
+readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readExtended origin addr start end = forever $ do
     (epoch, num_buckets) <- await

@@ -10,7 +10,6 @@
 --
 
 {-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE RecordWildCards #-}
 
 --
 -- | This module encapsulates the various daemons that you might want to start
@@ -26,63 +25,73 @@ module DaemonRunners
 )
 where
 
-import qualified Control.Concurrent.Async as A
+import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import qualified Data.ByteString.Char8 as S
 import Data.Word (Word64)
 import Pipes
 import System.Log.Logger
-import System.ZMQ4.Monadic
+import System.ZMQ4.Monadic hiding (async)
+import qualified System.ZMQ4.Monadic as Z
 
 import Vaultaire.Broker
-import Vaultaire.Contents
+import Vaultaire.Contents (startContents)
 import Vaultaire.Reader (startReader)
 import Vaultaire.Writer (startWriter)
 
 
-forkThread :: IO a -> IO ()
-forkThread a = A.link =<< A.async a
+forkThread :: IO a -> IO (Async a)
+forkThread action = do
+    a <- async action
+--  link a
+    return a
 
-forkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
-forkThreadZMQ a = (liftIO . A.link) =<< async a
 
-runBrokerDaemon :: MVar () -> IO ()
-runBrokerDaemon _ = runZMQ $ do
-    -- Writer proxy.
-    forkThreadZMQ $ startProxy (Router,"tcp://*:5560")
-                              (Dealer,"tcp://*:5561")
-                              "tcp://*:5000"
+linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
+linkThreadZMQ a = (liftIO . link) =<< Z.async a
 
-    -- Reader proxy.
-    forkThreadZMQ $ startProxy (Router,"tcp://*:5570")
-                              (Dealer,"tcp://*:5571")
-                              "tcp://*:5001"
+runBrokerDaemon :: MVar () -> IO (Async ())
+runBrokerDaemon shutdown =
+    forkThread $ do
+        infoM "Daemons.runBrokerDaemon" "Broker daemon started"
+        runZMQ $ do
+            -- Writer proxy.
+            linkThreadZMQ $ startProxy
+                (Router,"tcp://*:5560") (Dealer,"tcp://*:5561") "tcp://*:5000"
 
-    -- Contents proxy.
-    forkThreadZMQ $ startProxy (Router,"tcp://*:5580")
-                              (Dealer,"tcp://*:5581")
-                              "tcp://*:5002"
+            -- Reader proxy.
+            linkThreadZMQ $ startProxy
+                (Router,"tcp://*:5570") (Dealer,"tcp://*:5571") "tcp://*:5001"
 
-    liftIO $ debugM "Daemons.runBroker" "Proxies started"
+            -- Contents proxy.
+            linkThreadZMQ $ startProxy
+                (Router,"tcp://*:5580") (Dealer,"tcp://*:5581") "tcp://*:5002"
+        readMVar shutdown
 
-runReaderDaemon :: String -> String -> String -> MVar () -> IO ()
+runReaderDaemon :: String -> String -> String -> MVar () -> IO (Async ())
 runReaderDaemon pool user broker shutdown =
-    forkThread $ startReader ("tcp://" ++ broker ++ ":5571")
+    forkThread $ do
+        infoM "Daemons.runReaderDaemon" "Reader daemon started"
+        startReader ("tcp://" ++ broker ++ ":5571")
                 (Just $ S.pack user)
                 (S.pack pool)
                 shutdown
 
-runWriterDaemon :: String -> String -> String -> Word64 -> MVar () -> IO ()
+runWriterDaemon :: String -> String -> String -> Word64 -> MVar () -> IO (Async ())
 runWriterDaemon pool user broker bucket_size shutdown =
-    forkThread $ startWriter ("tcp://" ++ broker ++ ":5561")
+    forkThread $ do
+        infoM "Daemons.runWriterDaemon" "Writer daemon started"
+        startWriter ("tcp://" ++ broker ++ ":5561")
                 (Just $ S.pack user)
                 (S.pack pool)
                 bucket_size
                 shutdown
 
-runContentsDaemon :: String -> String -> String -> MVar () -> IO ()
+runContentsDaemon :: String -> String -> String -> MVar () -> IO (Async ())
 runContentsDaemon pool user broker shutdown =
-    forkThread $ startContents ("tcp://" ++ broker ++ ":5581")
+    forkThread $ do
+        infoM "Daemons.runContentsDaemon" "Contents daemon started"
+        startContents ("tcp://" ++ broker ++ ":5581")
                 (Just $ S.pack user)
                 (S.pack pool)
                 shutdown

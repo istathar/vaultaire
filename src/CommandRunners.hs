@@ -34,7 +34,7 @@ import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
 import Vaultaire.Types
 
 
-runReadPoints :: String -> Origin -> Address -> Word64 -> Word64 -> IO ()
+runReadPoints :: String -> Origin -> Address -> TimeStamp -> TimeStamp -> IO ()
 runReadPoints broker origin addr start end = do
     withReaderConnection broker $ \c ->
         runEffect $ for (readSimple addr start end origin c >-> decodeSimple)
@@ -59,8 +59,8 @@ runDumpDayMap pool user origin =  do
             putStrLn "Extended day map:"
             print extended
 
-runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> Word64 -> Word64 -> IO ()
-runRegisterOrigin pool user origin buckets step begin end = do
+runRegisterOrigin :: String -> String -> Origin -> Word64 -> Word64 -> TimeStamp -> TimeStamp -> IO ()
+runRegisterOrigin pool user origin buckets step (TimeStamp begin) (TimeStamp end) = do
     let targets = [simpleDayOID origin, extendedDayOID origin]
     let user' = Just (S.pack user)
     let pool' = S.pack pool

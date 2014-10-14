@@ -40,7 +40,6 @@ startContents
     -> MVar ()
     -> IO ()
 startContents broker user pool shutdown = do
-    liftIO $ infoM "Contents.startContents" "Contents daemon started"
     handleMessages broker user pool shutdown handleRequest
 
 handleRequest :: Message -> Daemon ()
@@ -78,7 +77,7 @@ allocateNewAddressInVault :: Origin -> Daemon Address
 allocateNewAddressInVault o = do
     a <- Address . (`clearBit` 0) <$> liftIO rollDice
 
-    withExLock "02_addresses_lock" $ do
+    withLockExclusive "02_addresses_lock" $ do
         exists <- isAddressInVault a
         if exists
             then allocateNewAddressInVault o
