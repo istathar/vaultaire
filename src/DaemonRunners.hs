@@ -43,7 +43,7 @@ import Vaultaire.Writer (startWriter)
 forkThread :: IO a -> IO (Async a)
 forkThread action = do
     a <- async action
---  link a
+    link a
     return a
 
 
