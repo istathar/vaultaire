@@ -249,7 +249,10 @@ release = fromIntegral $ timeout + 5
 --
 withLockShared :: ByteString -> Daemon a -> Daemon a
 withLockShared oid daemon = do
-    wrapPool (withSharedLock oid "lock" "lock" "daemon" (Just release)) daemon
+    liftIO $ debugM "Daemon.withSharedLock" ("Lock acquire shared    " ++ BS.unpack oid)
+    result <- wrapPool (withSharedLock oid "lock" "lock" "daemon" (Just release)) daemon
+    liftIO $ debugM "Daemon.withSharedLock" ("Lock release shared    " ++ BS.unpack oid)
+    return result
 
 
 --
@@ -259,7 +262,10 @@ withLockShared oid daemon = do
 --
 withLockExclusive :: ByteString -> Daemon a -> Daemon a
 withLockExclusive oid daemon = do
-    wrapPool (withExclusiveLock oid "lock" "lock" (Just release)) daemon
+    liftIO $ debugM "Daemon.withSharedLock" ("Lock acquire exclusive " ++ BS.unpack oid)
+    result <- wrapPool (withExclusiveLock oid "lock" "lock" (Just release)) daemon
+    liftIO $ debugM "Daemon.withSharedLock" ("Lock release exclusive " ++ BS.unpack oid)
+    return result
 
 
 {-

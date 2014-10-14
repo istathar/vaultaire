@@ -73,6 +73,9 @@ batchStateNow bucket_size dms =
 
 processBatch :: Word64 -> Message -> Daemon ()
 processBatch bucket_size (Message reply origin payload) = do
+    let bytes = S.length payload
+    t1 <- liftIO getCurrentTime
+
     write_state <- withLockShared (originLockOID origin) $ do
         refreshOriginDays origin
         simple_dm <- withSimpleDayMap origin id
@@ -80,8 +83,8 @@ processBatch bucket_size (Message reply origin payload) = do
         case (,) <$> simple_dm <*> extended_dm of
             Nothing -> return Nothing
             Just dms -> do
-                liftIO $ debugM "Writer.processBatch" $
-                                "Processing " ++ printf "%9d" (S.length payload) ++ " bytes"
+                liftIO $ infoM "Writer.processBatch" $
+                                "Processing " ++ printf "%9d" bytes ++ " B"
 
                 -- Most messages simply need to be placed into the correct epoch
                 -- and bucket, extended ones are a little more complex in that they
@@ -92,11 +95,20 @@ processBatch bucket_size (Message reply origin payload) = do
 
                 return . Just . flip execState s $
                     processPoints 0 payload (dayMaps s) origin (latestSimple s) (latestExtended s)
-    case write_state of
+
+    result <- case write_state of
         Nothing -> reply InvalidWriteOrigin
         Just s -> do
             write origin True s
             reply OnDisk
+
+    t2 <- liftIO getCurrentTime
+    let delta = diffUTCTime t2 t1
+    let deltaFloat = (fromRational . toRational) bytes / (fromRational . toRational) delta / 1000 :: Float
+    let deltaPadded = printf "%9.1f" deltaFloat
+    liftIO $ infoM "Writer.processBatch" $
+                                "Finished   " ++ deltaPadded ++ " kB/s"
+    return result
 
 processPoints :: MonadState BatchState m
               => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
