@@ -28,7 +28,6 @@ import System.Log.Logger
 import Text.Trifecta
 
 import CommandRunners
-import DaemonRunners (forkThread)
 import Marquise.Client
 import Package (package, version)
 import Vaultaire.Program
@@ -249,7 +248,7 @@ main = do
     -- of the main thread so that we can block the main thread on the quit
     -- semaphore, such that a user interrupt will kill the program.
 
-    a <- forkThread $ do
+    a <- async $ do
         case component of
             None -> return ()
             RegisterOrigin origin buckets step begin end ->
