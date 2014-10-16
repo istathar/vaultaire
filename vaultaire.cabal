@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.5.2
+version:             2.5.3
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
@@ -78,7 +78,7 @@ executable vault
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 2.5.0,
+                     marquise >= 2.8.3,
                      containers,
                      vaultaire-common >= 2.4.1,
                      pipes,
@@ -107,7 +107,7 @@ executable inspect
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 2.4.1,
+                     marquise >= 2.8.3,
                      containers,
                      vaultaire-common >= 2.4.1,
                      pipes,
@@ -136,7 +136,7 @@ executable demowave
                      optparse-applicative,
                      trifecta,
                      directory,
-                     marquise,
+                     marquise >= 2.8.3,
                      containers,
                      vaultaire-common,
                      pipes,
@@ -319,7 +319,7 @@ test-suite           contents-test
                      semigroups,
                      locators >= 0.2.4,
                      mtl,
-                     marquise,
+                     marquise >= 2.8.3,
                      bytestring,
                      zeromq4-haskell,
                      vaultaire-common,
@@ -344,7 +344,7 @@ test-suite           integration-test
                      unordered-containers,
                      text,
                      QuickCheck,
-                     marquise >= 2.5.0,
+                     marquise >= 2.8.3,
                      bytestring,
                      pipes,
                      semigroups,
@@ -416,7 +416,7 @@ benchmark contents-listing
                      criterion,
                      zeromq4-haskell,
                      vaultaire-common,
-                     marquise,
+                     marquise >= 2.8.3,
                      vaultaire
 
   ghc-options:       -O2
