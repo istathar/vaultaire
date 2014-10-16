@@ -299,8 +299,8 @@ wrapPool pool_action (Daemon r) = do
     watchdog :: IO ()
     watchdog = do
         threadDelay $ timeout * milliseconds
-        liftIO $ criticalM "Daemon.watchdog" "WATCHDOG TIMER ELAPSED"
-        raiseSignal sigABRT -- or KILL, depending on zmq
+        criticalM "Daemon.watchdog" "WATCHDOG TIMER ELAPSED"
+        raiseSignal sigKILL
 
 
 
