@@ -76,6 +76,8 @@ processBatch bucket_size (Message reply origin payload) = do
     let bytes = S.length payload
     t1 <- liftIO getCurrentTime
 
+    liftIO $ infoM "Writer.processBatch" "Processing " ++ printf "%9d" bytes ++ " B"
+
     write_state <- withLockShared (originLockOID origin) $ do
         refreshOriginDays origin
         simple_dm <- withSimpleDayMap origin id
@@ -83,9 +85,6 @@ processBatch bucket_size (Message reply origin payload) = do
         case (,) <$> simple_dm <*> extended_dm of
             Nothing -> return Nothing
             Just dms -> do
-                liftIO $ infoM "Writer.processBatch" $
-                                "Processing " ++ printf "%9d" bytes ++ " B"
-
                 -- Most messages simply need to be placed into the correct epoch
                 -- and bucket, extended ones are a little more complex in that they
                 -- have to be stored as an offset to a pending write to the
@@ -106,8 +105,7 @@ processBatch bucket_size (Message reply origin payload) = do
     let delta = diffUTCTime t2 t1
     let delta_float = (fromRational . toRational) bytes / (fromRational . toRational) delta / 1000 :: Float
     let delta_padded = printf "%9.1f" delta_float
-    liftIO $ infoM "Writer.processBatch" $
-                                "Finished   " ++ delta_padded ++ " kB/s"
+    liftIO $ infoM "Writer.processBatch" "Finished   " ++ delta_padded ++ " kB/s"
     return result
 
 processPoints :: MonadState BatchState m
