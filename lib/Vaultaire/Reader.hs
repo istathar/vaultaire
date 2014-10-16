@@ -37,7 +37,7 @@ handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =
     case fromWire payload' of
         Right req -> do
-            liftIO $ debugM "Reader.handleRequest" (show origin' ++ " Read " ++ show req)
+            liftIO $ infoM "Reader.handleRequest" (show origin' ++ " Read " ++ show req)
             case req of
                 SimpleReadRequest addr start end ->
                     processSimple addr start end origin' reply_f
