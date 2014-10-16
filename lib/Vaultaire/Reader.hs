@@ -18,7 +18,6 @@ import qualified Data.ByteString as S
 import Pipes
 import System.Log.Logger
 import System.Rados.Monadic
-import Text.Printf
 
 import Vaultaire.Daemon
 import Vaultaire.DayMap
@@ -38,7 +37,7 @@ handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =
     case fromWire payload' of
         Right req -> do
-            liftIO $ debugM "Reader.handleRequest" ("Read " ++ show origin' ++ " " ++ show req)
+            liftIO $ debugM "Reader.handleRequest" (show origin' ++ " Read " ++ show req)
             case req of
                 SimpleReadRequest addr start end ->
                     processSimple addr start end origin' reply_f
