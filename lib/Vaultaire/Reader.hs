@@ -18,7 +18,6 @@ import qualified Data.ByteString as S
 import Pipes
 import System.Log.Logger
 import System.Rados.Monadic
-import Text.Printf
 
 import Vaultaire.Daemon
 import Vaultaire.DayMap
@@ -38,7 +37,7 @@ handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =
     case fromWire payload' of
         Right req -> do
-            liftIO $ debugM "Reader.handleRequest" (display req)
+            liftIO $ infoM "Reader.handleRequest" (show origin' ++ " Read " ++ show req)
             case req of
                 SimpleReadRequest addr start end ->
                     processSimple addr start end origin' reply_f
@@ -48,10 +47,6 @@ handleRequest (Message reply_f origin' payload') =
         Left e ->
             liftIO . errorM "Reader.handleRequest" $
                             "failed to decode request: " ++ show e
-  where
-    display (SimpleReadRequest addr start end)   = "Read " ++ show origin' ++ " " ++ show addr ++ " (s) " ++ format start ++ " to " ++ format end
-    display (ExtendedReadRequest addr start end) = "Read " ++ show origin' ++ " " ++ show addr ++ " (e) " ++ format start ++ " to " ++ format end
-    format (TimeStamp t) = printf "%010d" (t `div` 1000000000)
 
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)
