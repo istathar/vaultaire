@@ -49,8 +49,8 @@ handleRequest (Message reply_f origin' payload') =
             liftIO . errorM "Reader.handleRequest" $
                             "failed to decode request: " ++ show e
   where
-    display (SimpleReadRequest addr start end)   = "Read " ++ show addr ++ " (s) " ++ format start ++ " to " ++ format end
-    display (ExtendedReadRequest addr start end) = "Read " ++ show addr ++ " (e) " ++ format start ++ " to " ++ format end
+    display (SimpleReadRequest addr start end)   = "Read " ++ show origin' ++ " " ++ show addr ++ " (s) " ++ format start ++ " to " ++ format end
+    display (ExtendedReadRequest addr start end) = "Read " ++ show origin' ++ " " ++ show addr ++ " (e) " ++ format start ++ " to " ++ format end
     format (TimeStamp t) = printf "%010d" (t `div` 1000000000)
 
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
