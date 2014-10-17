@@ -65,12 +65,18 @@ handleRequest (Message reply origin payload) =
 -}
 performListRequest :: ReplyF -> Origin ->  Daemon ()
 performListRequest reply o = do
+    liftIO $ infoM "Contents.performListRequest"
+                (show o ++ " ContentsListRequest")
+
     runEffect $ for (InternalStore.enumerateOrigin o)
                     (lift . reply . uncurry ContentsListBypass)
     reply EndOfContentsList
 
 performRegisterRequest :: ReplyF -> Origin -> Daemon ()
-performRegisterRequest reply o =
+performRegisterRequest reply o = do
+    liftIO $ infoM "Contents.performRegisterRequest"
+                (show o ++ " RegisterListRequest")
+
     allocateNewAddressInVault o >>= reply . RandomAddress
 
 allocateNewAddressInVault :: Origin -> Daemon Address
@@ -95,6 +101,9 @@ performUpdateRequest
     -> SourceDict
     -> Daemon ()
 performUpdateRequest reply o a input = do
+    liftIO $ infoM "Contents.performUpdateRequest"
+                (show o ++ " UpdateRequest " ++ show a)
+
     result <- retreiveSourceTagsForAddress o a
 
     case result of
@@ -114,6 +123,9 @@ performRemoveRequest
     -> SourceDict
     -> Daemon ()
 performRemoveRequest reply o a input = do
+    liftIO $ infoM "Contents.performRemoveRequest"
+                (show o ++ " RemoveRequest " ++ show a)
+
     result <- retreiveSourceTagsForAddress o a
     -- elements of first SourceDict not appearing in second remain
     case result of

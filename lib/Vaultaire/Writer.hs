@@ -249,6 +249,7 @@ write origin do_rollovers s = do
             offsets <- forWithKey (extended s) $ \epoch buckets -> do
 
                 -- Make requests for the entire epoch
+                liftIO $ debugM "Writer.writeExtendedBuckets" "Stat extended objects"
                 stats <- forWithKey buckets $ \bucket _ ->
                     extendedOffset origin epoch bucket
 
@@ -266,6 +267,7 @@ write origin do_rollovers s = do
 
             -- Second pass to write the extended data
             _ <- forWithKey (extended s) $ \epoch buckets -> do
+                liftIO $ debugM "Writer.writeExtendedBuckets" "Write extended objects"
                 writes <- forWithKey buckets $ \bucket builder -> do
                     let payload = toStrict $ toLazyByteString builder
                     writeExtended origin epoch bucket payload
@@ -302,6 +304,7 @@ write origin do_rollovers s = do
     -- Final write,
     stepTwo simple_buckets = liftPool $
         forWithKey simple_buckets $ \epoch buckets -> do
+            liftIO $ debugM "Writer.stepTwo" "Write simple objects"
             writes <- forWithKey buckets $ \bucket builder -> do
                 let payload = toStrict $ toLazyByteString builder
                 writeSimple origin epoch bucket payload
