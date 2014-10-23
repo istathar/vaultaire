@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.5.5
+version:             2.5.6
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
