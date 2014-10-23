@@ -102,7 +102,7 @@ processBatch bucket_size (Message reply origin payload) = do
             wt1 <- liftIO getCurrentTime
             write origin True s
             wt2 <- liftIO getCurrentTime
-            liftIO . (debugM "Writer.processBatch") . concat [
+            liftIO . (debugM "Writer.processBatch") $ concat [
                 "Wrote simple objects at ",
                 fmtWriteRate bytes wt2 wt1,
                 " kB/s"]
@@ -115,7 +115,7 @@ processBatch bucket_size (Message reply origin payload) = do
     return result
   where
     fmtWriteRate :: Int -> UTCTime -> UTCTime -> String
-    fmtWriteRate bytes = (printf "%9.1f") . (writeRate bytes) . diffUTCTime
+    fmtWriteRate bytes e s = (printf "%9.1f") . (writeRate bytes) $ diffUTCTime e s
 
     writeRate :: Int -> NominalDiffTime -> Float
     writeRate bytes = ((/) ((fromRational . toRational) bytes)) . ((fromRational . toRational) . (flip (/) 1000))
