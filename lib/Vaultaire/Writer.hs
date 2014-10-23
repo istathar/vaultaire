@@ -115,10 +115,12 @@ processBatch bucket_size (Message reply origin payload) = do
     return result
   where
     fmtWriteRate :: Int -> UTCTime -> UTCTime -> String
-    fmtWriteRate bytes e s = (printf "%9.1f") . (writeRate bytes) $ diffUTCTime e s
+    fmtWriteRate bytes end start = (printf "%9.1f") . (writeRate bytes) $ diffUTCTime end start
 
     writeRate :: Int -> NominalDiffTime -> Float
-    writeRate bytes = ((/) ((fromRational . toRational) bytes)) . ((fromRational . toRational) . (flip (/) 1000))
+    writeRate bytes = ((/) (viaRational bytes)) . (viaRational . (flip (/) 1000))
+
+    viaRational = fromRational . toRational
 
 processPoints :: MonadState BatchState m
               => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
