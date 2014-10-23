@@ -102,22 +102,23 @@ processBatch bucket_size (Message reply origin payload) = do
             wt1 <- liftIO getCurrentTime
             write origin True s
             wt2 <- liftIO getCurrentTime
-            liftIO . debugM . concat [
+            liftIO . (debugM "Writer.processBatch") . concat [
                 "Wrote simple objects at ",
-                fmtWriteRate wt2 wt1,
+                fmtWriteRate bytes wt2 wt1,
                 " kB/s"]
             reply OnDisk
 
     t2 <- liftIO getCurrentTime
-    let delta_padded = fmtWriteRate $ t2 t1
+    let delta_padded = fmtWriteRate bytes t2 t1
     liftIO $ infoM "Writer.processBatch"
                 (show origin ++ " Finished   " ++ delta_padded ++ " kB/s")
     return result
   where
-    fmtWriteRate = (printf "%9.1f") . (writeRate bytes) . diffUTCTime
+    fmtWriteRate :: Int -> UTCTime -> UTCTime -> String
+    fmtWriteRate bytes = (printf "%9.1f") . (writeRate bytes) . diffUTCTime
 
     writeRate :: Int -> NominalDiffTime -> Float
-    writeRate = ((/) ((fromRational . toRational) bytes)) . ((fromRational . toRational) . (flip (/) 1000))
+    writeRate bytes = ((/) ((fromRational . toRational) bytes)) . ((fromRational . toRational) . (flip (/) 1000))
 
 processPoints :: MonadState BatchState m
               => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
