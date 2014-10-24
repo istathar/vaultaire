@@ -135,6 +135,9 @@ performRemoveRequest reply o a input = do
             if current == update
                 then return ()
                 else writeSourceTagsForAddress o a update
+
+    liftIO $ infoM "Contents.performRemoveRequest"
+                (show o ++ " Complete")
     reply RemoveSuccess
 
 retreiveSourceTagsForAddress :: Origin -> Address -> Daemon (Maybe SourceDict)
@@ -145,5 +148,8 @@ retreiveSourceTagsForAddress o a = do
         Nothing     -> Nothing
 
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
-writeSourceTagsForAddress o a s =
+writeSourceTagsForAddress o a s = do
+    liftIO $ infoM "Contents.writeSourceTagsForAddress"
+                (show o ++ " Writing SourceDict")
+
     InternalStore.writeTo o a (toWire s)
