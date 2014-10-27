@@ -65,7 +65,7 @@ main = do
 
     logM "Main.main" DEBUG "Starting generator"
 
-    spool <- createSpoolFiles "demowave"
+    spool <- withMarquiseHandler (error . show) (createSpoolFiles "demowave")
 
     let a = hashIdentifier "This is a test of the emergency broadcast system"
     loop quit spool a
@@ -79,7 +79,7 @@ loop shutdown spool address = do
     let v = demoWaveAt i
     let msg = printf "%s\t%d\t% 9.6f" (show address) (unTimeStamp i) (wordToDouble v)
     logM "Main.loop" DEBUG msg
-    queueSimple spool address i v
+    withMarquiseHandler (error . show) (queueSimple spool address i v)
 
     a1 <- async (do
         readMVar shutdown

@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.5.6
+version:             2.5.7
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
@@ -78,7 +78,7 @@ executable vault
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 2.8.3,
+                     marquise >= 3.0.2,
                      containers,
                      vaultaire-common >= 2.7.2,
                      pipes,
@@ -107,7 +107,7 @@ executable inspect
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 2.8.3,
+                     marquise >= 3.0.2,
                      containers,
                      vaultaire-common >= 2.7.2,
                      pipes,
@@ -136,7 +136,7 @@ executable demowave
                      optparse-applicative,
                      trifecta,
                      directory,
-                     marquise >= 2.8.3,
+                     marquise >= 3.0.2,
                      containers,
                      vaultaire-common >= 2.7.2,
                      pipes,
@@ -319,7 +319,7 @@ test-suite           contents-test
                      semigroups,
                      locators >= 0.2.4,
                      mtl,
-                     marquise >= 2.8.3,
+                     marquise >= 3.0.2,
                      bytestring,
                      zeromq4-haskell,
                      vaultaire-common >= 2.7.2,
@@ -344,7 +344,7 @@ test-suite           integration-test
                      unordered-containers,
                      text,
                      QuickCheck,
-                     marquise >= 2.8.3,
+                     marquise >= 3.0.2,
                      bytestring,
                      pipes,
                      semigroups,

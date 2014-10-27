@@ -51,12 +51,12 @@ test: dist/setup-config tags
 dist/setup-config: vaultaire.cabal Setup.hs
 	cabal configure \
 		--enable-tests \
-		--enable-benchmarks \
-		-v0 2>/dev/null || /bin/echo -e "CABAL\tinstall --only-dependencies" && cabal install --only-dependencies --enable-tests --enable-benchmarks
+		--disable-benchmarks \
+		-v0 2>/dev/null || /bin/echo -e "CABAL\tinstall --only-dependencies" && cabal install --only-dependencies --enable-tests --disable-benchmarks
 	@/bin/echo -e "CABAL\tconfigure"
 	cabal configure \
 		--enable-tests \
-		--enable-benchmarks \
+		--disable-benchmarks \
 		--disable-library-profiling \
 		--disable-executable-profiling
 
