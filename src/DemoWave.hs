@@ -48,7 +48,7 @@ optionsParser =
         <> help "Set log level to DEBUG"
 
 parseOrigin :: Parser Origin
-parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
+parseOrigin = argument (fmap mkOrigin str) (metavar "ORIGIN")
   where
     mkOrigin = Origin . S.pack
 

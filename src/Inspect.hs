@@ -125,7 +125,7 @@ optionsParser Options{..} = Options <$> parsePool
         command cmd_name (info (helper <*> parser) (progDesc desc))
 
 parseOrigin :: O.Parser Origin
-parseOrigin = argument (fmap mkOrigin . str) (metavar "ORIGIN")
+parseOrigin = argument (fmap mkOrigin str) (metavar "ORIGIN")
   where
     mkOrigin = Origin . S.pack
 
@@ -135,15 +135,15 @@ readOptionsParser = Read <$> parseOrigin
                          <*> parseStart
                          <*> parseEnd
   where
-    parseAddress = argument (fmap fromString . str) (metavar "ADDRESS")
-    parseStart = O.option $
+    parseAddress = argument (fmap fromString str) (metavar "ADDRESS")
+    parseStart = O.option auto $
         long "start"
         <> short 's'
         <> value 0
         <> showDefault
         <> help "Start time in nanoseconds since epoch"
 
-    parseEnd = O.option $
+    parseEnd = O.option auto $
         long "end"
         <> short 'e'
         <> value maxBound
@@ -163,28 +163,28 @@ registerOriginParser = RegisterOrigin <$> parseOrigin
                                       <*> parseBegin
                                       <*> parseEnd
   where
-    parseBuckets = O.option $
+    parseBuckets = O.option auto $
         long "buckets"
         <> short 'n'
         <> value 128
         <> showDefault
         <> help "Number of buckets to distribute writes over"
 
-    parseStep = O.option $
+    parseStep = O.option auto $
         long "step"
         <> short 's'
         <> value 14400000000000
         <> showDefault
         <> help "Back-dated rollover period (see documentation: TODO)"
 
-    parseBegin = O.option $
+    parseBegin = O.option auto $
         long "begin"
         <> short 'b'
         <> value 0
         <> showDefault
         <> help "Back-date begin time (default is no backdating)"
 
-    parseEnd = O.option $
+    parseEnd = O.option auto $
         long "end"
         <> short 'e'
         <> value 0
