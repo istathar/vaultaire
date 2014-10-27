@@ -254,10 +254,10 @@ main = do
             None -> return ()
             RegisterOrigin origin buckets step begin end ->
                 runRegisterOrigin pool user origin buckets step begin end
-            Read origin addr start end ->
-                runReadPoints broker origin addr start end
-            List origin ->
-                runListContents broker origin
+            Read _ _ _ _ ->
+                error "Currently unimplemented. Use marquise's `data read` command"
+            List _ ->
+                error "Currently unimplemented. Use marquise's `data list` command"
             DumpDays origin ->
                 runDumpDayMap pool user origin
         putMVar quit ()
