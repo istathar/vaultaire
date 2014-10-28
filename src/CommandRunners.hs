@@ -14,8 +14,6 @@
 
 module CommandRunners
 (
-    runReadPoints,
-    runListContents,
     runDumpDayMap,
     runRegisterOrigin
 ) where
@@ -33,17 +31,6 @@ import Vaultaire.Daemon (dayMapsFromCeph, extendedDayOID, simpleDayOID,
                          withPool)
 import Vaultaire.Types
 
-
-runReadPoints :: String -> Origin -> Address -> TimeStamp -> TimeStamp -> IO ()
-runReadPoints broker origin addr start end = do
-    withReaderConnection broker $ \c ->
-        runEffect $ for (readSimple addr start end origin c >-> decodeSimple)
-                        (lift . print)
-
-runListContents :: String -> Origin -> IO ()
-runListContents broker origin = do
-    withContentsConnection broker $ \c ->
-        runEffect $ for (enumerateOrigin origin c) (lift . print)
 
 runDumpDayMap :: String -> String -> Origin -> IO ()
 runDumpDayMap pool user origin =  do
