@@ -114,7 +114,7 @@ optionsParser Options{..} = Options <$> parsePool
 writerOptionsParser :: O.Parser Component
 writerOptionsParser = Writer <$> parseBucketSize
   where
-    parseBucketSize = O.option $
+    parseBucketSize = O.option auto $
         long "roll_over_size"
         <> short 'r'
         <> value 4194304

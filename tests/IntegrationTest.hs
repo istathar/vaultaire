@@ -63,8 +63,8 @@ startServerDaemons tmp shutdown =
     runRegisterOrigin pool user origin num_buckets step_size 0 0
 
 setupClientSide :: IO SpoolFiles
-setupClientSide = do
-    createSpoolFiles "integration"
+setupClientSide =
+    withMarquiseHandler (error . show) $ createSpoolFiles "integration"
 
 --
 -- Sadly, the smazing standard library lacks a standardized way to create a
@@ -105,15 +105,16 @@ suite spool =
   in do
     describe "Generate data" $ do
         it "sends point via marquise" $ do
-            queueSimple spool address timestamp payload
-            flush spool
+            withMarquiseHandler (error . show) $ do
+                queueSimple spool address timestamp payload
+                flush spool
             pass
 
     describe "Retreive data" $ do
         it "reads point via marquise" $
           let
             go n = do
-                result <- withReaderConnection "localhost" $ \c -> do
+                result <- withReaderConnection "localhost" $ \c -> withMarquiseHandler (error . show) $ do
                     P.head (readSimple address begin end origin c >-> decodeSimple)
 
                 case result of
