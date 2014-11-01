@@ -17,8 +17,10 @@ points. We wanted a place to put metrics that wasn't lossy, allows arbitrary
 range querying, and would scale out without bothering anybody.
 
 Vaultaire is a data vault for system metrics, backed onto Ceph. We use it
-internally to store system metrics and to derive IP traffic usage for billing.
-We're looking forward to letting clients write to it as well.
+internally to store systems metrics from Nagios, OpenStack and pmacct for
+problem diagnosis, abnormality detection, metering/billing, forecasting
+and capacity planning. We're looking forward to letting clients write to
+it as well.
 
 Design
 ------
