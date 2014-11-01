@@ -52,7 +52,8 @@ are written in Haskell, with client libraries available in Haskell
 backed by ElasticSearch, and a visualization pipeline where RESTful access to
 interpolated data points ([sieste][]) is provided by Haskell to a beautiful
 Ruby/JavaScript graphing front-end ([machiavelli][]) that allows you to
-correlate and view data streams.
+correlate and view data streams. The [vaultaire-query][] library
+provides a Haskell-based DSL for analytics applications.
 
 
 
