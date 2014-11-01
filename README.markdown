@@ -67,3 +67,4 @@ provides a Haskell-based DSL for analytics applications.
 [chevalier]: https://github.com/anchor/chevalier
 [sieste]: https://github.com/anchor/sieste
 [machiavelli]: http://anchor.github.io/machiavelli/
+[vaultaire-query]: http://github.com/anchor/vaultaire-query
