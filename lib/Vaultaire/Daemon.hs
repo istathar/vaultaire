@@ -70,14 +70,21 @@ import Vaultaire.Util
 -- | The 'Daemon' monad stores per 'Origin' 'DayMap's and queues for message
 -- retrieval and reply. The underlying base monad is a rados 'Pool', you can
 -- lift to this via 'liftPool'.
-newtype Daemon a = Daemon (StateT OriginDays (ReaderT SharedConnection Pool) a)
-  deriving ( Functor, Applicative, Monad, MonadIO, MonadReader SharedConnection,
+newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConns Pool) a)
+  deriving ( Functor, Applicative, Monad, MonadIO, MonadReader DaemonConns,
              MonadState OriginDays)
+
+data DaemonConns = DaemonConns
+   { shared   :: SharedConnection
+   , internal :: InternalConnection }
 
 -- | Handle to commuicate with the 0MQ router.
 type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
 
--- Simple and extended day maps
+-- | Handle to communicate with the internal profiler.
+type InternalConnection = (AgentID, Output TeleMsg)
+
+-- | Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
 
 -- | Represents a request made by a client. This could be a request to write a
@@ -86,8 +93,8 @@ type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
 -- All mesages follow the same asyncronous response, reply pattern.
 data Message = Message
     { messageReplyF  :: ReplyF -- ^ Queue a reply to this message. This
-                        --   will be transmitted automatically
-                        --   at a later point.
+                               --   will be transmitted automatically
+                               --   at a later point.
     , messageOrigin  :: Origin
     , messagePayload :: ByteString
     }

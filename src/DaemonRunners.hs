@@ -66,6 +66,11 @@ runBrokerDaemon shutdown =
             -- Contents proxy.
             linkThreadZMQ $ startProxy
                 (Router,"tcp://*:5580") (Dealer,"tcp://*:5581") "tcp://*:5002"
+
+            -- Telemetry proxy.
+            linkThreadZMQ $ startProxy
+                (Router,"tcp://*:5590") (Dealer,"tcp://*:5591") "tcp://*:5003"
+
         readMVar shutdown
 
 runReaderDaemon :: String -> String -> String -> MVar () -> IO (Async ())
@@ -96,3 +101,13 @@ runContentsDaemon pool user broker shutdown =
                 (S.pack pool)
                 shutdown
 
+-- FIXME: this should be run in a low-priority thread
+runTelemetryDaemon :: String -> String -> String -> Int -> MVar () -> IO (Async ())
+runTelemetryDaemon pool user broker min_period shutdown =
+    forkThread $ do
+        infoM "Daemons.runTelemetryDaemon" "Telemetry daemon started"
+        startTelemetry ("tcp://" ++ broker ++ ":5591")
+                       (Just $ S.pack user)
+                       (S.pack pool)
+                        min_period
+                        shutdown
