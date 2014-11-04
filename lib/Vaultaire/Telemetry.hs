@@ -36,7 +36,7 @@ handleRequest min_period (Message reply_f origin payload) = case fromWire payloa
           then liftIO $ errorM "Telemetry.handleRequest"
                       $  "requested period "                  ++ show period
                       ++ " is less than the minimum allowed " ++ show min_period
-          else ask >>= report origin reply_f period . inchan
+          else forever $ ask >>= report origin reply_f period . inchan
 
     Left e -> liftIO $ errorM "Telemetry.handleRequest" $ "failed to decode request: " ++ show e
 
@@ -49,6 +49,8 @@ report org reply_f period chan = undefined
     -- since new reports would still be coming in after we have commenced this operation.
     msgs <- aggregate $ fromInputUntil undefined
     mapM (reply_f . mkResp) msgs
+    -- Sleep for <period>
+    threadDelay period
     where fromInputUntil n = evalStateP 0 $ do
             x <- lift $ get
             if x <= n then fromInput chan else return ()
@@ -56,7 +58,8 @@ report org reply_f period chan = undefined
             t <- getCurrentTimeNanoseconds
             return $ TeleResp org t msg
 
--- | Aggregate telemetric reports.
+-- | Aggregate telemetric reports, guaranteed to process only N reports
+--   see @report@.
 --
 aggregate :: Monad m => Producer TeleMsg m () -> m [TeleMsg]
 aggregate = evalStateT $ foldAll
