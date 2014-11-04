@@ -56,6 +56,7 @@ import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
                              withExclusiveLock, withSharedLock)
+import Pipes.Concurrent (Input, Output)
 import System.Posix.Signals
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4 as ZMQ
@@ -75,14 +76,15 @@ newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConns Pool) a)
              MonadState OriginDays)
 
 data DaemonConns = DaemonConns
-   { shared   :: SharedConnection
-   , internal :: InternalConnection }
+   { -- External ZMQ connection.
+     shared  :: SharedConnection
+     -- Internal connections (for profiling).
+   , name    :: AgentID
+   , outchan :: Output TeleMsg
+   , inchan  :: Input  TeleMsg }
 
 -- | Handle to commuicate with the 0MQ router.
 type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
-
--- | Handle to communicate with the internal profiler.
-type InternalConnection = (AgentID, Output TeleMsg)
 
 -- | Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
