@@ -18,7 +18,6 @@ module Vaultaire.Writer
 ) where
 
 import Control.Applicative
-import Control.Concurrent (MVar)
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
@@ -58,20 +57,14 @@ data BatchState = BatchState
 data Event = Msg Message | Tick
 
 -- | Start a writer daemon, runs until shutdown.
-startWriter :: String           -- ^ Broker
-            -> Maybe ByteString -- ^ Username for Ceph
-            -> ByteString       -- ^ Pool name for Ceph
-            -> Word64           -- ^ Maximum bytes in bucket before rollover
-            -> MVar ()          -- ^ Shutdown signal
-            -> IO ()
-startWriter broker user pool bucket_size shutdown = do
-    handleMessages broker user pool shutdown (processBatch bucket_size)
+startWriter :: DaemonArgs -> BucketSize -> IO ()
+startWriter args bucket_size = handleMessages args (processBatch bucket_size)
 
-batchStateNow :: Word64 -> (DayMap, DayMap) -> IO BatchState
+batchStateNow :: BucketSize -> (DayMap, DayMap) -> IO BatchState
 batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
-processBatch :: Word64 -> Message -> Daemon ()
+processBatch :: BucketSize -> Message -> Daemon ()
 processBatch bucket_size (Message reply origin payload) = do
     let bytes = S.length payload
     t1 <- liftIO getCurrentTime

@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE Rank2Types                 #-}
 
 -- | Encapsulates runtime requirements of a generic vaultaire daemon
@@ -15,11 +16,15 @@ module Vaultaire.Daemon
 (
     -- * Types
     Daemon,
+    DaemonArgs(..),
+    DaemonConns,
+    Name,
     Message(..),
     ReplyF,
     Address(..),
     Payload,
     Bucket,
+    BucketSize,
     -- * Functions
     runDaemon,
     handleMessages,
@@ -38,6 +43,11 @@ module Vaultaire.Daemon
     extendedDayOID,
     bucketOID,
     withPool,
+    -- * Nice wrappers
+    sharedConn,
+    daemonName,
+    internalChanOut,
+    internalChanIn,
 ) where
 
 import Control.Applicative
@@ -45,18 +55,20 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
+import Control.Monad.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Maybe
+import Data.Monoid
 import Data.Word (Word64)
+import Pipes.Concurrent (Output, Input, Buffer(..), spawn')
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
                              withExclusiveLock, withSharedLock)
-import Pipes.Concurrent (Input, Output)
 import System.Posix.Signals
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4 as ZMQ
@@ -71,20 +83,37 @@ import Vaultaire.Util
 -- | The 'Daemon' monad stores per 'Origin' 'DayMap's and queues for message
 -- retrieval and reply. The underlying base monad is a rados 'Pool', you can
 -- lift to this via 'liftPool'.
+--
 newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConns Pool) a)
-  deriving ( Functor, Applicative, Monad, MonadIO, MonadReader DaemonConns,
-             MonadState OriginDays)
+  deriving ( Functor, Applicative, Monad, MonadIO
+           , MonadReader DaemonConns, MonadState OriginDays)
 
-data DaemonConns = DaemonConns
-   { -- External ZMQ connection.
-     shared  :: SharedConnection
-     -- Internal connections (for profiling).
-   , name    :: AgentID
+-- | The minimal argumetns needed to run any daemon.
+--
+data DaemonArgs = DaemonArgs
+   { broker      :: URI              -- ^ Broker, e.g. example.com
+   , dname       :: Name             -- ^ Unique name for this daemon
+   , ceph_user   :: Maybe ByteString -- ^ Username for Ceph
+   , ceph_pool   :: ByteString       -- ^ Pool name for Ceph
+   , shutdown    :: MVar ()          -- ^ Shutdown signal
+   }
+
+type DaemonConns = (SharedConnection, InternalConnection)
+
+-- | Handle to communicate with the internal thread.
+--
+data InternalConnection = InternalConnection
+   { aname   :: AgentID
    , outchan :: Output TeleMsg
-   , inchan  :: Input  TeleMsg }
+   , inchan  :: Input TeleMsg }
 
 -- | Handle to commuicate with the 0MQ router.
 type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
+
+-- | Unique name for the daemon. User is responsible for ensuring
+--   the name is not already in use.
+--
+type Name = String
 
 -- | Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
@@ -101,9 +130,10 @@ data Message = Message
     , messagePayload :: ByteString
     }
 
-type ReplyF  = WireFormat w => w -> Daemon ()
-type Payload = Word64
-type Bucket  = Word64
+type ReplyF     = WireFormat w => w -> Daemon ()
+type Payload    = Word64
+type Bucket     = Word64
+type BucketSize = Word64
 
 -- | Handle messages using an arbitrary concurrency abstraction.
 --
@@ -114,14 +144,11 @@ type Bucket  = Word64
 --
 -- This prohibits any multi-message requests, if this is what you want you had
 -- best define your own concurrency mechanism.
-handleMessages :: String                 -- ^ Broker for ZMQ
-               -> Maybe ByteString       -- ^ Username for Ceph
-               -> ByteString             -- ^ Pool name for Ceph
-               -> MVar ()                -- ^ Shutdown signal
-               -> (Message -> Daemon ()) -- ^ Message handling function
+--
+handleMessages :: DaemonArgs             -- ^ Run the daemon with these arguments
+               -> (Message -> Daemon ()) -- ^ Handle messages with this handler
                -> IO ()
-handleMessages broker ceph_user pool shutdown f =
-    runDaemon broker ceph_user pool loop
+handleMessages args@(DaemonArgs{..}) f = runDaemon args loop
   where
     -- Dumb, no concurrency for now. WARNING we originally had tryReadMVar but
     -- it was causing non-deterministic asynchronous delayed hangs. We'll come
@@ -134,22 +161,29 @@ handleMessages broker ceph_user pool shutdown f =
                     Nothing -> loop
                     Just msg -> f msg >> loop
 
--- | This will go as far as to connect to Ceph and begin listening for
--- messages.
-runDaemon :: String           -- ^ Broker for ZMQ
-          -> Maybe ByteString -- ^ Username for Ceph
-          -> ByteString       -- ^ Pool name for Ceph
-          -> Daemon a
+-- | Encapsulating the lifetime of a daemon.
+--   This will go as far as to connect to Ceph and begin listening for messages.
+--
+runDaemon :: DaemonArgs -- ^ With these arguments
+          -> Daemon a   -- ^ Run this daemon
           -> IO a
-runDaemon broker ceph_user pool (Daemon a) =
-    bracket (setupSharedConnection broker)
-            (\(ctx, conn) -> do
+runDaemon DaemonArgs{..} (Daemon a) =
+    bracket (do s <- setupSharedConnection broker
+                p <- setupInternalConnection dname
+                return (s, p))
+            (\((ctx, conn), (_, seal)) -> do
+                -- clean up shared connection (ZMQ)
                 sock <- takeMVar conn
                 ZMQ.close sock
-                ZMQ.shutdown ctx)
-            (\(_, conn) ->
-                withPool ceph_user pool $
-                    runReaderT (evalStateT a emptyOriginMap) conn)
+                ZMQ.shutdown ctx
+                -- clean up internal connection
+                -- this will be garbage collected but we might
+                -- as well clean it up early
+                atomically seal)
+            (\((_, conn), (internal, _)) ->
+                withPool ceph_user ceph_pool $
+                    runReaderT (evalStateT a emptyOriginMap)
+                               (conn, internal))
 
 -- Connect to ceph and run your pool action
 withPool :: Maybe ByteString -> ByteString -> Pool a -> IO a
@@ -167,7 +201,7 @@ liftPool = Daemon . lift . lift
 --   4. The client's payload.
 nextMessage :: Daemon (Maybe Message)
 nextMessage = do
-    conn <- ask
+    conn <- sharedConn <$> ask
     liftIO $ withMVar conn $ \c -> do
         result <- ZMQ.poll 10 [ZMQ.Sock c [ZMQ.In] Nothing]
         case result of
@@ -183,7 +217,7 @@ nextMessage = do
                         -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
                         let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
                         in return . Just $
-                            Message (\r -> do var <- ask
+                            Message (\r -> do var <- sharedConn <$> ask
                                               liftIO $ withMVar var (send r))
                                     (Origin origin)
                                     payload
@@ -245,7 +279,7 @@ refreshOriginDays origin' = do
     Lock management
 -}
 
-timeout :: Int 
+timeout :: Int
 timeout = 600 -- 10 minutes
 
 release :: Double
@@ -378,9 +412,16 @@ simpleDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_simple_d
 extendedDayOID :: Origin -> ByteString
 extendedDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_extended_days"
 
+bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
+bucketOID (Origin origin') epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
+                                                         (BS.unpack origin')
+                                                         bucket
+                                                         epoch
+                                                         kind
+
 -- | Build the 'SharedConnection' for use by potentially many consumers within
 -- this 'Daemon'.
-setupSharedConnection :: String -- ^ Broker name
+setupSharedConnection :: URI -- ^ Broker name
                       -> IO (ZMQ.Context, SharedConnection)
 setupSharedConnection broker = do
     ctx <- ZMQ.context
@@ -389,9 +430,31 @@ setupSharedConnection broker = do
     mvar <- newMVar sock
     return (ctx, mvar)
 
-bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
-bucketOID (Origin origin') epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
-                                                         (BS.unpack origin')
-                                                         bucket
-                                                         epoch
-                                                         kind
+-- | Internal connection for internal.
+setupInternalConnection
+    :: Name
+    -> IO (InternalConnection, STM ())
+setupInternalConnection name = do
+    -- We use the @Newest@ buffer for the internal report queue
+    -- so that old reports will be removed if the buffer is full.
+    -- This means the internal will lose precision but not have
+    -- an impact on performance if there is too much activity.
+    (output, input, seal) <- spawn' $ Newest 1024
+    n <- maybe (do errorM  "Daemon.setupInternalConnection"
+                          ("The daemon name given is invalid: " ++ name)
+                   return mempty)
+               (return)
+               (agentID name)
+    return (InternalConnection n output input, seal)
+
+
+-- Convenience/Nice
+
+sharedConn      = fst
+{-# INLINE sharedConn #-}
+daemonName      = aname . snd
+{-# INLINE daemonName #-}
+internalChanOut = outchan . snd
+{-# INLINE internalChanOut #-}
+internalChanIn  = inchan  . snd
+{-# INLINE internalChanIn #-}

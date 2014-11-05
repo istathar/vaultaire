@@ -9,7 +9,6 @@ module Vaultaire.Reader
 ) where
 
 import Control.Applicative
-import Control.Concurrent (MVar)
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.ST
@@ -25,13 +24,8 @@ import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
 import Vaultaire.Types
 
 -- | Start a writer daemon, never returns.
-startReader :: String           -- ^ Broker
-            -> Maybe ByteString -- ^ Username for Ceph
-            -> ByteString       -- ^ Pool name for Ceph
-            -> MVar ()
-            -> IO ()
-startReader broker user pool shutdown = do
-    handleMessages broker user pool shutdown handleRequest
+startReader :: DaemonArgs -> IO ()
+startReader = flip handleMessages handleRequest
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin' payload') =

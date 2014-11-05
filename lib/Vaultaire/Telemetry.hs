@@ -15,16 +15,13 @@ import           Vaultaire.Daemon
 import           Vaultaire.Types
 
 
--- | Start a writer daemon, runs until shutdown.
+-- | Start a telemetry thread
 startTelemetry
   :: String           -- ^ Broker
-  -> Maybe ByteString -- ^ Username for Ceph
-  -> ByteString       -- ^ Pool name for Ceph
-  -> Int              -- ^ Maximum frequency allowed
+  -> Int              -- ^ Frequency
   -> MVar ()          -- ^ Shutdown signal
   -> IO ()
-startTelemetry broker user pool min_period shutdown
-  = handleMessages broker user pool shutdown (report min_period)
+startTelemetry broker period shutdown = undefined
 
 telemetryChan :: Daemon (Input TeleMsg)
 telemetryChan = inchan <$> ask

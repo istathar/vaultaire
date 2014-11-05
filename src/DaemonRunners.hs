@@ -28,17 +28,22 @@ where
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import qualified Data.ByteString.Char8 as S
+import Data.Unique
 import Data.Word (Word64)
 import Pipes
 import System.Log.Logger
 import System.ZMQ4.Monadic hiding (async)
 import qualified System.ZMQ4.Monadic as Z
 
+import Vaultaire.Types
+import Vaultaire.Daemon
 import Vaultaire.Broker
 import Vaultaire.Contents (startContents)
 import Vaultaire.Reader (startReader)
 import Vaultaire.Writer (startWriter)
 
+
+-- have an option for forking a telemetry thread associated with a worker thread
 
 forkThread :: IO a -> IO (Async a)
 forkThread action = do
@@ -51,9 +56,9 @@ linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
 linkThreadZMQ a = (liftIO . link) =<< Z.async a
 
 runBrokerDaemon :: MVar () -> IO (Async ())
-runBrokerDaemon shutdown =
+runBrokerDaemon shutdown_signal =
     forkThread $ do
-        infoM "Daemons.runBrokerDaemon" "Broker daemon started"
+        infoM "Daemons.runBroker_uriDaemon" "Broker_uri daemon started"
         runZMQ $ do
             -- Writer proxy.
             linkThreadZMQ $ startProxy
@@ -71,43 +76,45 @@ runBrokerDaemon shutdown =
             linkThreadZMQ $ startProxy
                 (Router,"tcp://*:5590") (Dealer,"tcp://*:5591") "tcp://*:5003"
 
-        readMVar shutdown
+        readMVar shutdown_signal
 
-runReaderDaemon :: String -> String -> String -> MVar () -> IO (Async ())
-runReaderDaemon pool user broker shutdown =
+runReaderDaemon :: URI -> String -> String -> MVar () -> IO (Async ())
+runReaderDaemon broker_uri user pool shutdown_signal =
     forkThread $ do
         infoM "Daemons.runReaderDaemon" "Reader daemon started"
-        startReader ("tcp://" ++ broker ++ ":5571")
-                (Just $ S.pack user)
-                (S.pack pool)
-                shutdown
+        uname <- uniqueDaemonName broker_uri "reader"
+        startReader $ DaemonArgs ("tcp://" ++ broker_uri ++ ":5571")
+                                 uname
+                                 (Just $ S.pack user)
+                                 (S.pack pool)
+                                 shutdown_signal
 
 runWriterDaemon :: String -> String -> String -> Word64 -> MVar () -> IO (Async ())
-runWriterDaemon pool user broker bucket_size shutdown =
+runWriterDaemon pool user broker_uri bucket_size shutdown_signal =
     forkThread $ do
         infoM "Daemons.runWriterDaemon" "Writer daemon started"
-        startWriter ("tcp://" ++ broker ++ ":5561")
-                (Just $ S.pack user)
-                (S.pack pool)
-                bucket_size
-                shutdown
+        uname <- uniqueDaemonName broker_uri "writer"
+        startWriter (DaemonArgs ("tcp://" ++ broker_uri ++ ":5561")
+                                uname
+                                (Just $ S.pack user)
+                                (S.pack pool)
+                                shutdown_signal)
+                     bucket_size
 
 runContentsDaemon :: String -> String -> String -> MVar () -> IO (Async ())
-runContentsDaemon pool user broker shutdown =
+runContentsDaemon pool user broker_uri shutdown_signal =
     forkThread $ do
         infoM "Daemons.runContentsDaemon" "Contents daemon started"
-        startContents ("tcp://" ++ broker ++ ":5581")
-                (Just $ S.pack user)
-                (S.pack pool)
-                shutdown
+        uname <- uniqueDaemonName broker_uri "contents"
+        startContents $ DaemonArgs ("tcp://" ++ broker_uri ++ ":5581")
+                                   uname
+                                   (Just $ S.pack user)
+                                   (S.pack pool)
+                                   shutdown_signal
 
--- FIXME: this should be run in a low-priority thread
-runTelemetryDaemon :: String -> String -> String -> Int -> MVar () -> IO (Async ())
-runTelemetryDaemon pool user broker min_period shutdown =
-    forkThread $ do
-        infoM "Daemons.runTelemetryDaemon" "Telemetry daemon started"
-        startTelemetry ("tcp://" ++ broker ++ ":5591")
-                       (Just $ S.pack user)
-                       (S.pack pool)
-                        min_period
-                        shutdown
+-- Attempt to create a unique daemon name
+-- FIXME: is this what we actually want?
+uniqueDaemonName :: URI -> String -> IO Name
+uniqueDaemonName broker_uri n = do
+  u <- newUnique
+  return $ concat [broker_uri, ":", n, "-", show $ hashUnique u]

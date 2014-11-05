@@ -41,7 +41,6 @@ data Component = Broker
                | Reader
                | Writer { bucketSize :: Word64 }
                | Contents
-               | Telemetry Int
 
 -- | Command line option parsing
 
@@ -191,8 +190,6 @@ main = do
             runWriterDaemon pool user broker roll_over_size quit
         Contents ->
             runContentsDaemon pool user broker quit
-        Telemetry min_period ->
-            runTelemetryDaemon pool user broker min_period quit
 
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"

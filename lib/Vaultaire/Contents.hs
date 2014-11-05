@@ -13,15 +13,12 @@
 {-# LANGUAGE RankNTypes        #-}
 
 module Vaultaire.Contents
-(
-    startContents,
-) where
+     ( startContents )
+where
 
 import Control.Applicative
-import Control.Concurrent (MVar)
 import Control.Exception
 import Data.Bits
-import Data.ByteString (ByteString)
 import Data.Maybe (isJust)
 import Data.Monoid (mempty)
 import Data.Word (Word64)
@@ -32,15 +29,10 @@ import Vaultaire.Daemon
 import qualified Vaultaire.InternalStore as InternalStore
 import Vaultaire.Types
 
--- | Start a writer daemon, never returns.
-startContents
-    :: String           -- ^ Broker
-    -> Maybe ByteString -- ^ Username for Ceph
-    -> ByteString       -- ^ Pool name for Ceph
-    -> MVar ()
-    -> IO ()
-startContents broker user pool shutdown = do
-    handleMessages broker user pool shutdown handleRequest
+-- | Start a contents daemon, never returns.
+--
+startContents :: DaemonArgs -> IO ()
+startContents = flip handleMessages handleRequest
 
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply origin payload) =
