@@ -30,6 +30,7 @@ import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import qualified Data.ByteString.Char8 as S
 import Data.Unique
+import Data.Maybe
 import Data.Word (Word64)
 import Pipes
 import System.Log.Logger
@@ -98,7 +99,8 @@ runReaderDaemon :: String -> String -> URI -> MVar () -> Maybe Period
 runReaderDaemon pool user broker_uri end profiling_period = do
     infoM "Daemons.runReaderDaemon" "Reader daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5571")
-                        "reader" pool user end profiling_period
+                       pool user end
+                       (const "reader" <$> profiling_period)
     forkThreads (startReader   args)
                 (startProfiler args <$> profiling_period)
 
@@ -107,7 +109,8 @@ runWriterDaemon :: String -> String -> URI -> Word64 -> MVar () -> Maybe Period
 runWriterDaemon pool user broker_uri bucket_size end profiling_period = do
     infoM "Daemons.runWriterDaemon" "Writer daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5561")
-                        "writer" pool user end profiling_period
+                       pool user end
+                       (const "writer" <$> profiling_period)
     forkThreads (startWriter args bucket_size)
                 (startProfiler args <$> profiling_period)
 
@@ -116,18 +119,22 @@ runContentsDaemon :: String -> String -> URI -> MVar () -> Maybe Period
 runContentsDaemon pool user broker_uri end profiling_period = do
     infoM "Daemons.runContentsDaemon" "Contents daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5581")
-                        "contents" pool user end profiling_period
+                       pool user end
+                       (const "contents" <$> profiling_period)
     forkThreads (startContents args)
                 (startProfiler args <$> profiling_period)
 
-daemonArgs :: String -> URI -> String -> String -> MVar () -> Maybe Period
+-- | Convient helper for creating daemon args.
+daemonArgs :: URI -> String -> String -> MVar ()
+           -> Maybe Name
            -> IO DaemonArgs
-daemonArgs n full_broker_uri pool user end profiling_period = do
-    uname <- uniqueDaemonName full_broker_uri n
+daemonArgs full_broker_uri pool user end mname = do
     prof  <- maybe (return Nothing)
-                   (fmap Just . setupProfiling uname)
-                   profiling_period
-    return $ DaemonArgs full_broker_uri uname
+                   (\s -> do uname <- uniqueDaemonName full_broker_uri s
+                             conn  <- setupProfiling uname
+                             return $ Just conn)
+                   mname
+    return $ DaemonArgs full_broker_uri
                         (Just $ S.pack user)
                         (S.pack pool)
                         end prof

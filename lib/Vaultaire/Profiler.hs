@@ -23,11 +23,8 @@ import           Vaultaire.Types
 
 
 startProfiler :: DaemonArgs -> Period -> IO ()
-startProfiler args = undefined
+startProfiler args period = runDaemon args $ report args period
 
--- | Listen on profiling channel for reports from other daemons,
---   aggregate them (count/average/etc) and construct a telemetric response.
---
 report :: DaemonArgs -> Period -> Daemon ()
 report args period = do
     -- Read at most N reports from the profiling channel (N = size of the channel)

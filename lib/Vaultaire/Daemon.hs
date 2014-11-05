@@ -94,7 +94,6 @@ newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConns Pool) a)
 --
 data DaemonArgs = DaemonArgs
    { broker      :: URI                      -- ^ Broker, e.g. example.com
-   , dname       :: Name                     -- ^ Unique name for this daemon
    , ceph_user   :: Maybe ByteString         -- ^ Username for Ceph
    , ceph_pool   :: ByteString               -- ^ Pool name for Ceph
    , shutdown    :: MVar ()                  -- ^ Shutdown signal
@@ -436,8 +435,8 @@ setupSharedConnection broker = do
     mvar <- newMVar sock
     return (ctx, mvar)
 
-setupProfiling :: Name -> Period -> IO InternalConnection
-setupProfiling name _ = do
+setupProfiling :: Name -> IO InternalConnection
+setupProfiling name = do
     -- We use the @Newest@ buffer for the internal report queue
     -- so that old reports will be removed if the buffer is full.
     -- This means the internal will lose precision but not have
