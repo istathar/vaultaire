@@ -1,59 +1,53 @@
-module Vaultaire.Telemetry
-     ( startTelemetry
-     , telemetryChan )
+module Vaultaire.Profiler
+     ( Period
+     , startProfiler )
 where
 
+import           Control.Applicative
+import           Control.Concurrent
 import           Control.Concurrent.MVar
+import           Control.Monad.Reader
+import           Control.Monad.State.Strict
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Map.Strict as M
 import           Data.Word
 import           Pipes
-import           Pipes.Parse
+import           Pipes.Concurrent
+import           Pipes.Lift
+import           Pipes.Parse (foldAll)
+import           System.Log.Logger
 
 import           Vaultaire.Daemon
 import           Vaultaire.Types
 
 
--- | Start a telemetry thread
-startTelemetry
-  :: String           -- ^ Broker
-  -> Int              -- ^ Frequency
-  -> MVar ()          -- ^ Shutdown signal
-  -> IO ()
-startTelemetry broker period shutdown = undefined
-
-telemetryChan :: Daemon (Input TeleMsg)
-telemetryChan = inchan <$> ask
-
-handleRequest :: Int -> Message -> Daemon ()
-handleRequest min_period (Message reply_f origin payload) = case fromWire payload of
-    Right (TeleRequest period agent) -> do
-          if period < min_period
-          then liftIO $ errorM "Telemetry.handleRequest"
-                      $  "requested period "                  ++ show period
-                      ++ " is less than the minimum allowed " ++ show min_period
-          else forever $ ask >>= report origin reply_f period . inchan
-
-    Left e -> liftIO $ errorM "Telemetry.handleRequest" $ "failed to decode request: " ++ show e
+startProfiler :: DaemonArgs -> Period -> IO ()
+startProfiler args = undefined
 
 -- | Listen on profiling channel for reports from other daemons,
 --   aggregate them (count/average/etc) and construct a telemetric response.
 --
-report :: Origin -> ReplyF -> Int -> Input TeleMsg -> Daemon ()
-report org reply_f period chan = undefined
+report :: DaemonArgs -> Period -> Daemon ()
+report args period = do
     -- Read at most N reports from the profiling channel (N = size of the channel)
     -- since new reports would still be coming in after we have commenced this operation.
-    msgs <- aggregate $ fromInputUntil undefined
-    mapM (reply_f . mkResp) msgs
+    msgs <- aggregate $ fromInputUntil size
+    mapM (publish . mkResp) msgs
     -- Sleep for <period>
-    threadDelay period
+    liftIO $ threadDelay period
     where fromInputUntil n = evalStateP 0 $ do
             x <- lift $ get
-            if x <= n then fromInput chan else return ()
+            c <- lift $ ask
+            when (x <= n)
+               $ maybe (return ()) fromInput
+                       (internalChanIn c)
           mkResp msg = do
             t <- getCurrentTimeNanoseconds
-            return $ TeleResp org t msg
+            return $ TeleResp origin t msg
+          publish = undefined
+          size    = undefined
+          origin  = undefined
 
 -- | Aggregate telemetric reports, guaranteed to process only N reports
 --   see @report@.

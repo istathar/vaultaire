@@ -15,16 +15,17 @@
 -- | This module encapsulates the various daemons that you might want to start
 -- up as part of a Vaultaire cluster, along with their default behaviours.
 --
-module DaemonRunners
-(
-   forkThread,
+module DaemonRunners (
+   DaemonProcess,
+   waitDaemon,
    runBrokerDaemon,
    runWriterDaemon,
    runReaderDaemon,
-   runContentsDaemon
-)
-where
+   runContentsDaemon,
+   forkThread
+   ) where
 
+import Control.Applicative
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import qualified Data.ByteString.Char8 as S
@@ -39,25 +40,39 @@ import Vaultaire.Types
 import Vaultaire.Daemon
 import Vaultaire.Broker
 import Vaultaire.Contents (startContents)
-import Vaultaire.Reader (startReader)
-import Vaultaire.Writer (startWriter)
+import Vaultaire.Reader   (startReader)
+import Vaultaire.Writer   (startWriter)
+import Vaultaire.Profiler (startProfiler)
 
 
 -- have an option for forking a telemetry thread associated with a worker thread
 
-forkThread :: IO a -> IO (Async a)
+type DaemonProcess a = ( Async a           -- worker thread
+                       , Maybe (Async ())) -- profiler thread
+
+waitDaemon :: DaemonProcess a -> IO a
+waitDaemon (worker, Nothing)       =         wait     worker
+waitDaemon (worker, Just profiler) = fst <$> waitBoth worker profiler
+
+forkThread  :: IO a -> IO (Async a)
 forkThread action = do
     a <- async action
     link a
     return a
 
+forkThreads :: IO a -> Maybe (IO ()) -> IO (DaemonProcess a)
+forkThreads action profiler = do
+    a <- async action
+    link a
+    b <- maybe (return Nothing) (fmap Just . async) profiler
+    return (a, b)
 
 linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
 linkThreadZMQ a = (liftIO . link) =<< Z.async a
 
-runBrokerDaemon :: MVar () -> IO (Async ())
-runBrokerDaemon shutdown_signal =
-    forkThread $ do
+runBrokerDaemon :: MVar () -> IO (DaemonProcess ())
+runBrokerDaemon end =
+    flip forkThreads Nothing $ do
         infoM "Daemons.runBroker_uriDaemon" "Broker_uri daemon started"
         runZMQ $ do
             -- Writer proxy.
@@ -76,41 +91,46 @@ runBrokerDaemon shutdown_signal =
             linkThreadZMQ $ startProxy
                 (Router,"tcp://*:5590") (Dealer,"tcp://*:5591") "tcp://*:5003"
 
-        readMVar shutdown_signal
+        readMVar end
 
-runReaderDaemon :: URI -> String -> String -> MVar () -> IO (Async ())
-runReaderDaemon broker_uri user pool shutdown_signal =
-    forkThread $ do
-        infoM "Daemons.runReaderDaemon" "Reader daemon started"
-        uname <- uniqueDaemonName broker_uri "reader"
-        startReader $ DaemonArgs ("tcp://" ++ broker_uri ++ ":5571")
-                                 uname
-                                 (Just $ S.pack user)
-                                 (S.pack pool)
-                                 shutdown_signal
+runReaderDaemon :: String -> String -> URI -> MVar () -> Maybe Period
+                -> IO (DaemonProcess ())
+runReaderDaemon pool user broker_uri end profiling_period = do
+    infoM "Daemons.runReaderDaemon" "Reader daemon starting"
+    args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5571")
+                        "reader" pool user end profiling_period
+    forkThreads (startReader   args)
+                (startProfiler args <$> profiling_period)
 
-runWriterDaemon :: String -> String -> String -> Word64 -> MVar () -> IO (Async ())
-runWriterDaemon pool user broker_uri bucket_size shutdown_signal =
-    forkThread $ do
-        infoM "Daemons.runWriterDaemon" "Writer daemon started"
-        uname <- uniqueDaemonName broker_uri "writer"
-        startWriter (DaemonArgs ("tcp://" ++ broker_uri ++ ":5561")
-                                uname
-                                (Just $ S.pack user)
-                                (S.pack pool)
-                                shutdown_signal)
-                     bucket_size
+runWriterDaemon :: String -> String -> URI -> Word64 -> MVar () -> Maybe Period
+                -> IO (DaemonProcess ())
+runWriterDaemon pool user broker_uri bucket_size end profiling_period = do
+    infoM "Daemons.runWriterDaemon" "Writer daemon starting"
+    args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5561")
+                        "writer" pool user end profiling_period
+    forkThreads (startWriter args bucket_size)
+                (startProfiler args <$> profiling_period)
 
-runContentsDaemon :: String -> String -> String -> MVar () -> IO (Async ())
-runContentsDaemon pool user broker_uri shutdown_signal =
-    forkThread $ do
-        infoM "Daemons.runContentsDaemon" "Contents daemon started"
-        uname <- uniqueDaemonName broker_uri "contents"
-        startContents $ DaemonArgs ("tcp://" ++ broker_uri ++ ":5581")
-                                   uname
-                                   (Just $ S.pack user)
-                                   (S.pack pool)
-                                   shutdown_signal
+runContentsDaemon :: String -> String -> URI -> MVar () -> Maybe Period
+                  -> IO (DaemonProcess ())
+runContentsDaemon pool user broker_uri end profiling_period = do
+    infoM "Daemons.runContentsDaemon" "Contents daemon starting"
+    args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5581")
+                        "contents" pool user end profiling_period
+    forkThreads (startContents args)
+                (startProfiler args <$> profiling_period)
+
+daemonArgs :: String -> URI -> String -> String -> MVar () -> Maybe Period
+           -> IO DaemonArgs
+daemonArgs n full_broker_uri pool user end profiling_period = do
+    uname <- uniqueDaemonName full_broker_uri n
+    prof  <- maybe (return Nothing)
+                   (fmap Just . setupProfiling uname)
+                   profiling_period
+    return $ DaemonArgs full_broker_uri uname
+                        (Just $ S.pack user)
+                        (S.pack pool)
+                        end prof
 
 -- Attempt to create a unique daemon name
 -- FIXME: is this what we actually want?

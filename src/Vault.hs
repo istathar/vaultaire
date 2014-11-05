@@ -185,13 +185,14 @@ main = do
         Broker ->
             runBrokerDaemon quit
         Reader ->
-            runReaderDaemon pool user broker quit
+            runReaderDaemon pool user broker quit prof
         Writer roll_over_size ->
-            runWriterDaemon pool user broker roll_over_size quit
+            runWriterDaemon pool user broker roll_over_size quit prof
         Contents ->
-            runContentsDaemon pool user broker quit
+            runContentsDaemon pool user broker quit prof
 
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"
-    _ <- wait a
+    _ <- waitDaemon a
     debugM "Main.main" "End"
+    where prof = undefined

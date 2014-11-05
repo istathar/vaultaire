@@ -19,6 +19,7 @@ module Vaultaire.Daemon
     DaemonArgs(..),
     DaemonConns,
     Name,
+    Period,
     Message(..),
     ReplyF,
     Address(..),
@@ -27,6 +28,7 @@ module Vaultaire.Daemon
     BucketSize,
     -- * Functions
     runDaemon,
+    setupProfiling,
     handleMessages,
     liftPool,
     nextMessage,
@@ -88,24 +90,26 @@ newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConns Pool) a)
   deriving ( Functor, Applicative, Monad, MonadIO
            , MonadReader DaemonConns, MonadState OriginDays)
 
--- | The minimal argumetns needed to run any daemon.
+-- | The minimal arguments needed to run any daemon.
 --
 data DaemonArgs = DaemonArgs
-   { broker      :: URI              -- ^ Broker, e.g. example.com
-   , dname       :: Name             -- ^ Unique name for this daemon
-   , ceph_user   :: Maybe ByteString -- ^ Username for Ceph
-   , ceph_pool   :: ByteString       -- ^ Pool name for Ceph
-   , shutdown    :: MVar ()          -- ^ Shutdown signal
+   { broker      :: URI                      -- ^ Broker, e.g. example.com
+   , dname       :: Name                     -- ^ Unique name for this daemon
+   , ceph_user   :: Maybe ByteString         -- ^ Username for Ceph
+   , ceph_pool   :: ByteString               -- ^ Pool name for Ceph
+   , shutdown    :: MVar ()                  -- ^ Shutdown signal
+   , profiling   :: Maybe InternalConnection -- ^ Intra-daemon channel for profiling
    }
 
-type DaemonConns = (SharedConnection, InternalConnection)
+type DaemonConns = (SharedConnection, Maybe InternalConnection)
 
 -- | Handle to communicate with the internal thread.
 --
 data InternalConnection = InternalConnection
    { aname   :: AgentID
    , outchan :: Output TeleMsg
-   , inchan  :: Input TeleMsg }
+   , inchan  :: Input TeleMsg
+   , seal    :: STM () }
 
 -- | Handle to commuicate with the 0MQ router.
 type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
@@ -134,6 +138,10 @@ type ReplyF     = WireFormat w => w -> Daemon ()
 type Payload    = Word64
 type Bucket     = Word64
 type BucketSize = Word64
+
+-- | Profiling period
+type Period     = Int
+
 
 -- | Handle messages using an arbitrary concurrency abstraction.
 --
@@ -168,10 +176,8 @@ runDaemon :: DaemonArgs -- ^ With these arguments
           -> Daemon a   -- ^ Run this daemon
           -> IO a
 runDaemon DaemonArgs{..} (Daemon a) =
-    bracket (do s <- setupSharedConnection broker
-                p <- setupInternalConnection dname
-                return (s, p))
-            (\((ctx, conn), (_, seal)) -> do
+    bracket (setupSharedConnection broker)
+            (\(ctx, conn) -> do
                 -- clean up shared connection (ZMQ)
                 sock <- takeMVar conn
                 ZMQ.close sock
@@ -179,11 +185,11 @@ runDaemon DaemonArgs{..} (Daemon a) =
                 -- clean up internal connection
                 -- this will be garbage collected but we might
                 -- as well clean it up early
-                atomically seal)
-            (\((_, conn), (internal, _)) ->
-                withPool ceph_user ceph_pool $
-                    runReaderT (evalStateT a emptyOriginMap)
-                               (conn, internal))
+                maybe (return ())
+                      atomically (seal <$> profiling))
+            (\(_, conn) -> withPool ceph_user ceph_pool
+                         $ flip runReaderT (conn, profiling)
+                         $ evalStateT a emptyOriginMap)
 
 -- Connect to ceph and run your pool action
 withPool :: Maybe ByteString -> ByteString -> Pool a -> IO a
@@ -430,11 +436,8 @@ setupSharedConnection broker = do
     mvar <- newMVar sock
     return (ctx, mvar)
 
--- | Internal connection for internal.
-setupInternalConnection
-    :: Name
-    -> IO (InternalConnection, STM ())
-setupInternalConnection name = do
+setupProfiling :: Name -> Period -> IO InternalConnection
+setupProfiling name _ = do
     -- We use the @Newest@ buffer for the internal report queue
     -- so that old reports will be removed if the buffer is full.
     -- This means the internal will lose precision but not have
@@ -445,16 +448,19 @@ setupInternalConnection name = do
                    return mempty)
                (return)
                (agentID name)
-    return (InternalConnection n output input, seal)
-
+    return $ InternalConnection n output input seal
 
 -- Convenience/Nice
 
-sharedConn      = fst
+sharedConn :: DaemonConns -> SharedConnection
+sharedConn = fst
 {-# INLINE sharedConn #-}
-daemonName      = aname . snd
+daemonName :: DaemonConns -> Maybe AgentID
+daemonName x = aname <$> snd x
 {-# INLINE daemonName #-}
-internalChanOut = outchan . snd
+internalChanOut :: DaemonConns -> Maybe (Output TeleMsg)
+internalChanOut x = outchan <$> snd x
 {-# INLINE internalChanOut #-}
-internalChanIn  = inchan  . snd
+internalChanIn :: DaemonConns -> Maybe (Input TeleMsg)
+internalChanIn x = inchan <$> snd x
 {-# INLINE internalChanIn #-}
