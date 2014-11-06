@@ -17,7 +17,7 @@ module Vaultaire.Daemon
     -- * Types
     Daemon,
     DaemonArgs(..),
-    DaemonConns,
+    DaemonEnv,
     Name,
     Period,
     Message(..),
@@ -28,7 +28,6 @@ module Vaultaire.Daemon
     BucketSize,
     -- * Functions
     runDaemon,
-    setupProfiling,
     handleMessages,
     liftPool,
     nextMessage,
@@ -65,6 +64,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Maybe
 import Data.Monoid
+import Data.Time.Clock.POSIX
 import Data.Word (Word64)
 import Pipes.Concurrent (Output, Input, Buffer(..), spawn')
 import System.Log.Logger
@@ -86,37 +86,34 @@ import Vaultaire.Util
 -- retrieval and reply. The underlying base monad is a rados 'Pool', you can
 -- lift to this via 'liftPool'.
 --
-newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonConns Pool) a)
+newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonEnv Pool) a)
   deriving ( Functor, Applicative, Monad, MonadIO
-           , MonadReader DaemonConns, MonadState OriginDays)
+           , MonadReader DaemonEnv, MonadState OriginDays)
 
 -- | The minimal arguments needed to run any daemon.
 --
 data DaemonArgs = DaemonArgs
-   { broker      :: URI                      -- ^ Broker, e.g. example.com
-   , ceph_user   :: Maybe ByteString         -- ^ Username for Ceph
-   , ceph_pool   :: ByteString               -- ^ Pool name for Ceph
-   , shutdown    :: MVar ()                  -- ^ Shutdown signal
-   , profiling   :: Maybe InternalConnection -- ^ Intra-daemon channel for profiling
+   { broker      :: URI              -- ^ Broker, e.g. example.com
+   , ceph_user   :: Maybe ByteString -- ^ Username for Ceph
+   , ceph_pool   :: ByteString       -- ^ Pool name for Ceph
+   , shutdown    :: MVar ()          -- ^ Shutdown signal
+   , profiler    :: Profiler         -- ^ Profiler interface to use for this daemon
    }
 
-type DaemonConns = (SharedConnection, Maybe InternalConnection)
-
--- | Handle to communicate with the internal thread.
---
-data InternalConnection = InternalConnection
-   { aname   :: AgentID
-   , outchan :: Output TeleMsg
-   , inchan  :: Input TeleMsg
-   , seal    :: STM () }
+type DaemonEnv = (SharedConnection, Profiler)
 
 -- | Handle to commuicate with the 0MQ router.
 type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
 
--- | Unique name for the daemon. User is responsible for ensuring
---   the name is not already in use.
---
-type Name = String
+data Profiler = Profiler
+   { aname     :: AgentID
+   , outchan   :: Output TeleMsg
+   , inchan    :: Input TeleMsg
+   , seal      :: IO ()
+   -- Dictionary of reporting functions.
+   -- without profiling, they should become no-op's.
+   , profCount :: MonadIO m => TeleMsgType -> m ()
+   , profTime  :: MonadIO m => TeleMsgType -> m r -> m r }
 
 -- | Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
@@ -184,10 +181,9 @@ runDaemon DaemonArgs{..} (Daemon a) =
                 -- clean up internal connection
                 -- this will be garbage collected but we might
                 -- as well clean it up early
-                maybe (return ())
-                      atomically (seal <$> profiling))
+                seal profiler)
             (\(_, conn) -> withPool ceph_user ceph_pool
-                         $ flip runReaderT (conn, profiling)
+                         $ flip runReaderT (conn, profiler)
                          $ evalStateT a emptyOriginMap)
 
 -- Connect to ceph and run your pool action
@@ -435,31 +431,17 @@ setupSharedConnection broker = do
     mvar <- newMVar sock
     return (ctx, mvar)
 
-setupProfiling :: Name -> IO InternalConnection
-setupProfiling name = do
-    -- We use the @Newest@ buffer for the internal report queue
-    -- so that old reports will be removed if the buffer is full.
-    -- This means the internal will lose precision but not have
-    -- an impact on performance if there is too much activity.
-    (output, input, seal) <- spawn' $ Newest 1024
-    n <- maybe (do errorM  "Daemon.setupInternalConnection"
-                          ("The daemon name given is invalid: " ++ name)
-                   return mempty)
-               (return)
-               (agentID name)
-    return $ InternalConnection n output input seal
-
 -- Convenience/Nice
 
-sharedConn :: DaemonConns -> SharedConnection
+sharedConn :: DaemonEnv -> SharedConnection
 sharedConn = fst
 {-# INLINE sharedConn #-}
-daemonName :: DaemonConns -> Maybe AgentID
+daemonName :: DaemonEnv -> Maybe AgentID
 daemonName x = aname <$> snd x
 {-# INLINE daemonName #-}
-internalChanOut :: DaemonConns -> Maybe (Output TeleMsg)
+internalChanOut :: DaemonEnv -> Maybe (Output TeleMsg)
 internalChanOut x = outchan <$> snd x
 {-# INLINE internalChanOut #-}
-internalChanIn :: DaemonConns -> Maybe (Input TeleMsg)
+internalChanIn :: DaemonEnv -> Maybe (Input TeleMsg)
 internalChanIn x = inchan <$> snd x
 {-# INLINE internalChanIn #-}

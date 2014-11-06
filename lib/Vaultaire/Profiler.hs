@@ -1,6 +1,8 @@
 module Vaultaire.Profiler
      ( Period
-     , startProfiler )
+     , startProfiler
+     , noProfiler
+     , hasProfiler )
 where
 
 import           Control.Applicative
@@ -11,6 +13,7 @@ import           Control.Monad.State.Strict
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Map.Strict as M
+import           Data.Time.Clock.POSIX
 import           Data.Word
 import           Pipes
 import           Pipes.Concurrent
@@ -18,15 +21,49 @@ import           Pipes.Lift
 import           Pipes.Parse (foldAll)
 import           System.Log.Logger
 
-import           Vaultaire.Daemon
 import           Vaultaire.Types
+import           Vaultaire.Daemon
 
 
 startProfiler :: DaemonArgs -> Period -> IO ()
-startProfiler args period = runDaemon args $ report args period
+startProfiler args period = runDaemon args $ publish args period
 
-report :: DaemonArgs -> Period -> Daemon ()
-report args period = do
+noProfiler :: Profiler
+noProfiler =  Profiler
+    { aname       = agentID ""
+    , outchan     = Output { send = const $ return False }
+    , inchan      = Input  { recv = return Nothing       }
+    , seal        = return ()
+    , profCount _ = return ()
+    , profTime _  = id }
+
+hasProfiler :: String -> Period -> IO Profiler
+hasProfiler =  do
+    n <- maybe (do errorM  "Daemon.setupProfiler"
+                          ("The daemon name given is invalid: " ++ name)
+                   return mempty)
+               (return)
+               (agentID name)
+    -- We use the @Newest@ buffer for the internal report queue
+    -- so that old reports will be removed if the buffer is full.
+    -- This means the internal will lose precision but not have
+    -- an impact on performance if there is too much activity.
+    (output, input, sealchan) <- spawn' $ Newest 1024
+    return $ Profiler
+           { aname           = agentID n
+           , outchan         = output
+           , inchan          = input
+           , seal            = atomically   sealchan
+           , profCount t     = atomically $ send $ TeleMsg t 1
+           , profTime  t act = do t1 <- getPOSIXTime
+                                  r  <- act
+                                  t2 <- getPOSIXTime
+                                  atomically $ send $ TeleMsg t (t2 - t1)
+                                  return r
+           }
+
+publish :: DaemonArgs -> Period -> Daemon ()
+publish report args period = do
     -- Read at most N reports from the profiling channel (N = size of the channel)
     -- since new reports would still be coming in after we have commenced this operation.
     msgs <- aggregate $ fromInputUntil size
