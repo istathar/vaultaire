@@ -56,6 +56,7 @@ library
                      vaultaire-common >= 2.7.2,
                      text,
                      unix,
+                     unix-time,
                      rados-haskell >= 3.0.3
 
   ghc-options:       -O2

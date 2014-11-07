@@ -18,7 +18,7 @@ module Vaultaire.Daemon
     Daemon,
     DaemonArgs(..),
     DaemonEnv,
-    Name,
+    Profiler(..),
     Period,
     Message(..),
     ReplyF,
@@ -44,11 +44,7 @@ module Vaultaire.Daemon
     extendedDayOID,
     bucketOID,
     withPool,
-    -- * Nice wrappers
-    sharedConn,
-    daemonName,
-    internalChanOut,
-    internalChanIn,
+    sharedConn
 ) where
 
 import Control.Applicative
@@ -56,17 +52,14 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
-import Control.Monad.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Maybe
-import Data.Monoid
-import Data.Time.Clock.POSIX
 import Data.Word (Word64)
-import Pipes.Concurrent (Output, Input, Buffer(..), spawn')
+import Pipes.Concurrent (Output, Input)
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
@@ -436,12 +429,3 @@ setupSharedConnection broker = do
 sharedConn :: DaemonEnv -> SharedConnection
 sharedConn = fst
 {-# INLINE sharedConn #-}
-daemonName :: DaemonEnv -> Maybe AgentID
-daemonName x = aname <$> snd x
-{-# INLINE daemonName #-}
-internalChanOut :: DaemonEnv -> Maybe (Output TeleMsg)
-internalChanOut x = outchan <$> snd x
-{-# INLINE internalChanOut #-}
-internalChanIn :: DaemonEnv -> Maybe (Input TeleMsg)
-internalChanIn x = inchan <$> snd x
-{-# INLINE internalChanIn #-}

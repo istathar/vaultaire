@@ -37,6 +37,7 @@ import Text.Printf
 import Vaultaire.Daemon
 import Vaultaire.DayMap
 import Vaultaire.RollOver
+import Vaultaire.Profiler
 import Vaultaire.Types
 import Vaultaire.Util (fatal)
 
@@ -65,12 +66,8 @@ batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
 processBatch :: BucketSize -> Message -> Daemon ()
-processBatch bucket_size (Message reply origin payload) = do
+processBatch bucket_size (Message reply origin payload) = profileTime WriterRequestLatency $ do
     let bytes = S.length payload
-    t1 <- liftIO getCurrentTime
-
-    liftIO $ infoM "Writer.processBatch"
-                (show origin ++ " Processing " ++ printf "%9d" bytes ++ " B")
 
     write_state <- withLockShared (originLockOID origin) $ do
         refreshOriginDays origin
@@ -89,25 +86,17 @@ processBatch bucket_size (Message reply origin payload) = do
                 return . Just . flip execState s $
                     processPoints 0 payload (dayMaps s) origin (latestSimple s) (latestExtended s)
 
-    result <- case write_state of
+    case write_state of
         Nothing -> reply InvalidWriteOrigin
         Just s -> do
-            write origin True s
+            profileTime WriterCephLatency $ write origin True s
             reply OnDisk
-
-    t2 <- liftIO getCurrentTime
-    let delta = diffUTCTime t2 t1
-    let delta_float = (fromRational . toRational) bytes / (fromRational . toRational) delta / 1000 :: Float
-    let delta_padded = printf "%9.1f" delta_float
-    liftIO $ infoM "Writer.processBatch"
-                (show origin ++ " Finished   " ++ delta_padded ++ " kB/s")
-    return result
 
 processPoints :: MonadState BatchState m
               => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
 processPoints offset message day_maps origin latest_simple latest_ext
     | fromIntegral offset >= S.length message = modify (\s -> s{ latestSimple = latest_simple
-                                                                , latestExtended = latest_ext })
+                                                               , latestExtended = latest_ext })
     | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (simple_epoch, simple_buckets) = lookupFirst time (fst day_maps)
