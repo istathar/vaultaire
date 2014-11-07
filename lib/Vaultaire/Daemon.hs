@@ -100,13 +100,14 @@ type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
 
 data Profiler = Profiler
    { aname     :: AgentID
+   , bound     :: Int
    , outchan   :: Output TeleMsg
    , inchan    :: Input TeleMsg
    , seal      :: IO ()
    -- Dictionary of reporting functions.
    -- without profiling, they should become no-op's.
-   , profCount :: MonadIO m => TeleMsgType -> m ()
-   , profTime  :: MonadIO m => TeleMsgType -> m r -> m r }
+   , profCount :: MonadIO m => TeleMsgType -> Origin -> m ()
+   , profTime  :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
 
 -- | Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))

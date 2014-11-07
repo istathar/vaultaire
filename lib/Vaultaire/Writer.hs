@@ -66,7 +66,7 @@ batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
 processBatch :: BucketSize -> Message -> Daemon ()
-processBatch bucket_size (Message reply origin payload) = profileTime WriterRequestLatency $ do
+processBatch bucket_size (Message reply origin payload) = profileTime WriterRequestLatency origin $ do
     let bytes = S.length payload
 
     write_state <- withLockShared (originLockOID origin) $ do
@@ -89,7 +89,7 @@ processBatch bucket_size (Message reply origin payload) = profileTime WriterRequ
     case write_state of
         Nothing -> reply InvalidWriteOrigin
         Just s -> do
-            profileTime WriterCephLatency $ write origin True s
+            profileTime WriterCephLatency origin $ write origin True s
             reply OnDisk
 
 processPoints :: MonadState BatchState m
