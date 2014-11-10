@@ -14,7 +14,6 @@
 
 module Main where
 
-import Control.Concurrent.Async
 import Control.Monad
 import Data.Maybe (fromJust)
 import Data.Word (Word64)
@@ -23,6 +22,7 @@ import qualified Options.Applicative as O
 import System.Directory
 import System.Log.Logger
 import Text.Trifecta
+import Text.Read
 
 import DaemonRunners
 import Package (package, version)
@@ -35,6 +35,8 @@ data Options = Options
   , broker    :: String
   , debug     :: Bool
   , quiet     :: Bool
+  , profile   :: Bool
+  , period    :: Int
   , component :: Component }
 
 data Component = Broker
@@ -53,6 +55,8 @@ optionsParser Options{..} = Options <$> parsePool
                                     <*> parseBroker
                                     <*> parseDebug
                                     <*> parseQuiet
+                                    <*> parseProfile
+                                    <*> parsePeriod
                                     <*> parseComponents
   where
     parsePool = strOption $
@@ -88,6 +92,18 @@ optionsParser Options{..} = Options <$> parsePool
            long "quiet"
         <> short 'q'
         <> help "Only emit warnings or fatal messages"
+
+    parseProfile = switch $
+           long "profiling"
+        <> short 'p'
+        <> help "Enables profiling"
+
+    parsePeriod = O.option auto $
+           long "period"
+        <> short 't'
+        <> metavar "PERIOD"
+        <> value period
+        <> showDefault
 
     parseComponents = subparser
        (  parseBrokerComponent
@@ -134,13 +150,15 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False Broker
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False True 10000 Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
                 <*> lookup "broker" ls `mplus` pure broker
                 <*> pure debug
                 <*> pure quiet
+                <*> pure profile
+                <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
                 <*> pure Broker
 
 configParser :: Parser [(String, String)]

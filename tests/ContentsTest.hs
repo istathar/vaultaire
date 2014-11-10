@@ -19,6 +19,7 @@ import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
+import Control.Applicative
 import Control.Concurrent
 import Data.HashMap.Strict (fromList)
 import Data.String
@@ -31,6 +32,7 @@ import Test.QuickCheck.Monadic (assert, monadicIO, run)
 import TestHelpers
 import Vaultaire.Broker
 import Vaultaire.Contents
+import Vaultaire.Daemon (daemonArgs)
 import Vaultaire.Util
 
 startDaemons :: IO ()
@@ -41,7 +43,8 @@ startDaemons = do
                             (Dealer,"tcp://*:5581") "tcp://*:5008"
         readMVar shutdown
 
-    linkThread $ startContents "tcp://localhost:5581" Nothing "test" shutdown
+    linkThread $  startContents
+              <$> daemonArgs "tcp://localhost:5581" Nothing "test" shutdown Nothing
 
 main :: IO ()
 main = do

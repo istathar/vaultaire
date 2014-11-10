@@ -16,9 +16,10 @@
 module Main where
 
 
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
-import qualified Data.ByteString.Char8 as S
+import Control.Monad
 import Data.HashMap.Strict (fromList)
 import Data.Text
 import Pipes
@@ -32,7 +33,7 @@ import DaemonRunners
 import Marquise.Client
 import Marquise.Server
 import TestHelpers (cleanup)
-import Vaultaire.Daemon
+import Vaultaire.Daemon hiding (shutdown, broker)
 
 pool :: String
 pool = "test"
@@ -42,7 +43,8 @@ user = "vaultaire"
 
 destroyExistingVault :: IO ()
 destroyExistingVault =
-    runDaemon "inproc://1" (Just (S.pack user)) (S.pack pool) cleanup
+    join $  flip runDaemon cleanup
+        <$> daemonArgsDefault "inproc://1" (Just user) pool
 
 startServerDaemons :: FilePath -> MVar () -> IO ()
 startServerDaemons tmp shutdown =
@@ -55,16 +57,20 @@ startServerDaemons tmp shutdown =
     namespace = "integration"
   in do
     a1 <- runBrokerDaemon shutdown
-    a2 <- runWriterDaemon pool user broker bucket_size shutdown
-    a3 <- runReaderDaemon pool user broker shutdown
-    a4 <- runContentsDaemon pool user broker shutdown
+    a2 <- runWriterDaemon pool user broker bucket_size shutdown Nothing
+    a3 <- runReaderDaemon pool user broker shutdown Nothing
+    a4 <- runContentsDaemon pool user broker shutdown Nothing
     a5 <- runMarquiseDaemon broker origin namespace shutdown tmp 60
-    mapM_ link [a1,a2,a3,a4,a5]
+    -- link the following threads to this main thread
+    mapM_ link [ daemonWorker a1
+               , daemonWorker a2
+               , daemonWorker a3
+               , daemonWorker a4
+               , a5 ]
     runRegisterOrigin pool user origin num_buckets step_size 0 0
 
 setupClientSide :: IO SpoolFiles
-setupClientSide =
-    withMarquiseHandler (error . show) $ createSpoolFiles "integration"
+setupClientSide = crashOnMarquiseErrors $ createSpoolFiles "integration"
 
 --
 -- Sadly, the smazing standard library lacks a standardized way to create a
@@ -134,4 +140,3 @@ pass = return ()
 
 listToDict :: [(Text, Text)] -> SourceDict
 listToDict elts = either error id . makeSourceDict $ fromList elts
-

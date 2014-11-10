@@ -119,8 +119,8 @@ suite = do
 withReplier :: IO a -> IO a
 withReplier f = do
     shutdown <- newEmptyMVar
-    linkThread $
-        handleMessages "tcp://localhost:5561" Nothing "test" shutdown handler
+    linkThread $  flip handleMessages handler
+              <$> daemonArgs "tcp://localhost:5561" Nothing "test" shutdown Nothing
     r <- f
     putMVar shutdown ()
     return r

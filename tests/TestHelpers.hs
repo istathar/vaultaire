@@ -24,6 +24,8 @@ module TestHelpers
 )
 where
 
+import Control.Applicative
+import Control.Monad
 import Control.Concurrent
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -77,8 +79,9 @@ throwJust =
     maybe (return ()) (error . show)
 
 runTestDaemon :: String -> Daemon a -> IO a
-runTestDaemon broker a =
-    runDaemon broker Nothing "test" (cleanup >> loadState >> a)
+runTestDaemon brokerURI a =
+    join $ flip runDaemon (cleanup >> loadState >> a)
+                      <$> daemonArgsDefault brokerURI Nothing "test"
 
 cleanupTestEnvironment :: IO ()
 cleanupTestEnvironment = runTestDaemon "tcp://localhost:1234" (return ())
@@ -120,20 +123,22 @@ sendTestMsg = runZMQ $ do
     receiveMulti s
 
 startTestDaemons :: MVar () -> IO ()
-startTestDaemons shutdown = do
+startTestDaemons shutdownSig = do
     linkThread $ do
         runZMQ $ startProxy (Router,"tcp://*:5560")
                             (Dealer,"tcp://*:5561")
                             "tcp://*:5000"
-        readMVar shutdown
+        readMVar shutdownSig
 
     linkThread $ do
         runZMQ $ startProxy (Router,"tcp://*:5570")
                             (Dealer,"tcp://*:5571")
                             "tcp://*:5001"
-        readMVar shutdown
-    linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 shutdown
-    linkThread $ startReader "tcp://localhost:5571" Nothing "test" shutdown
+        readMVar shutdownSig
+    linkThread  $  flip startWriter 0
+               <$> daemonArgs "tcp://localhost:5561" Nothing "test" shutdownSig Nothing
+    linkThread  $  startReader
+               <$> daemonArgs "tcp://localhost:5571" Nothing "test" shutdownSig Nothing
 
 readObject :: ByteString -> IO (Either RadosError ByteString)
 readObject = runTestPool . flip runObject readFull

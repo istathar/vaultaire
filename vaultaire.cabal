@@ -427,4 +427,34 @@ benchmark contents-listing
                      -Wwarn
                      -fwarn-tabs
 
+test-suite           profiler-test
+  hs-source-dirs:    tests,src
+  main-is:           ProfilerTest.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     containers,
+                     unordered-containers,
+                     text,
+                     QuickCheck,
+                     marquise >= 3.0.2,
+                     bytestring,
+                     pipes,
+                     semigroups,
+                     async,
+                     hslogger >= 1.2.4,
+                     zeromq4-haskell,
+                     rados-haskell >= 3.0.1,
+                     directory,
+                     vaultaire-common >= 2.7.2,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
 -- vim: set tabstop=21 expandtab:

@@ -44,12 +44,17 @@ module Vaultaire.Daemon
     extendedDayOID,
     bucketOID,
     withPool,
-    sharedConn
+    -- * Smart constructors
+    daemonArgs,
+    daemonArgsDefault,
+    noProfiler,
+    hasProfiler
 ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
 import Control.Monad.Reader
@@ -58,8 +63,11 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Maybe
+import Data.Monoid
+import Data.Unique
+import Data.UnixTime
 import Data.Word (Word64)
-import Pipes.Concurrent (Output, Input)
+import Pipes.Concurrent
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
@@ -101,6 +109,7 @@ type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
 data Profiler = Profiler
    { aname     :: AgentID
    , bound     :: Int
+   , sleep     :: Int
    , outchan   :: Output TeleMsg
    , inchan    :: Input TeleMsg
    , seal      :: IO ()
@@ -196,7 +205,7 @@ liftPool = Daemon . lift . lift
 --   4. The client's payload.
 nextMessage :: Daemon (Maybe Message)
 nextMessage = do
-    conn <- sharedConn <$> ask
+    conn <- fst <$> ask
     liftIO $ withMVar conn $ \c -> do
         result <- ZMQ.poll 10 [ZMQ.Sock c [ZMQ.In] Nothing]
         case result of
@@ -212,7 +221,7 @@ nextMessage = do
                         -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
                         let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
                         in return . Just $
-                            Message (\r -> do var <- sharedConn <$> ask
+                            Message (\r -> do var <- fst <$> ask
                                               liftIO $ withMVar var (send r))
                                     (Origin origin)
                                     payload
@@ -425,8 +434,84 @@ setupSharedConnection broker = do
     mvar <- newMVar sock
     return (ctx, mvar)
 
--- Convenience/Nice
 
-sharedConn :: DaemonEnv -> SharedConnection
-sharedConn = fst
-{-# INLINE sharedConn #-}
+-- Convenience/Smart constructors
+
+-- | Construct daemon arguments with all the provided fields.
+daemonArgs
+  :: URI                    -- ^ Full broker URI, e.g. tcp://example.com:9999
+  -> Maybe String           -- ^ Ceph user
+  -> String                 -- ^ Ceph pool
+  -> MVar ()                -- ^ Shutdown signal
+  -> Maybe (String, Period) -- ^ Profiler information
+  -> IO DaemonArgs
+daemonArgs full_broker_uri user pool end profargs = do
+    prof  <- maybe (return noProfiler)
+                   (\(s,p) -> do uname <- uniqueDaemonName s
+                                 hasProfiler uname p)
+                   profargs
+    return $ DaemonArgs full_broker_uri
+                        (BS.pack <$> user)
+                        (BS.pack     pool)
+                        end prof
+    where -- Attempt to create a unique daemon name
+          -- FIXME: is this what we actually want?
+          uniqueDaemonName n = do
+            u <- newUnique
+            return $ concat [full_broker_uri, ":", n, "-", show $ hashUnique u]
+
+-- | Construct default daemon arguments, with no profiler, no shutdown signal.
+daemonArgsDefault
+  :: URI                    -- ^ Full broker URI, e.g. tcp://example.com:9999
+  -> Maybe String           -- ^ Ceph user
+  -> String                 -- ^ Ceph pool
+  -> IO DaemonArgs
+daemonArgsDefault full_broker_uri user pool = do
+  x <- newEmptyMVar
+  daemonArgs full_broker_uri user pool x Nothing
+
+noProfiler :: Profiler
+noProfiler =  Profiler
+    { aname     = mempty
+    , bound     = 0
+    , sleep     = 0
+    , outchan   = Output { send = const $ return False}
+    , inchan    = Input  { recv = return Nothing }
+    , seal      = return ()
+    , profCount = const $ const $ return ()
+    , profTime  = const $ const id }
+
+hasProfiler :: String -> Period -> IO Profiler
+hasProfiler name period =  do
+    n <- maybe (do errorM  "Daemon.setupProfiler"
+                          ("The daemon name given is invalid: " ++ name ++
+                           ". An empty name has been given to the daemon.")
+                   return mempty)
+               (return)
+               (agentID name)
+    -- We use the @Newest@ buffer for the internal report queue
+    -- so that old reports will be removed if the buffer is full.
+    -- This means the internal will lose precision but not have
+    -- an impact on performance if there is too much activity.
+    (output, input, sealchan) <- spawn' $ Newest 1024
+    return $ Profiler
+           { aname     = n
+           , bound     = 1024
+           , sleep     = period
+           , outchan   = output
+           , inchan    = input
+           , seal      = liftIO $ atomically sealchan
+           , profCount = g output
+           , profTime  = h output }
+    where g outchan timestamp origin = liftIO $ do
+            _ <- atomically (send outchan $ TeleMsg origin timestamp 1)
+            return ()
+          h outchan timestamp origin act = do
+            t1 <- liftIO $ getUnixTime
+            r  <- act
+            t2 <- liftIO $ getUnixTime
+            _  <- liftIO $ atomically $ send outchan
+               $  TeleMsg origin timestamp $ fromIntegral
+               $  udtMicroSeconds
+               $  diffUnixTime t1 t2
+            return r

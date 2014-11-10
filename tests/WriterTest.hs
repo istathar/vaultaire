@@ -125,13 +125,14 @@ suite now = do
                 runObject "02_PONY_simple_latest" remove
 
 
-            shutdown <- newEmptyMVar
+            shutdownSignal <- newEmptyMVar
             linkThread $ do
                 runZMQ $ startProxy (Router,"tcp://*:5560")
                                     (Dealer,"tcp://*:5561") "tcp://*:5000"
-                readMVar shutdown
+                readMVar shutdownSignal
 
-            linkThread $ startWriter "tcp://localhost:5561" Nothing "test" 0 shutdown
+            linkThread  $  flip startWriter 0
+                       <$> daemonArgs "tcp://localhost:5561" Nothing "test" shutdownSignal Nothing
 
             sendTestMsg >>= (`shouldBe` ["\NUL"])
 

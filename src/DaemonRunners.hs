@@ -19,18 +19,18 @@
 module DaemonRunners (
    DaemonProcess,
    waitDaemon,
+   forkThread,
+   daemonWorker,
+   daemonProfiler,
    runBrokerDaemon,
    runWriterDaemon,
    runReaderDaemon,
-   runContentsDaemon,
-   forkThread
+   runContentsDaemon
    ) where
 
 import Control.Applicative
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
-import qualified Data.ByteString.Char8 as S
-import Data.Unique
 import Data.Word (Word64)
 import Pipes
 import System.Log.Logger
@@ -46,27 +46,42 @@ import Vaultaire.Writer   (startWriter)
 import Vaultaire.Profiler
 
 
--- have an option for forking a telemetry thread associated with a worker thread
-
 type DaemonProcess a = ( Async a           -- worker thread
                        , Maybe (Async ())) -- profiler thread
 
+daemonWorker :: DaemonProcess a -> Async a
+daemonWorker = fst
+
+daemonProfiler :: DaemonProcess a -> Maybe (Async ())
+daemonProfiler = snd
+
+-- | Wait for a worker daemon, and its profiler - if any, to finish.
 waitDaemon :: DaemonProcess a -> IO a
 waitDaemon (worker, Nothing)   =         wait     worker
 waitDaemon (worker, Just prof) = fst <$> waitBoth worker prof
 
+-- | Fork a worker daemon thread.
 forkThread  :: IO a -> IO (Async a)
 forkThread action = do
     a <- async action
     link a
     return a
 
+-- | Fork a daemon worker thread and (maybe) a profiler thread associated with it.
 forkThreads :: IO a -> Maybe (IO ()) -> IO (DaemonProcess a)
-forkThreads action prof= do
+forkThreads action prof = do
     a <- async action
     link a
     b <- maybe (return Nothing) (fmap Just . async) prof
+    -- Do not link the worker with the profiler thread,
+    -- as the worker should not die if the profiler does.
     return (a, b)
+
+-- | Sugar for @forkThreads@
+forkThreads' :: IO a -> IO () -> Maybe Period -> IO (DaemonProcess a)
+forkThreads' action prof period
+    = forkThreads action
+    $ maybe Nothing (const $ Just prof) period
 
 linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
 linkThreadZMQ a = (liftIO . link) =<< Z.async a
@@ -99,46 +114,33 @@ runReaderDaemon :: String -> String -> URI -> MVar () -> Maybe Period
 runReaderDaemon pool user broker_uri end profiling_period = do
     infoM "Daemons.runReaderDaemon" "Reader daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5571")
-                       pool user end
+                       (Just user)
+                       pool
+                       end
                        (("reader",) <$> profiling_period)
-    forkThreads (startReader   args)
-                (startProfiler args <$> profiling_period)
+    forkThreads' (startReader   args)
+                 (startProfiler args) profiling_period
 
 runWriterDaemon :: String -> String -> URI -> Word64 -> MVar () -> Maybe Period
                 -> IO (DaemonProcess ())
 runWriterDaemon pool user broker_uri bucket_size end profiling_period = do
     infoM "Daemons.runWriterDaemon" "Writer daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5561")
-                       pool user end
+                       (Just user)
+                       pool
+                       end
                        (("writer",) <$> profiling_period)
-    forkThreads (startWriter args bucket_size)
-                (startProfiler args <$> profiling_period)
+    forkThreads' (startWriter   args bucket_size)
+                 (startProfiler args) profiling_period
 
 runContentsDaemon :: String -> String -> URI -> MVar () -> Maybe Period
                   -> IO (DaemonProcess ())
 runContentsDaemon pool user broker_uri end profiling_period = do
     infoM "Daemons.runContentsDaemon" "Contents daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5581")
-                       pool user end
+                       (Just user)
+                       pool
+                       end
                        (("contents",) <$> profiling_period)
-    forkThreads (startContents args)
-                (startProfiler args <$> profiling_period)
-
--- | Convient helper for creating daemon args.
-daemonArgs :: URI -> String -> String -> MVar ()
-           -> Maybe (String, Period)
-           -> IO DaemonArgs
-daemonArgs full_broker_uri pool user end profargs = do
-    prof  <- maybe (return noProfiler)
-                   (\s -> do uname <- uniqueDaemonName $ fst s
-                             uncurry hasProfiler s)
-                   profargs
-    return $ DaemonArgs full_broker_uri
-                        (Just $ S.pack user)
-                        (S.pack pool)
-                        end prof
-    where -- Attempt to create a unique daemon name
-          -- FIXME: is this what we actually want?
-          uniqueDaemonName n = do
-            u <- newUnique
-            return $ concat [full_broker_uri, ":", n, "-", show $ hashUnique u]
+    forkThreads' (startContents args)
+                 (startProfiler args) profiling_period
