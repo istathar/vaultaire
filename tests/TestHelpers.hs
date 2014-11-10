@@ -21,6 +21,7 @@ module TestHelpers
     startTestDaemons,
     cleanupTestEnvironment,
     readObject,
+    daemonArgsTest
 )
 where
 
@@ -30,7 +31,9 @@ import Control.Concurrent
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (fromList)
+import Data.Maybe
 import Numeric (showHex)
+import Network.URI
 import System.Rados.Monadic
 import System.ZMQ4.Monadic
 import Vaultaire.Broker
@@ -80,8 +83,9 @@ throwJust =
 
 runTestDaemon :: String -> Daemon a -> IO a
 runTestDaemon brokerURI a =
-    join $ flip runDaemon (cleanup >> loadState >> a)
-                      <$> daemonArgsDefault brokerURI Nothing "test"
+    join $   flip runDaemon (cleanup >> loadState >> liftIO (putStrLn "now doing a") >> a)
+         <$> daemonArgsTest (fromJust $ parseURI brokerURI)
+                            Nothing "test"
 
 cleanupTestEnvironment :: IO ()
 cleanupTestEnvironment = runTestDaemon "tcp://localhost:1234" (return ())
@@ -136,9 +140,16 @@ startTestDaemons shutdownSig = do
                             "tcp://*:5001"
         readMVar shutdownSig
     linkThread  $  flip startWriter 0
-               <$> daemonArgs "tcp://localhost:5561" Nothing "test" shutdownSig Nothing
+               <$> daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
+                                     Nothing "test" shutdownSig
     linkThread  $  startReader
-               <$> daemonArgs "tcp://localhost:5571" Nothing "test" shutdownSig Nothing
+               <$> daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5571")
+                                     Nothing "test" shutdownSig
 
 readObject :: ByteString -> IO (Either RadosError ByteString)
 readObject = runTestPool . flip runObject readFull
+
+daemonArgsTest :: URI -> Maybe String -> String -> IO DaemonArgs
+daemonArgsTest broker_uri user pool = do
+    x <- newEmptyMVar
+    daemonArgsDefault broker_uri user pool x

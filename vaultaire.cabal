@@ -57,6 +57,7 @@ library
                      text,
                      unix,
                      unix-time,
+                     network-uri,
                      rados-haskell >= 3.0.3
 
   ghc-options:       -O2
@@ -168,6 +169,7 @@ test-suite           daemon-test
                      vaultaire-common >= 2.7.2,
                      semigroups,
                      bytestring,
+                     network-uri,
                      vaultaire,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1

@@ -1,9 +1,16 @@
-{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RankNTypes      #-}
+
 module Vaultaire.Profiler
-     ( Period
+     ( Profiler
+     , ProfilerArgs
+     , ProfilingEnv
+     , ProfilingInterface(..)
+     , Period
      , startProfiler
-     , profileCount
-     , profileTime )
+     , noProfiler
+     , hasProfiler )
 where
 
 import           Control.Applicative
@@ -11,14 +18,17 @@ import           Control.Concurrent
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
 import qualified Data.Map.Strict as M
+import           Data.Monoid
+import           Data.UnixTime
+import           Network.URI
 import           Pipes
 import           Pipes.Concurrent
 import           Pipes.Lift
 import           Pipes.Parse (foldAll)
+import           System.Log.Logger
 import qualified System.ZMQ4 as Z
 
 import           Vaultaire.Types
-import           Vaultaire.Daemon
 
 -- TODO
 -- the profiler also needs to check shutdown periodically
@@ -27,42 +37,123 @@ import           Vaultaire.Daemon
 
 type PublishSock = Z.Socket Z.Pub
 
-startProfiler :: DaemonArgs -> IO ()
-startProfiler args =
+type Period     = Int
+
+-- | A profile action, with access to the internal connections.
+newtype Profiler a = Profiler (ReaderT ProfilingEnv IO a)
+        deriving ( Functor, Applicative, Monad, MonadIO
+                 , MonadReader ProfilingEnv )
+
+-- | Use the environment to run a profiler action.
+--   *NOTE* this is destructive w.r.t the environment, afterwards
+--          the environment cannot be reused for another profiler.
+--
+runProfiler :: ProfilingEnv -> Profiler a -> IO a
+runProfiler e (Profiler x) = do
+    r <- runReaderT x e
+    _ <- _seal e
+    return r
+
+startProfiler :: ProfilingEnv -> IO ()
+startProfiler env@(ProfilingEnv{..}) =
     Z.withContext $ \ctx ->
       Z.withSocket ctx Z.Pub $ \sock -> do
-        Z.connect sock $ broker args
-        runDaemon args (profile sock)
+        Z.connect   sock $ show _publish
+        runProfiler env $ profile sock
 
-profileCount :: TeleMsgType -> Origin -> Daemon ()
-profileCount t g = do
-    (_, prof) <- ask
-    profCount prof t g
+-- | Interface exposed to worker threads so they can report to the profiler.
+data ProfilingInterface = ProfilingInterface
+   -- Dictionary of reporting functions.
+   -- without profiling, they should become no-op's.
+   { profCount :: MonadIO m => TeleMsgType -> Origin -> m ()
+   , profTime  :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
 
-profileTime :: TeleMsgType -> Origin -> Daemon r -> Daemon r
-profileTime  t g act = do
-    (_, prof) <- ask
-    profTime prof t g act
+-- | Arguments needed to be specified by the user for profiling
+type ProfilerArgs = (String, URI, Period)
 
-profile :: PublishSock -> Daemon ()
+-- | Profiling environment.
+data ProfilingEnv = ProfilingEnv
+   { _aname     :: AgentID         -- ^ Identifiable name for this daemon
+   , _publish   :: URI             -- ^ Broker for telemetrics
+   , _bound     :: Int             -- ^ Max telemetric messages from worker per period
+   , _sleep     :: Int             -- ^ Period
+   , _outchan   :: Output TeleMsg
+   , _inchan    :: Input TeleMsg
+   , _seal      :: IO () }
+
+noProfiler :: (ProfilingEnv, ProfilingInterface)
+noProfiler
+    = ( ProfilingEnv
+            { _aname    = mempty
+            , _publish  = nullURI
+            , _bound    = 0
+            , _sleep    = 0
+            , _outchan  = Output { send = const $ return False}
+            , _inchan   = Input  { recv = return Nothing }
+            , _seal     = return () }
+      , ProfilingInterface
+            { profCount = const $ const $ return ()
+            , profTime  = const $ const id } )
+
+hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
+hasProfiler (name, broker, period) =  do
+    n <- maybe (do errorM  "Daemon.setupProfiler"
+                          ("The daemon name given is invalid: " ++ name ++
+                           ". An empty name has been given to the daemon.")
+                   return mempty)
+               (return)
+               (agentID name)
+    -- We use the @Newest@ buffer for the internal report queue
+    -- so that old reports will be removed if the buffer is full.
+    -- This means the internal will lose precision but not have
+    -- an impact on performance if there is too much activity.
+    (output, input, sealchan) <- spawn' $ Newest 1024
+    return ( ProfilingEnv
+                 { _aname    = n
+                 , _publish  = broker
+                 , _bound    = 1024
+                 , _sleep    = period
+                 , _outchan  = output
+                 , _inchan   = input
+                 , _seal     = liftIO $ atomically sealchan }
+           , ProfilingInterface
+                 { profCount = g output
+                 , profTime  = h output } )
+
+    where g outchan timestamp origin = liftIO $ do
+            _ <- atomically (send outchan $ TeleMsg origin timestamp 1)
+            return ()
+          h outchan timestamp origin act = do
+            t1 <- liftIO $ getUnixTime
+            r  <- act
+            t2 <- liftIO $ getUnixTime
+            _  <- liftIO $ atomically $ send outchan
+               $  TeleMsg origin timestamp $ fromIntegral
+               $  udtMicroSeconds
+               $  diffUnixTime t1 t2
+            return r
+
+profile :: PublishSock -> Profiler ()
 profile sock = do
-    (_, c) <- ask
+    ProfilingEnv{..} <- ask
+
     -- Read at most N reports from the profiling channel (N = size of the channel)
     -- since new reports would still be coming in after we have commenced this operation.
-    msgs <- aggregate $ fromInputUntil (bound c) (inchan c)
-    _    <- mapM (mkResp (aname c) >=> publish sock) msgs
+    msgs <- aggregate $ fromInputUntil _bound _inchan
+    _    <- mapM (mkResp _aname >=> send) msgs
+
     -- Sleep for <period>
-    liftIO $ threadDelay (sleep c)
+    liftIO $ threadDelay _sleep
+
     where fromInputUntil n chan = evalStateP 0 $ do
             x      <- lift $ get
             when (x <= n) $ fromInput chan
+
           mkResp n msg = do
             t      <- liftIO $ getCurrentTimeNanoseconds
             return $ TeleResp t n msg
 
-publish :: PublishSock -> TeleResp -> Daemon ()
-publish sock resp =
-    liftIO $ Z.send sock [] $ toWire resp
+          send resp = liftIO $ Z.send sock [] $ toWire resp
 
 -- | Aggregate telemetric reports, guaranteed to process only N reports
 --   see @report@.

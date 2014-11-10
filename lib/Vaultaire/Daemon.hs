@@ -18,8 +18,6 @@ module Vaultaire.Daemon
     Daemon,
     DaemonArgs(..),
     DaemonEnv,
-    Profiler(..),
-    Period,
     Message(..),
     ReplyF,
     Address(..),
@@ -44,11 +42,11 @@ module Vaultaire.Daemon
     extendedDayOID,
     bucketOID,
     withPool,
+    profileTime,
+    profileCount,
     -- * Smart constructors
     daemonArgs,
-    daemonArgsDefault,
-    noProfiler,
-    hasProfiler
+    daemonArgsDefault
 ) where
 
 import Control.Applicative
@@ -64,10 +62,9 @@ import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Maybe
 import Data.Monoid
-import Data.Unique
-import Data.UnixTime
 import Data.Word (Word64)
 import Pipes.Concurrent
+import Network.URI
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
@@ -79,7 +76,10 @@ import Text.Printf
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.Types
+import Vaultaire.Profiler
 import Vaultaire.Util
+
+import Debug.Trace
 
 -- User facing API
 
@@ -91,32 +91,20 @@ newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonEnv Pool) a)
   deriving ( Functor, Applicative, Monad, MonadIO
            , MonadReader DaemonEnv, MonadState OriginDays)
 
--- | The minimal arguments needed to run any daemon.
---
+-- | Arguments needed to be supplied by user to run a daemon
 data DaemonArgs = DaemonArgs
-   { broker      :: URI              -- ^ Broker, e.g. example.com
-   , ceph_user   :: Maybe ByteString -- ^ Username for Ceph
-   , ceph_pool   :: ByteString       -- ^ Pool name for Ceph
-   , shutdown    :: MVar ()          -- ^ Shutdown signal
-   , profiler    :: Profiler         -- ^ Profiler interface to use for this daemon
+   { broker    :: URI                -- ^ Broker, e.g. tcp://example.com:5550
+   , ceph_user :: Maybe ByteString   -- ^ Username for Ceph
+   , ceph_pool :: ByteString         -- ^ Pool name for Ceph
+   , shutdown  :: MVar ()            -- ^ Shutdown signal
+   , profiler  :: ProfilingInterface -- ^ Profiler interface to use for this daemon
    }
 
-type DaemonEnv = (SharedConnection, Profiler)
+-- | Environment in which to run a daemon
+type DaemonEnv = (SharedConnection, ProfilingInterface)
 
 -- | Handle to commuicate with the 0MQ router.
 type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
-
-data Profiler = Profiler
-   { aname     :: AgentID
-   , bound     :: Int
-   , sleep     :: Int
-   , outchan   :: Output TeleMsg
-   , inchan    :: Input TeleMsg
-   , seal      :: IO ()
-   -- Dictionary of reporting functions.
-   -- without profiling, they should become no-op's.
-   , profCount :: MonadIO m => TeleMsgType -> Origin -> m ()
-   , profTime  :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
 
 -- | Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
@@ -137,9 +125,6 @@ type ReplyF     = WireFormat w => w -> Daemon ()
 type Payload    = Word64
 type Bucket     = Word64
 type BucketSize = Word64
-
--- | Profiling period
-type Period     = Int
 
 
 -- | Handle messages using an arbitrary concurrency abstraction.
@@ -430,88 +415,52 @@ setupSharedConnection :: URI -- ^ Broker name
 setupSharedConnection broker = do
     ctx <- ZMQ.context
     sock <- ZMQ.socket ctx ZMQ.Router
-    ZMQ.connect sock broker
+    ZMQ.connect sock $ show broker
     mvar <- newMVar sock
     return (ctx, mvar)
 
 
--- Convenience/Smart constructors
+-- Convenience/Smart constructors and interface
 
--- | Construct daemon arguments with all the provided fields.
+-- | Construct necessary arguments to start a daemon
 daemonArgs
-  :: URI                    -- ^ Full broker URI, e.g. tcp://example.com:9999
-  -> Maybe String           -- ^ Ceph user
-  -> String                 -- ^ Ceph pool
-  -> MVar ()                -- ^ Shutdown signal
-  -> Maybe (String, Period) -- ^ Profiler information
-  -> IO DaemonArgs
-daemonArgs full_broker_uri user pool end profargs = do
-    prof  <- maybe (return noProfiler)
-                   (\(s,p) -> do uname <- uniqueDaemonName s
-                                 hasProfiler uname p)
-                   profargs
-    return $ DaemonArgs full_broker_uri
+  :: URI                  -- ^ Full broker URI, e.g. @tcp://example.com:9990@
+  -> Maybe String         -- ^ Ceph user
+  -> String               -- ^ Ceph pool
+  -> MVar ()              -- ^ Shutdown signal
+  -> Maybe String         -- ^ Indentifiable daemon name, e.g. @vault.example.com-writer-01@
+  -> Maybe (Int, Period)  -- ^ If has profiling, (port, profile period)
+  -> IO (DaemonArgs, ProfilingEnv)
+daemonArgs brokerd user pool end dname pargs = do
+    (env, interface)  <- maybe (return noProfiler)
+                               (\(pport, pperiod) -> hasProfiler ( maybe mempty id dname
+                                                                 , modPort brokerd pport
+                                                                 , pperiod)) pargs
+    return ( DaemonArgs brokerd
                         (BS.pack <$> user)
                         (BS.pack     pool)
-                        end prof
-    where -- Attempt to create a unique daemon name
-          -- FIXME: is this what we actually want?
-          uniqueDaemonName n = do
-            u <- newUnique
-            return $ concat [full_broker_uri, ":", n, "-", show $ hashUnique u]
+                        end
+                        interface
+           , env)
+    where -- could probably lens this, if network.uri has lens support
+          modPort u i = u { uriAuthority = fmap (\x -> x { uriPort = ':':show i }) $ uriAuthority u }
 
--- | Construct default daemon arguments, with no profiler, no shutdown signal.
+-- | Construct default daemon arguments, with no profiler, no name.
 daemonArgsDefault
   :: URI                    -- ^ Full broker URI, e.g. tcp://example.com:9999
   -> Maybe String           -- ^ Ceph user
   -> String                 -- ^ Ceph pool
+  -> MVar ()                -- ^ Shutdown Signal
   -> IO DaemonArgs
-daemonArgsDefault full_broker_uri user pool = do
-  x <- newEmptyMVar
-  daemonArgs full_broker_uri user pool x Nothing
+daemonArgsDefault full_broker_uri user pool shutdown
+  = fst <$> daemonArgs full_broker_uri user pool shutdown Nothing Nothing
 
-noProfiler :: Profiler
-noProfiler =  Profiler
-    { aname     = mempty
-    , bound     = 0
-    , sleep     = 0
-    , outchan   = Output { send = const $ return False}
-    , inchan    = Input  { recv = return Nothing }
-    , seal      = return ()
-    , profCount = const $ const $ return ()
-    , profTime  = const $ const id }
+profileCount :: TeleMsgType -> Origin -> Daemon ()
+profileCount t g = do
+    (_, prof) <- ask
+    profCount prof t g
 
-hasProfiler :: String -> Period -> IO Profiler
-hasProfiler name period =  do
-    n <- maybe (do errorM  "Daemon.setupProfiler"
-                          ("The daemon name given is invalid: " ++ name ++
-                           ". An empty name has been given to the daemon.")
-                   return mempty)
-               (return)
-               (agentID name)
-    -- We use the @Newest@ buffer for the internal report queue
-    -- so that old reports will be removed if the buffer is full.
-    -- This means the internal will lose precision but not have
-    -- an impact on performance if there is too much activity.
-    (output, input, sealchan) <- spawn' $ Newest 1024
-    return $ Profiler
-           { aname     = n
-           , bound     = 1024
-           , sleep     = period
-           , outchan   = output
-           , inchan    = input
-           , seal      = liftIO $ atomically sealchan
-           , profCount = g output
-           , profTime  = h output }
-    where g outchan timestamp origin = liftIO $ do
-            _ <- atomically (send outchan $ TeleMsg origin timestamp 1)
-            return ()
-          h outchan timestamp origin act = do
-            t1 <- liftIO $ getUnixTime
-            r  <- act
-            t2 <- liftIO $ getUnixTime
-            _  <- liftIO $ atomically $ send outchan
-               $  TeleMsg origin timestamp $ fromIntegral
-               $  udtMicroSeconds
-               $  diffUnixTime t1 t2
-            return r
+profileTime :: TeleMsgType -> Origin -> Daemon r -> Daemon r
+profileTime  t g act = do
+    (_, prof) <- ask
+    profTime prof t g act

@@ -7,16 +7,20 @@ import Control.Concurrent.MVar
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.List.NonEmpty (fromList)
+import Data.Maybe
+import Network.URI
 import System.Rados.Monadic hiding (async)
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
-import TestHelpers
+
 import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
 import Vaultaire.RollOver
 import Vaultaire.Types
 import Vaultaire.Util
+import TestHelpers
+
 
 main :: IO ()
 main = do
@@ -120,7 +124,8 @@ withReplier :: IO a -> IO a
 withReplier f = do
     shutdown <- newEmptyMVar
     linkThread $  flip handleMessages handler
-              <$> daemonArgs "tcp://localhost:5561" Nothing "test" shutdown Nothing
+              <$> daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
+                                    Nothing "test" shutdown
     r <- f
     putMVar shutdown ()
     return r
@@ -135,7 +140,10 @@ sendPonyMsg = runZMQ $ do
     connect s "tcp://localhost:5560"
     -- Simulate a client sending a sequence number and message
     sendMulti s $ fromList ["PONY", "im in ur vaults"]
-    receiveMulti s
+    liftIO $ putStrLn "sendPony: sent"
+    x <- receiveMulti s
+    liftIO $ putStrLn "sendPony: receive"
+    return x
 
 sendBadMsg :: IO ()
 sendBadMsg = runZMQ $ do

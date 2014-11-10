@@ -77,19 +77,13 @@ forkThreads action prof = do
     -- as the worker should not die if the profiler does.
     return (a, b)
 
--- | Sugar for @forkThreads@
-forkThreads' :: IO a -> IO () -> Maybe Period -> IO (DaemonProcess a)
-forkThreads' action prof period
-    = forkThreads action
-    $ maybe Nothing (const $ Just prof) period
-
 linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
 linkThreadZMQ a = (liftIO . link) =<< Z.async a
 
 runBrokerDaemon :: MVar () -> IO (DaemonProcess ())
 runBrokerDaemon end =
     flip forkThreads Nothing $ do
-        infoM "Daemons.runBroker_uriDaemon" "Broker_uri daemon started"
+        infoM "Daemons.runBrokerDaemon" "Broker daemon started"
         runZMQ $ do
             -- Writer proxy.
             linkThreadZMQ $ startProxy
@@ -109,38 +103,47 @@ runBrokerDaemon end =
 
         readMVar end
 
-runReaderDaemon :: String -> String -> URI -> MVar () -> Maybe Period
+runReaderDaemon :: String -> String -> URI -> MVar ()
+                -> Maybe ProfilerArgs
                 -> IO (DaemonProcess ())
-runReaderDaemon pool user broker_uri end profiling_period = do
+runReaderDaemon pool user broker_uri end profiling = do
     infoM "Daemons.runReaderDaemon" "Reader daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5571")
                        (Just user)
                        pool
                        end
-                       (("reader",) <$> profiling_period)
-    forkThreads' (startReader   args)
-                 (startProfiler args) profiling_period
+                       profiling
+    forkThreads (startReader   args)
+                (if   isJust profiling
+                 then Just $ startProfiler args
+                 else Nothing)
 
-runWriterDaemon :: String -> String -> URI -> Word64 -> MVar () -> Maybe Period
+runWriterDaemon :: String -> String -> URI -> Word64 -> MVar ()
+                -> Maybe ProfilerArgs
                 -> IO (DaemonProcess ())
-runWriterDaemon pool user broker_uri bucket_size end profiling_period = do
+runWriterDaemon pool user broker_uri bucket_size end profiling = do
     infoM "Daemons.runWriterDaemon" "Writer daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5561")
                        (Just user)
                        pool
                        end
-                       (("writer",) <$> profiling_period)
-    forkThreads' (startWriter   args bucket_size)
-                 (startProfiler args) profiling_period
+                       profiling
+    forkThreads (startWriter   args bucket_size)
+                (if   isJust profiling
+                 then Just $ startProfiler args
+                 else Nothing)
 
-runContentsDaemon :: String -> String -> URI -> MVar () -> Maybe Period
+runContentsDaemon :: String -> String -> URI -> MVar ()
+                  -> Maybe ProfilerArgs
                   -> IO (DaemonProcess ())
-runContentsDaemon pool user broker_uri end profiling_period = do
+runContentsDaemon pool user broker_uri end profiling = do
     infoM "Daemons.runContentsDaemon" "Contents daemon starting"
     args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5581")
                        (Just user)
                        pool
                        end
-                       (("contents",) <$> profiling_period)
-    forkThreads' (startContents args)
-                 (startProfiler args) profiling_period
+                       profiling
+    forkThreads (startContents args)
+                (if   isJust profiling
+                 then startProfiler args
+                 else Nothing)
