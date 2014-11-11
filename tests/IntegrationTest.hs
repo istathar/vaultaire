@@ -16,14 +16,14 @@
 module Main where
 
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Monad
 import Data.HashMap.Strict (fromList)
+import Data.Maybe
 import Data.Text
 import Pipes
 import qualified Pipes.Prelude as P
+import Network.URI
 import System.Directory
 import System.IO
 import Test.Hspec hiding (pending)
@@ -32,7 +32,7 @@ import CommandRunners
 import DaemonRunners
 import Marquise.Client
 import Marquise.Server
-import TestHelpers (cleanup)
+import TestHelpers (daemonArgsTest, cleanup)
 import Vaultaire.Daemon hiding (shutdown, broker)
 
 pool :: String
@@ -42,9 +42,10 @@ user :: String
 user = "vaultaire"
 
 destroyExistingVault :: IO ()
-destroyExistingVault =
-    join $  flip runDaemon cleanup
-        <$> daemonArgsDefault "inproc://1" (Just user) pool
+destroyExistingVault = do
+    args <- daemonArgsTest (fromJust $ parseURI "inproc://1")
+                           (Just user) pool
+    runDaemon args cleanup
 
 startServerDaemons :: FilePath -> MVar () -> IO ()
 startServerDaemons tmp shutdown =
@@ -57,9 +58,9 @@ startServerDaemons tmp shutdown =
     namespace = "integration"
   in do
     a1 <- runBrokerDaemon shutdown
-    a2 <- runWriterDaemon pool user broker bucket_size shutdown Nothing
-    a3 <- runReaderDaemon pool user broker shutdown Nothing
-    a4 <- runContentsDaemon pool user broker shutdown Nothing
+    a2 <- runWriterDaemon pool user broker bucket_size shutdown "" Nothing
+    a3 <- runReaderDaemon pool user broker shutdown "" Nothing
+    a4 <- runContentsDaemon pool user broker shutdown "" Nothing
     a5 <- runMarquiseDaemon broker origin namespace shutdown tmp 60
     -- link the following threads to this main thread
     mapM_ link [ daemonWorker a1

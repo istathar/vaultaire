@@ -69,6 +69,7 @@ data ProfilingInterface = ProfilingInterface
    , profTime  :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
 
 -- | Arguments needed to be specified by the user for profiling
+--   (name, publishing port, period)
 type ProfilerArgs = (String, URI, Period)
 
 -- | Profiling environment.

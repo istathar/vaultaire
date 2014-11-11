@@ -37,6 +37,7 @@ data Options = Options
   , quiet     :: Bool
   , profile   :: Bool
   , period    :: Int
+  , name      :: String
   , component :: Component }
 
 data Component = Broker
@@ -57,6 +58,7 @@ optionsParser Options{..} = Options <$> parsePool
                                     <*> parseQuiet
                                     <*> parseProfile
                                     <*> parsePeriod
+                                    <*> parseName
                                     <*> parseComponents
   where
     parsePool = strOption $
@@ -105,6 +107,14 @@ optionsParser Options{..} = Options <$> parsePool
         <> value period
         <> showDefault
 
+    parseName = strOption $
+           long "name"
+        <> short 'n'
+        <> metavar "NAME"
+        <> value name
+        <> showDefault
+        <> help "Identifiable name for the daemon. Useful for telemetrics."
+
     parseComponents = subparser
        (  parseBrokerComponent
        <> parseReaderComponent
@@ -150,7 +160,7 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False True 10000 Broker
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False True 10000 "" Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
@@ -159,6 +169,7 @@ parseConfig fp = do
                 <*> pure quiet
                 <*> pure profile
                 <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
+                <*> lookup "name" ls `mplus` pure name
                 <*> pure Broker
 
 configParser :: Parser [(String, String)]
@@ -202,12 +213,21 @@ main = do
     a <- case component of
         Broker ->
             runBrokerDaemon quit
+
         Reader ->
-            runReaderDaemon pool user broker quit prof
+            if   profile
+            then runReaderDaemon pool user broker quit name Nothing
+            else runReaderDaemon pool user broker quit name (Just period)
+
         Writer roll_over_size ->
-            runWriterDaemon pool user broker roll_over_size quit prof
+            if   profile
+            then runWriterDaemon pool user broker roll_over_size quit name Nothing
+            else runWriterDaemon pool user broker roll_over_size quit name (Just prof)
+
         Contents ->
-            runContentsDaemon pool user broker quit prof
+            if   profile
+            then runContentsDaemon pool user broker quit name Nothing
+            else runContentsDaemon pool user broker quit name (Just prof)
 
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"

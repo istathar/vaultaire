@@ -88,6 +88,7 @@ executable vault
                      hslogger >= 1.2.4,
                      async,
                      unix,
+                     network-uri,
                      vaultaire
 
   ghc-options:       -O2
@@ -117,6 +118,7 @@ executable inspect
                      hslogger >= 1.2.4,
                      async,
                      unix,
+                     network-uri,
                      vaultaire
 
   ghc-options:       -O2
@@ -212,6 +214,7 @@ test-suite           writer-test
                      zeromq4-haskell,
                      mtl,
                      bytestring,
+                     network-uri,
                      unordered-containers,
                      rados-haskell >= 3.0.1,
                      vaultaire
@@ -241,6 +244,7 @@ test-suite           reader-test
                      zeromq4-haskell,
                      mtl,
                      bytestring,
+                     network-uri,
                      unordered-containers,
                      rados-haskell >= 3.0.1,
                      vaultaire
@@ -296,6 +300,7 @@ test-suite           internal-store-test
                      mtl,
                      vaultaire-common >= 2.7.2,
                      bytestring,
+                     network-uri,
                      zeromq4-haskell,
                      vaultaire
 
@@ -325,6 +330,7 @@ test-suite           contents-test
                      mtl,
                      marquise >= 3.0.2,
                      bytestring,
+                     network-uri,
                      zeromq4-haskell,
                      vaultaire-common >= 2.7.2,
                      pipes,
@@ -353,6 +359,7 @@ test-suite           integration-test
                      pipes,
                      semigroups,
                      async,
+                     network-uri,
                      hslogger >= 1.2.4,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,

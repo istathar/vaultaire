@@ -139,12 +139,14 @@ startTestDaemons shutdownSig = do
                             (Dealer,"tcp://*:5571")
                             "tcp://*:5001"
         readMVar shutdownSig
-    linkThread  $  flip startWriter 0
-               <$> daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
-                                     Nothing "test" shutdownSig
-    linkThread  $  startReader
-               <$> daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5571")
-                                     Nothing "test" shutdownSig
+
+    argsw <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
+                               Nothing "test" shutdownSig
+    argsr <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5571")
+                               Nothing "test" shutdownSig
+
+    linkThread $ startWriter argsw 0
+    linkThread $ startReader argsr
 
 readObject :: ByteString -> IO (Either RadosError ByteString)
 readObject = runTestPool . flip runObject readFull

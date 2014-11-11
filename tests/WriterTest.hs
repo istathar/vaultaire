@@ -12,10 +12,13 @@ import Data.ByteString.Lazy.Builder
 import qualified Data.HashMap.Strict as HashMap
 import Data.List (sort)
 import Data.Monoid
+import Data.Maybe
 import Data.Time
+import Network.URI
 import System.Rados.Monadic
 import System.ZMQ4.Monadic hiding (Event)
 import Test.Hspec hiding (pending)
+
 import TestHelpers
 import Vaultaire.Broker
 import Vaultaire.Daemon
@@ -131,8 +134,9 @@ suite now = do
                                     (Dealer,"tcp://*:5561") "tcp://*:5000"
                 readMVar shutdownSignal
 
-            linkThread  $  flip startWriter 0
-                       <$> daemonArgs "tcp://localhost:5561" Nothing "test" shutdownSignal Nothing
+            args <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
+                                       Nothing "test" shutdownSignal
+            linkThread $ startWriter args 0
 
             sendTestMsg >>= (`shouldBe` ["\NUL"])
 

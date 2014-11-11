@@ -19,32 +19,35 @@ import System.ZMQ4.Monadic hiding (Event)
 
 import Test.Hspec hiding (pending)
 
-import Control.Applicative
 import Control.Concurrent
 import Data.HashMap.Strict (fromList)
 import Data.String
+import Data.Maybe
 import Data.Text
-import Marquise.Client
+import Network.URI
 import Pipes.Prelude (toListM)
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Monadic (assert, monadicIO, run)
+
+import Marquise.Client
 import TestHelpers
 import Vaultaire.Broker
 import Vaultaire.Contents
-import Vaultaire.Daemon (daemonArgs)
+import Vaultaire.Daemon
 import Vaultaire.Util
 
 startDaemons :: IO ()
 startDaemons = do
-    shutdown <- newEmptyMVar
+    quit <- newEmptyMVar
     linkThread $ do
         runZMQ $ startProxy (Router,"tcp://*:5580")
                             (Dealer,"tcp://*:5581") "tcp://*:5008"
-        readMVar shutdown
+        readMVar quit
 
-    linkThread $  startContents
-              <$> daemonArgs "tcp://localhost:5581" Nothing "test" shutdown Nothing
+    args <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5581")
+                               Nothing "test" quit
+    linkThread $ startContents args
 
 main :: IO ()
 main = do

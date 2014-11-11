@@ -31,19 +31,20 @@ module DaemonRunners (
 import Control.Applicative
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
-import Data.Word (Word64)
+import Data.Maybe
+import Network.URI
 import Pipes
 import System.Log.Logger
 import System.ZMQ4.Monadic hiding (async)
 import qualified System.ZMQ4.Monadic as Z
 
-import Vaultaire.Types
 import Vaultaire.Daemon
 import Vaultaire.Broker
 import Vaultaire.Contents (startContents)
 import Vaultaire.Reader   (startReader)
 import Vaultaire.Writer   (startWriter)
 import Vaultaire.Profiler
+import Vaultaire.Util
 
 
 type DaemonProcess a = ( Async a           -- worker thread
@@ -103,47 +104,39 @@ runBrokerDaemon end =
 
         readMVar end
 
-runReaderDaemon :: String -> String -> URI -> MVar ()
-                -> Maybe ProfilerArgs
-                -> IO (DaemonProcess ())
-runReaderDaemon pool user broker_uri end profiling = do
-    infoM "Daemons.runReaderDaemon" "Reader daemon starting"
-    args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5571")
-                       (Just user)
-                       pool
-                       end
-                       profiling
-    forkThreads (startReader   args)
-                (if   isJust profiling
-                 then Just $ startProfiler args
-                 else Nothing)
+runWorkerDaemon
+    :: String                -- ^ Ceph pool
+    -> String                -- ^ Ceph user
+    -> String                -- ^ Broker URI
+    -> MVar ()               -- ^ Shutdown
+    -> String                -- ^ Optional daemon name
+    -> Maybe Period          -- ^ Optional profiler
+    -> (DaemonArgs -> IO ()) -- ^ Run this worker daemon
+    -> IO (DaemonProcess ())
+runWorkerDaemon pool user brok down name prof daemon = do
+    (args, env) <- daemonArgs (fromMaybe (fatal "runWorkerDaemon" "Invalid broker URI")
+                                         (parseURI brok))
+                              (Just user) pool down
+                              (if name == "" then Nothing else Just name)
+                              ((profilingPort,) <$> prof)
+    forkThreads (daemon args)
+                (fmap (const $ startProfiler env) prof)
 
-runWriterDaemon :: String -> String -> URI -> Word64 -> MVar ()
-                -> Maybe ProfilerArgs
-                -> IO (DaemonProcess ())
-runWriterDaemon pool user broker_uri bucket_size end profiling = do
+runWriterDaemon pool user brok rollover down name prof = do
     infoM "Daemons.runWriterDaemon" "Writer daemon starting"
-    args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5561")
-                       (Just user)
-                       pool
-                       end
-                       profiling
-    forkThreads (startWriter   args bucket_size)
-                (if   isJust profiling
-                 then Just $ startProfiler args
-                 else Nothing)
+    runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5561")
+                    down name prof (flip startWriter rollover)
 
-runContentsDaemon :: String -> String -> URI -> MVar ()
-                  -> Maybe ProfilerArgs
-                  -> IO (DaemonProcess ())
-runContentsDaemon pool user broker_uri end profiling = do
+runReaderDaemon pool user brok down name prof = do
+    infoM "Daemons.runReaderDaemon" "Reader daemon starting"
+    runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5571")
+                    down name prof startReader
+
+runContentsDaemon pool user brok down name prof = do
     infoM "Daemons.runContentsDaemon" "Contents daemon starting"
-    args <- daemonArgs ("tcp://" ++ broker_uri ++ ":5581")
-                       (Just user)
-                       pool
-                       end
-                       profiling
-    forkThreads (startContents args)
-                (if   isJust profiling
-                 then startProfiler args
-                 else Nothing)
+    runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5581")
+                    down name prof startContents
+
+-- The other ports are hard-coded here, so we define the profiling port here too.
+-- FIXME: allow user to specify ports for all daemons.
+profilingPort = 6000

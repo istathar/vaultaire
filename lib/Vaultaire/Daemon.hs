@@ -159,17 +159,12 @@ handleMessages args@(DaemonArgs{..}) f = runDaemon args loop
 runDaemon :: DaemonArgs -- ^ With these arguments
           -> Daemon a   -- ^ Run this daemon
           -> IO a
-runDaemon DaemonArgs{..} (Daemon a) =
+runDaemon DaemonArgs{..} (Daemon a) = do
     bracket (setupSharedConnection broker)
             (\(ctx, conn) -> do
-                -- clean up shared connection (ZMQ)
                 sock <- takeMVar conn
                 ZMQ.close sock
-                ZMQ.shutdown ctx
-                -- clean up internal connection
-                -- this will be garbage collected but we might
-                -- as well clean it up early
-                seal profiler)
+                ZMQ.shutdown ctx)
             (\(_, conn) -> withPool ceph_user ceph_pool
                          $ flip runReaderT (conn, profiler)
                          $ evalStateT a emptyOriginMap)

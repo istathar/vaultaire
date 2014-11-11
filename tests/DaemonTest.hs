@@ -123,9 +123,9 @@ suite = do
 withReplier :: IO a -> IO a
 withReplier f = do
     shutdown <- newEmptyMVar
-    linkThread $  flip handleMessages handler
-              <$> daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
-                                    Nothing "test" shutdown
+    args     <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
+                                   Nothing "test" shutdown
+    linkThread $ handleMessages args handler
     r <- f
     putMVar shutdown ()
     return r
