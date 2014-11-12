@@ -1,6 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Vaultaire.Profiler
      ( Profiler
@@ -14,27 +16,36 @@ module Vaultaire.Profiler
 where
 
 import           Control.Applicative
-import           Control.Concurrent
+import           Control.Concurrent hiding (yield)
+import           Control.Concurrent.STM.TBQueue
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
 import qualified Data.Map.Strict as M
 import           Data.Monoid
+import           Data.Ratio
 import           Data.UnixTime
+import           Data.Word
+import           Foreign.C.Types (CTime(..))
 import           Network.URI
 import           Pipes
-import           Pipes.Concurrent
 import           Pipes.Lift
+import           Pipes.Concurrent
+import qualified Pipes.Prelude as P
 import           Pipes.Parse (foldAll)
 import           System.Log.Logger
 import qualified System.ZMQ4 as Z
 
 import           Vaultaire.Types
 
+import Debug.Trace
+import System.IO.Unsafe
+
 -- TODO
 -- the profiler also needs to check shutdown periodically
 -- if the profiler crashes, the worker shouldn't be pulled down
 -- but if the worker dies, the profiler should die too
 
+-- | The profiler will publish on this socket.
 type PublishSock = Z.Socket Z.Pub
 
 type Period     = Int
@@ -50,23 +61,24 @@ newtype Profiler a = Profiler (ReaderT ProfilingEnv IO a)
 --
 runProfiler :: ProfilingEnv -> Profiler a -> IO a
 runProfiler e (Profiler x) = do
-    r <- runReaderT x e
-    _ <- _seal e
-    return r
+  r <- runReaderT x e
+  _ <- _seal e
+  return r
 
 startProfiler :: ProfilingEnv -> IO ()
 startProfiler env@(ProfilingEnv{..}) =
-    Z.withContext $ \ctx ->
-      Z.withSocket ctx Z.Pub $ \sock -> do
-        Z.connect   sock $ show _publish
-        runProfiler env $ profile sock
+  Z.withContext $ \ctx ->
+    Z.withSocket ctx Z.Pub $ \sock -> do
+      Z.connect   sock $ show _publish
+      runProfiler env $ profile sock
 
 -- | Interface exposed to worker threads so they can report to the profiler.
 data ProfilingInterface = ProfilingInterface
    -- Dictionary of reporting functions.
    -- without profiling, they should become no-op's.
-   { profCount :: MonadIO m => TeleMsgType -> Origin -> m ()
-   , profTime  :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
+   { profCount  :: MonadIO m => TeleMsgType -> Origin -> m ()
+   , profCountN :: MonadIO m => TeleMsgType -> Origin -> Int -> m ()
+   , profTime   :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
 
 -- | Arguments needed to be specified by the user for profiling
 --   (name, publishing port, period)
@@ -77,87 +89,119 @@ data ProfilingEnv = ProfilingEnv
    { _aname     :: AgentID         -- ^ Identifiable name for this daemon
    , _publish   :: URI             -- ^ Broker for telemetrics
    , _bound     :: Int             -- ^ Max telemetric messages from worker per period
-   , _sleep     :: Int             -- ^ Period
-   , _outchan   :: Output TeleMsg
-   , _inchan    :: Input TeleMsg
-   , _seal      :: IO () }
+   , _sleep     :: Int             -- ^ Period, in milliseconds
+   , _output    :: Output ChanMsg  -- ^ Send to the profiler via this output
+   , _input     :: Input  ChanMsg  -- ^ Receive messages sent to the profiler via this input
+   , _seal      :: IO ()           -- ^ Seal the profiler chan
+   }
+
+-- | Values that can be sent to the profiling channel.
+--
+data ChanMsg = Barrier
+             | Tele TeleMsg
+             deriving Show
 
 noProfiler :: (ProfilingEnv, ProfilingInterface)
 noProfiler
-    = ( ProfilingEnv
-            { _aname    = mempty
-            , _publish  = nullURI
-            , _bound    = 0
-            , _sleep    = 0
-            , _outchan  = Output { send = const $ return False}
-            , _inchan   = Input  { recv = return Nothing }
-            , _seal     = return () }
-      , ProfilingInterface
-            { profCount = const $ const $ return ()
-            , profTime  = const $ const id } )
+  = ( ProfilingEnv
+          { _aname    = mempty
+          , _publish  = nullURI
+          , _bound    = 0
+          , _sleep    = 0
+          , _output   = Output { send = const $ return False   }
+          , _input    = Input  { recv =         return Nothing }
+          , _seal     = return () }
+    , ProfilingInterface
+          { profCount  = const $ const $ return ()
+          , profCountN = const $ const $ const $ return ()
+          , profTime   = const $ const id } )
 
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
 hasProfiler (name, broker, period) =  do
-    n <- maybe (do errorM  "Daemon.setupProfiler"
-                          ("The daemon name given is invalid: " ++ name ++
-                           ". An empty name has been given to the daemon.")
-                   return mempty)
-               (return)
-               (agentID name)
-    -- We use the @Newest@ buffer for the internal report queue
-    -- so that old reports will be removed if the buffer is full.
-    -- This means the internal will lose precision but not have
-    -- an impact on performance if there is too much activity.
-    (output, input, sealchan) <- spawn' $ Newest 1024
-    return ( ProfilingEnv
-                 { _aname    = n
-                 , _publish  = broker
-                 , _bound    = 1024
-                 , _sleep    = period
-                 , _outchan  = output
-                 , _inchan   = input
-                 , _seal     = liftIO $ atomically sealchan }
-           , ProfilingInterface
-                 { profCount = g output
-                 , profTime  = h output } )
+  n <- maybe (do errorM  "Daemon.setupProfiler"
+                        ("The daemon name given is invalid: " ++ name ++
+                         ". An empty name has been given to the daemon.")
+                 return mempty)
+             (return)
+             (agentID name)
+  -- We use the @Newest@ buffer for the internal report queue
+  -- so that old reports will be removed if the buffer is full.
+  -- This means the internal will lose precision but not have
+  -- an impact on performance if there is too much activity.
+  (output, input, sealchan) <- spawn' $ Newest 1024
+  return ( ProfilingEnv
+               { _aname    = n
+               , _publish  = broker
+               , _bound    = 1024
+               , _sleep    = period
+               , _output   = output
+               , _input    = input
+               , _seal     = liftIO $ atomically sealchan }
+         , ProfilingInterface
+               { profCount  = g output
+               , profCountN = f output
+               , profTime   = h output } )
 
-    where g outchan timestamp origin = liftIO $ do
-            _ <- atomically (send outchan $ TeleMsg origin timestamp 1)
-            return ()
-          h outchan timestamp origin act = do
-            t1 <- liftIO $ getUnixTime
-            r  <- act
-            t2 <- liftIO $ getUnixTime
-            _  <- liftIO $ atomically $ send outchan
-               $  TeleMsg origin timestamp $ fromIntegral
-               $  udtMicroSeconds
-               $  diffUnixTime t1 t2
-            return r
+  where f output teletype origin count = liftIO $ do
+          _ <- atomically (send output $ Tele $ TeleMsg origin teletype $ fromIntegral count)
+          return ()
+        g output teletype origin = liftIO $ do
+          _ <- atomically (send output $ Tele $ TeleMsg origin teletype 1)
+          return ()
+        h output teletype origin act = do
+          !t1 <- liftIO $ getUnixTime
+          r   <- act
+          !t2 <- liftIO $ getUnixTime
+          _  <- liftIO $ atomically $ send output $ Tele
+             $  TeleMsg origin teletype
+             $  diffTimeInMs
+             $  diffUnixTime t2 t1
+          return r
+        diffTimeInMs :: UnixDiffTime -> Word64
+        diffTimeInMs u
+          = let secInMilliSec  = (raw $ udtSeconds u) * 1000
+                uSecInMilliSec = (udtMicroSeconds u) `div` 1000
+            in  fromIntegral $ secInMilliSec + fromIntegral uSecInMilliSec
+        raw (CTime x) = x
 
 profile :: PublishSock -> Profiler ()
-profile sock = do
-    ProfilingEnv{..} <- ask
+profile sock = forever $ do
+  ProfilingEnv{..} <- ask
 
-    -- Read at most N reports from the profiling channel (N = size of the channel)
-    -- since new reports would still be coming in after we have commenced this operation.
-    msgs <- aggregate $ fromInputUntil _bound _inchan
-    _    <- mapM (mkResp _aname >=> send) msgs
+  -- Read at most N reports from the profiling channel (N = size of the channel)
+  -- since new reports would still be coming in after we have commenced this operation.
+  liftIO $ atomically $ send _output Barrier
+  msgs <- aggregate $ fromInputUntil _bound _input
+  _    <- mapM (mkResp _aname >=> pub) msgs
 
-    -- Sleep for <period>
-    liftIO $ threadDelay _sleep
+  -- Sleep for <period> milliseconds
+  liftIO $ milliDelay _sleep
 
-    where fromInputUntil n chan = evalStateP 0 $ do
-            x      <- lift $ get
-            when (x <= n) $ fromInput chan
+  where mkResp :: MonadIO m => AgentID -> TeleMsg -> m TeleResp
+        mkResp n msg = do
+          t      <- liftIO $ getCurrentTimeNanoseconds
+          return $ TeleResp t n msg
 
-          mkResp n msg = do
-            t      <- liftIO $ getCurrentTimeNanoseconds
-            return $ TeleResp t n msg
+        pub :: TeleResp -> Profiler ()
+        pub resp = liftIO $ Z.send sock [] $ toWire resp
 
-          send resp = liftIO $ Z.send sock [] $ toWire resp
+-- | Reads from input until we either hit a barrier or reach the cap.
+--   Like pipes-concurrency's @fromInput@ but non-blocking.
+--
+fromInputUntil :: MonadIO m => Int -> Input ChanMsg -> Producer TeleMsg m ()
+fromInputUntil n chan = evalStateP 0 go
+  where go = do
+          x  <- lift get
+          when (x <= n) $ do
+            a <- liftIO $ atomically $ recv chan
+            case a of Just (Tele t) -> yield t >> lift (put (x + 1)) >> go
+                      _             -> return ()
 
--- | Aggregate telemetric reports, guaranteed to process only N reports
---   see @report@.
+-- | Aggregate telemetric reports, guaranteed to process only N reports.
+--
+--   *NOTE* Technically we do not need to report number of requests received,
+--          since we can just count the number of latency samples,
+--          but to keep things simple and modular we will leave them separate.
 --
 aggregate :: Monad m => Producer TeleMsg m () -> m [TeleMsg]
 aggregate = evalStateT $ foldAll
@@ -199,3 +243,6 @@ aggregate = evalStateT $ foldAll
         count (c1, _)  (c2, _)  = (c1 + c2, 0)
         keep  (c1, v1) (c2, v2) = (c1 + c2, v1 + v2)
         msg (x,y) z = TeleMsg x y z
+
+milliDelay :: Int -> IO ()
+milliDelay = threadDelay . (*1000)

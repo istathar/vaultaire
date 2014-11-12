@@ -41,6 +41,7 @@ library
                      pipes-parse,
                      pipes,
                      mtl,
+                     transformers,
                      unordered-containers,
                      primitive,
                      vector-algorithms,
@@ -457,6 +458,8 @@ test-suite           profiler-test
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
                      directory,
+                     network-uri,
+                     mtl,
                      vaultaire-common >= 2.7.2,
                      vaultaire
 

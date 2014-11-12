@@ -83,7 +83,7 @@ throwJust =
 
 runTestDaemon :: String -> Daemon a -> IO a
 runTestDaemon brokerURI a =
-    join $   flip runDaemon (cleanup >> loadState >> liftIO (putStrLn "now doing a") >> a)
+    join $   flip runDaemon (cleanup >> loadState >> a)
          <$> daemonArgsTest (fromJust $ parseURI brokerURI)
                             Nothing "test"
 

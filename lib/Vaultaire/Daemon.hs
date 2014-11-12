@@ -44,6 +44,10 @@ module Vaultaire.Daemon
     withPool,
     profileTime,
     profileCount,
+    profileCountN,
+    profileTime_,
+    profileCount_,
+    profileCountN_,
     -- * Smart constructors
     daemonArgs,
     daemonArgsDefault
@@ -450,12 +454,48 @@ daemonArgsDefault
 daemonArgsDefault full_broker_uri user pool shutdown
   = fst <$> daemonArgs full_broker_uri user pool shutdown Nothing Nothing
 
+-- | Send a one-count for this telemtric type to the profiler for this daemon
+--
 profileCount :: TeleMsgType -> Origin -> Daemon ()
 profileCount t g = do
     (_, prof) <- ask
     profCount prof t g
+{-# INLINE profileCount #-}
 
+-- | Send an n-count for this telemtric type to the profiler for this daemon
+--
+profileCountN :: TeleMsgType -> Origin -> Int -> Daemon ()
+profileCountN t g c = do
+    (_, prof) <- ask
+    profCountN prof t g c
+{-# INLINE profileCountN #-}
+
+-- | Measure the timelapse for a daemon operation and
+--   send the result to the profiler
+--
 profileTime :: TeleMsgType -> Origin -> Daemon r -> Daemon r
 profileTime  t g act = do
     (_, prof) <- ask
     profTime prof t g act
+{-# INLINE profileTime #-}
+
+-- | Like @profileCount@, but allows an arbitrary profiling interface,
+--   so it can be use in any monad.
+--
+profileCount_ :: MonadIO m => TeleMsgType -> Origin -> ProfilingInterface -> m ()
+profileCount_ t g p = profCount p t g
+{-# INLINE profileCount_ #-}
+
+-- | Like @profileCount@, but allows an arbitrary profiling interface,
+--   so it can be use in any monad.
+--
+profileCountN_ :: MonadIO m => TeleMsgType -> Origin -> Int -> ProfilingInterface -> m ()
+profileCountN_ t g c p = profCountN p t g c
+{-# INLINE profileCountN_ #-}
+
+-- | Like @profileTime@, but allows an arbitrary profiling interface,
+--   so it can be use in any monad.
+--
+profileTime_ :: MonadIO m => TeleMsgType -> Origin -> ProfilingInterface -> m r -> m r
+profileTime_ t g p act = profTime p t g act
+{-# INLINE profileTime_ #-}

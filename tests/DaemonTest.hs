@@ -140,10 +140,7 @@ sendPonyMsg = runZMQ $ do
     connect s "tcp://localhost:5560"
     -- Simulate a client sending a sequence number and message
     sendMulti s $ fromList ["PONY", "im in ur vaults"]
-    liftIO $ putStrLn "sendPony: sent"
-    x <- receiveMulti s
-    liftIO $ putStrLn "sendPony: receive"
-    return x
+    receiveMulti s
 
 sendBadMsg :: IO ()
 sendBadMsg = runZMQ $ do

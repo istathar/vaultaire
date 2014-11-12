@@ -20,6 +20,7 @@ module DaemonRunners (
    DaemonProcess,
    waitDaemon,
    forkThread,
+   forkThreads,
    daemonWorker,
    daemonProfiler,
    runBrokerDaemon,
@@ -100,7 +101,7 @@ runBrokerDaemon end =
 
             -- Telemetry proxy.
             linkThreadZMQ $ startProxy
-                (Router,"tcp://*:5590") (Dealer,"tcp://*:5591") "tcp://*:5003"
+                (Sub,   "tcp://*:6660") (Pub,   "tcp://*:6661") "tcp://*:6000"
 
         readMVar end
 
@@ -138,5 +139,4 @@ runContentsDaemon pool user brok down name prof = do
                     down name prof startContents
 
 -- The other ports are hard-coded here, so we define the profiling port here too.
--- FIXME: allow user to specify ports for all daemons.
-profilingPort = 6000
+profilingPort = 6661
