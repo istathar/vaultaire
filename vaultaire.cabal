@@ -160,6 +160,38 @@ executable demowave
 
   ghc-prof-options:  -fprof-auto
 
+executable telemetry
+  hs-source-dirs:    src
+  main-is:           TelemetrySub.hs
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     mtl,
+                     network-uri,
+                     semigroups,
+                     rados-haskell,
+                     zeromq4-haskell,
+                     optparse-applicative,
+                     trifecta,
+                     directory,
+                     marquise >= 3.0.2,
+                     containers,
+                     vaultaire-common >= 2.7.2,
+                     pipes,
+                     hslogger,
+                     time,
+                     data-binary-ieee754,
+                     async,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
+  ghc-prof-options:  -fprof-auto
+
 test-suite           daemon-test
   hs-source-dirs:    tests
   main-is:           DaemonTest.hs
