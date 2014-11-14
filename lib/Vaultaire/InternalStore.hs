@@ -22,6 +22,7 @@ module Vaultaire.InternalStore
 ) where
 
 import Control.Monad.State.Strict
+import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.Monoid
@@ -76,7 +77,10 @@ readFrom origin addr =
 enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()
 enumerateOrigin origin =
     forM_ [0,2..internalStoreBuckets] $ \bucket -> do
-        buckets <- lift $ getBuckets (namespace origin) 0 bucket
+        -- This is using the Reader so the profiled time is not exactly just
+        -- Ceph waiting time, but also some reader checking.
+        buckets <- lift $ profileTime ContentsEnumerateCeph
+                 $ getBuckets (namespace origin) 0 bucket
         case buckets of
             Nothing -> return ()
             Just (s,e) -> mergeNoFilter s e

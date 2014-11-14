@@ -35,14 +35,19 @@ startContents :: DaemonArgs -> IO ()
 startContents = flip handleMessages handleRequest
 
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply origin payload) =
+handleRequest (Message reply origin payload) = do
     case fromWire payload of
         Left err -> liftIO $ errorM "Contents.handleRequest" $
                                     "bad request: " ++ show err
         Right op -> case op of
-            ContentsListRequest   -> performListRequest reply origin
+            ContentsListRequest   -> profileCount ContentsEnumerate origin
+                                  >> performListRequest reply origin
+
             GenerateNewAddress    -> performRegisterRequest reply origin
-            UpdateSourceTag a s   -> performUpdateRequest reply origin a s
+
+            UpdateSourceTag a s   -> profileCount ContentsListUpdate origin
+                                  >> performUpdateRequest reply origin a s
+
             RemoveSourceTag a s   -> performRemoveRequest reply origin a s
 
 {-
@@ -56,7 +61,9 @@ handleRequest (Message reply origin payload) =
     times, so each reply here represents one Address,SourceDict pair.
 -}
 performListRequest :: ReplyF -> Origin ->  Daemon ()
-performListRequest reply o = do
+performListRequest reply o
+  = profileTime ContentsEnumerateLatency o $ do
+
     liftIO $ infoM "Contents.performListRequest"
                 (show o ++ " ContentsListRequest")
 
@@ -92,7 +99,9 @@ performUpdateRequest
     -> Address
     -> SourceDict
     -> Daemon ()
-performUpdateRequest reply o a input = do
+performUpdateRequest reply o a input
+  = profileTime ContentsUpdateLatency o $ do
+
     liftIO $ infoM "Contents.performUpdateRequest"
                 (show o ++ " UpdateRequest " ++ show a)
 

@@ -1,19 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Concurrent.Async
-import           Control.Concurrent.MVar
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Reader
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import           Data.List.NonEmpty (fromList)
+import           Control.Monad.Trans.State
+import qualified Data.List as L
 import           Data.Maybe
 import           Network.URI
 import           System.ZMQ4 hiding (shutdown)
 import qualified System.ZMQ4.Monadic as Z
-import qualified System.IO as IO
+import           Test.Hspec hiding (pending)
 
 import           Vaultaire.Daemon
 import           Vaultaire.Broker
@@ -23,32 +22,28 @@ import           Vaultaire.Types
 import           Vaultaire.Util
 import           TestHelpers
 
-{-
 main :: IO ()
 main = do
-    now <- getCurrentTime
-    hspec (suite now)
+    hspec suite
 
-suite :: UTCTime -> Spec
-suite now = do
-    describe "Writer requests" $ do
-        it "has corresponding telemetric data" $ do
-            done <- newEmptyMVar
-            runTelemetrySub
-            runWriterThen $ forM_ [0..1000] $ const sendPonyMsg
-            putMVar done ()
--}
+suite :: Spec
+suite = do
+    describe "Requests" $ do
+        it "have corresponding telemetric data" $ do
+            runTestDaemon "tcp://localhost:1234" loadState
+            sig     <- newEmptyMVar
+            client  <- telemetry sig
+            _       <- testWriter sig writeThings
+            putMVar sig ()
+            x       <- wait client
+            x `shouldBe` [ WriterSimplePoints
+                         , WriterExtendedPoints
+                         , WriterRequest
+                         , WriterRequestLatency
+                         , WriterCephLatency ]
 
-main = do
-  -- create the testing environment
-  runTestDaemon "tcp://localhost:1234" loadState
 
-  sig                <- newEmptyMVar
-  client             <- telemetry sig
-  (server, profiler) <- writer sig writeThings
-  waitAny [client, server, profiler]
-
-telemetry :: MVar () -> IO (Async ())
+telemetry :: MVar () -> IO (Async [TeleMsgType])
 telemetry quit = async $ do
     -- setup a broker for telemetry
     linkThread $ do
@@ -61,37 +56,34 @@ telemetry quit = async $ do
       withSocket ctx Sub $ \sock -> do
         connect sock $ "tcp://localhost:6660"
         subscribe sock ""
-        go sock
+        L.nub <$> L.sort <$> execStateT (go sock) []
     where go sock = do
             done <- isJust <$> liftIO (tryReadMVar quit)
             unless done $ do
-              x <- receive sock
+              x <- liftIO $ receive sock
               case (fromWire x :: Either SomeException TeleResp) of
-                Right y -> print $ show y
-                _ -> error "huh"
+                Right y -> modify ((_type $ _msg y):)
+                _       -> error "Unrecognised telemetric response"
               go sock
 
-writer :: MVar () -> IO () -> IO (Async (), Async ())
-writer quit act = do
-    -- setup a broker so we can "send" to this writer daemon
+testWriter :: MVar () -> IO () -> IO (Async (), Async ())
+testWriter quit act = do
+    -- setup a broker so we can "send" to this testWriter daemon
     linkThread $ do
         Z.runZMQ $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
                               "tcp://*:5000"
 
-    -- start the writer daemon and its profiler
+    -- start the testWriter daemon and its profiler
     (args, prof) <- daemonArgs (fromJust $ parseURI "tcp://localhost:5561")
                                 Nothing "test" quit
-                               (Just "writer-test") (Just (6661, 1000))
-    writer   <- async $ startWriter args 0
-    profiler <- async $ startProfiler prof
+                               (Just "testWriter-test") (Just (6661, 1000))
+    w <- async $ startWriter args 0
+    p <- async $ startProfiler prof
 
     -- perform the fake "send" actions
-    r <- act
-    return (writer, profiler)
-
-  where handler (Message rep_f (Origin origin) msg ) =
-            rep_f . PassThrough $ origin `B.append` msg
+    _ <- act
+    return (w,p)
 
 writeThings :: IO ()
 writeThings = forM_ ([0..100]::[Int]) $ const sendTestMsg

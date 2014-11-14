@@ -56,7 +56,6 @@ module Vaultaire.Daemon
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
 import Control.Monad.Reader
@@ -67,7 +66,6 @@ import Data.List.NonEmpty (fromList)
 import Data.Maybe
 import Data.Monoid
 import Data.Word (Word64)
-import Pipes.Concurrent
 import Network.URI
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
@@ -83,7 +81,6 @@ import Vaultaire.Types
 import Vaultaire.Profiler
 import Vaultaire.Util
 
-import Debug.Trace
 
 -- User facing API
 

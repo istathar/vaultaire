@@ -75,8 +75,8 @@ forkThreads action prof = do
     a <- async action
     link a
     b <- maybe (return Nothing) (fmap Just . async) prof
-    -- Do not link the worker with the profiler thread,
-    -- as the worker should not die if the profiler does.
+
+    link2 a b
     return (a, b)
 
 linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()

@@ -491,7 +491,9 @@ test-suite           profiler-test
                      rados-haskell >= 3.0.1,
                      directory,
                      network-uri,
+                     time,
                      mtl,
+                     transformers,
                      vaultaire-common >= 2.7.2,
                      vaultaire
 

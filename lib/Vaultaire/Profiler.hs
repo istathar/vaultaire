@@ -17,12 +17,10 @@ where
 
 import           Control.Applicative
 import           Control.Concurrent hiding (yield)
-import           Control.Concurrent.STM.TBQueue
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
 import qualified Data.Map.Strict as M
 import           Data.Monoid
-import           Data.Ratio
 import           Data.UnixTime
 import           Data.Word
 import           Foreign.C.Types (CTime(..))
@@ -30,20 +28,11 @@ import           Network.URI
 import           Pipes
 import           Pipes.Lift
 import           Pipes.Concurrent
-import qualified Pipes.Prelude as P
 import           Pipes.Parse (foldAll)
 import           System.Log.Logger
 import qualified System.ZMQ4 as Z
 
 import           Vaultaire.Types
-
-import Debug.Trace
-import System.IO.Unsafe
-
--- TODO
--- the profiler also needs to check shutdown periodically
--- if the profiler crashes, the worker shouldn't be pulled down
--- but if the worker dies, the profiler should die too
 
 -- | The profiler will publish on this socket.
 type PublishSock = Z.Socket Z.Pub
@@ -170,7 +159,7 @@ profile sock = forever $ do
 
   -- Read at most N reports from the profiling channel (N = size of the channel)
   -- since new reports would still be coming in after we have commenced this operation.
-  liftIO $ atomically $ send _output Barrier
+  _    <- liftIO $ atomically $ send _output Barrier
   msgs <- aggregate $ fromInputUntil _bound _input
   _    <- mapM (mkResp _aname >=> pub) msgs
 
