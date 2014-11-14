@@ -102,10 +102,9 @@ processBatch bucket_size (Message reply origin payload)
     result <- case write_state of
         Nothing -> reply InvalidWriteOrigin
         Just s -> do
+            wt1 <- liftIO getCurrentTime
             profileTime  WriterCephLatency origin
                        $ write origin True s
-            wt1 <- liftIO getCurrentTime
-            write origin True s
             wt2 <- liftIO getCurrentTime
             liftIO . (debugM "Writer.processBatch") $ concat [
                 "Wrote simple objects at ",
