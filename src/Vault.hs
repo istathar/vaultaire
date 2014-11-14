@@ -160,7 +160,8 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False True 10000 "" Broker
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost"
+                            False False True 10000 "" Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user

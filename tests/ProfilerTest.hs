@@ -32,19 +32,22 @@ suite = do
         it "have corresponding telemetric data" $ do
             runTestDaemon "tcp://localhost:1234" loadState
             sig     <- newEmptyMVar
-            client  <- telemetry sig
+            client  <- testTelemetry
             _       <- testWriter sig writeThings
             putMVar sig ()
             x       <- wait client
-            x `shouldBe` [ WriterSimplePoints
-                         , WriterExtendedPoints
-                         , WriterRequest
-                         , WriterRequestLatency
-                         , WriterCephLatency ]
+            x `shouldBe` expected
 
 
-telemetry :: MVar () -> IO (Async [TeleMsgType])
-telemetry quit = async $ do
+expected :: [TeleMsgType]
+expected = [ WriterSimplePoints
+           , WriterExtendedPoints
+           , WriterRequest
+           , WriterRequestLatency
+           , WriterCephLatency ]
+
+testTelemetry :: IO (Async [TeleMsgType])
+testTelemetry = async $ do
     -- setup a broker for telemetry
     linkThread $ do
         Z.runZMQ $ startProxy (XPub,"tcp://*:6660")
@@ -56,15 +59,12 @@ telemetry quit = async $ do
       withSocket ctx Sub $ \sock -> do
         connect sock $ "tcp://localhost:6660"
         subscribe sock ""
-        L.nub <$> L.sort <$> execStateT (go sock) []
+        L.nub <$> L.sort <$> execStateT (forM expected $ const $ go sock) []
     where go sock = do
-            done <- isJust <$> liftIO (tryReadMVar quit)
-            unless done $ do
               x <- liftIO $ receive sock
               case (fromWire x :: Either SomeException TeleResp) of
                 Right y -> modify ((_type $ _msg y):)
                 _       -> error "Unrecognised telemetric response"
-              go sock
 
 testWriter :: MVar () -> IO () -> IO (Async (), Async ())
 testWriter quit act = do

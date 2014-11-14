@@ -177,7 +177,7 @@ hasProfiler (name, broker, period, quit) =  do
         raw (CTime x) = x
 
 profile :: PublishSock -> Profiler ()
-profile sock = forever $ do
+profile sock = do
   ProfilingEnv{..} <- ask
 
   done <- isJust <$> liftIO (tryReadMVar _shutdown)
@@ -190,6 +190,7 @@ profile sock = forever $ do
 
     -- Sleep for <period> milliseconds
     liftIO $ milliDelay _sleep
+    profile sock
 
   where mkResp :: MonadIO m => AgentID -> TeleMsg -> m TeleResp
         mkResp n msg = do
