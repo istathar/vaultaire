@@ -21,6 +21,7 @@ import           Control.Concurrent hiding (yield)
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
 import qualified Data.Map.Strict as M
+import           Data.Maybe
 import           Data.Monoid
 import           Data.UnixTime
 import           Data.Word
@@ -75,8 +76,9 @@ data ProfilingInterface = ProfilingInterface
    , report      :: MonadIO m => TeleMsgType -> Origin -> Word64 -> m () }
 
 -- | Arguments needed to be specified by the user for profiling
---   (name, publishing port, period)
-type ProfilerArgs = (String, URI, Period)
+--   (name, publishing port, period, shutdown signal)
+--
+type ProfilerArgs = (String, URI, Period, MVar ())
 
 -- | Profiling environment.
 data ProfilingEnv = ProfilingEnv
@@ -87,6 +89,7 @@ data ProfilingEnv = ProfilingEnv
    , _output    :: Output ChanMsg  -- ^ Send to the profiler via this output
    , _input     :: Input  ChanMsg  -- ^ Receive messages sent to the profiler via this input
    , _seal      :: IO ()           -- ^ Seal the profiler chan
+   , _shutdown  :: MVar ()         -- ^ Shutdown signal
    }
 
 -- | Values that can be sent to the profiling channel.
@@ -104,7 +107,10 @@ noProfiler
           , _sleep    = 0
           , _output   = Output { send = const $ return False   }
           , _input    = Input  { recv =         return Nothing }
-          , _seal     = return () }
+          , _seal     = return ()
+          -- This is fine because this MVar will never be read
+          -- the profiling environment accessors are not exported.
+          , _shutdown = undefined }
     , ProfilingInterface
           { profCount   = const $ const $ const $ return ()
           , profTime    = const $ const id
@@ -112,7 +118,7 @@ noProfiler
           , report      = const $ const $ const $ return () } )
 
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
-hasProfiler (name, broker, period) =  do
+hasProfiler (name, broker, period, quit) =  do
   n <- maybe (do errorM  "Daemon.setupProfiler"
                         ("The daemon name given is invalid: " ++ name ++
                          ". An empty name has been given to the daemon.")
@@ -131,7 +137,8 @@ hasProfiler (name, broker, period) =  do
                , _sleep    = period
                , _output   = output
                , _input    = input
-               , _seal     = liftIO $ atomically sealchan }
+               , _seal     = liftIO $ atomically sealchan
+               , _shutdown = quit }
          , ProfilingInterface
                { profCount   = sendCount   output
                , profTime    = sendElapsed output
@@ -173,14 +180,16 @@ profile :: PublishSock -> Profiler ()
 profile sock = forever $ do
   ProfilingEnv{..} <- ask
 
-  -- Read at most N reports from the profiling channel (N = size of the channel)
-  -- since new reports would still be coming in after we have commenced this operation.
-  _    <- liftIO $ atomically $ send _output Barrier
-  msgs <- aggregate $ fromInputUntil _bound _input
-  _    <- mapM (mkResp _aname >=> pub) msgs
+  done <- isJust <$> liftIO (tryReadMVar _shutdown)
+  unless done $ do
+    -- Read at most N reports from the profiling channel (N = size of the channel)
+    -- since new reports would still be coming in after we have commenced this operation.
+    _    <- liftIO $ atomically $ send _output Barrier
+    msgs <- aggregate $ fromInputUntil _bound _input
+    _    <- mapM (mkResp _aname >=> pub) msgs
 
-  -- Sleep for <period> milliseconds
-  liftIO $ milliDelay _sleep
+    -- Sleep for <period> milliseconds
+    liftIO $ milliDelay _sleep
 
   where mkResp :: MonadIO m => AgentID -> TeleMsg -> m TeleResp
         mkResp n msg = do

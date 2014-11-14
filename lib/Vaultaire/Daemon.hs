@@ -430,7 +430,8 @@ daemonArgs brokerd user pool end dname pargs = do
     (env, interface)  <- maybe (return noProfiler)
                                (\(pport, pperiod) -> hasProfiler ( maybe mempty id dname
                                                                  , modPort brokerd pport
-                                                                 , pperiod)) pargs
+                                                                 , pperiod
+                                                                 , end )) pargs
     return ( DaemonArgs brokerd
                         (BS.pack <$> user)
                         (BS.pack     pool)
