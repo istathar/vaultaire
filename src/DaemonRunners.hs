@@ -75,8 +75,8 @@ forkThreads action prof = do
     a <- async action
     link a
     b <- maybe (return Nothing) (fmap Just . async) prof
+    _ <- maybe (return ())      (link2 a)           b
 
-    link2 a b
     return (a, b)
 
 linkThreadZMQ :: forall a z. ZMQ z a -> ZMQ z ()
