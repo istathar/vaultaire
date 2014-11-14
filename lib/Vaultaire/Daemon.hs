@@ -456,7 +456,7 @@ daemonArgsDefault full_broker_uri user pool shutdown
 profileCount :: TeleMsgType -> Origin -> Daemon ()
 profileCount t g = do
     (_, prof) <- ask
-    profCount prof t g
+    profCountN prof t g 1
 {-# INLINE profileCount #-}
 
 -- | Send an n-count for this telemtric type to the profiler for this daemon
@@ -480,7 +480,7 @@ profileTime  t g act = do
 --   so it can be use in any monad.
 --
 profileCount_ :: MonadIO m => TeleMsgType -> Origin -> ProfilingInterface -> m ()
-profileCount_ t g p = profCount p t g
+profileCount_ t g p = profCountN p t g 1
 {-# INLINE profileCount_ #-}
 
 -- | Like @profileCount@, but allows an arbitrary profiling interface,

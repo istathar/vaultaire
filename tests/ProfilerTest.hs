@@ -77,7 +77,7 @@ testWriter quit act = do
     -- start the testWriter daemon and its profiler
     (args, prof) <- daemonArgs (fromJust $ parseURI "tcp://localhost:5561")
                                 Nothing "test" quit
-                               (Just "testWriter-test") (Just (6661, 1000))
+                               (Just "writer-test") (Just (6661, 1000))
     w <- async $ startWriter args 0
     p <- async $ startProfiler prof
 

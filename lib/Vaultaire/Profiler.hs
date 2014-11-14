@@ -65,8 +65,7 @@ startProfiler env@(ProfilingEnv{..}) =
 data ProfilingInterface = ProfilingInterface
    -- Dictionary of reporting functions.
    -- without profiling, they should become no-op's.
-   { profCount  :: MonadIO m => TeleMsgType -> Origin -> m ()
-   , profCountN :: MonadIO m => TeleMsgType -> Origin -> Int -> m ()
+   { profCountN :: MonadIO m => TeleMsgType -> Origin -> Int -> m ()
    , profTime   :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
 
 -- | Arguments needed to be specified by the user for profiling
@@ -101,8 +100,7 @@ noProfiler
           , _input    = Input  { recv =         return Nothing }
           , _seal     = return () }
     , ProfilingInterface
-          { profCount  = const $ const $ return ()
-          , profCountN = const $ const $ const $ return ()
+          { profCountN = const $ const $ const $ return ()
           , profTime   = const $ const id } )
 
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
@@ -115,7 +113,7 @@ hasProfiler (name, broker, period) =  do
              (agentID name)
   -- We use the @Newest@ buffer for the internal report queue
   -- so that old reports will be removed if the buffer is full.
-  -- This means the internal will lose precision but not have
+  -- This means the profiler will lose precision but not have
   -- an impact on performance if there is too much activity.
   (output, input, sealchan) <- spawn' $ Newest 1024
   return ( ProfilingEnv
@@ -127,15 +125,11 @@ hasProfiler (name, broker, period) =  do
                , _input    = input
                , _seal     = liftIO $ atomically sealchan }
          , ProfilingInterface
-               { profCount  = g output
-               , profCountN = f output
+               { profCountN = f output
                , profTime   = h output } )
 
   where f output teletype origin count = liftIO $ do
           _ <- atomically (send output $ Tele $ TeleMsg origin teletype $ fromIntegral count)
-          return ()
-        g output teletype origin = liftIO $ do
-          _ <- atomically (send output $ Tele $ TeleMsg origin teletype 1)
           return ()
         h output teletype origin act = do
           !t1 <- liftIO $ getUnixTime
