@@ -45,7 +45,7 @@ handleRequest (Message reply origin payload) = do
 
             GenerateNewAddress    -> performRegisterRequest reply origin
 
-            UpdateSourceTag a s   -> profileCount ContentsListUpdate origin
+            UpdateSourceTag a s   -> profileCount ContentsUpdate origin
                                   >> performUpdateRequest reply origin a s
 
             RemoveSourceTag a s   -> performRemoveRequest reply origin a s

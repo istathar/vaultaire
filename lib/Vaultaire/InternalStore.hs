@@ -22,7 +22,6 @@ module Vaultaire.InternalStore
 ) where
 
 import Control.Monad.State.Strict
-import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.Monoid
@@ -32,7 +31,7 @@ import Data.Word (Word64)
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as Pipes
-import Vaultaire.Daemon (Daemon)
+import Vaultaire.Daemon (Daemon, profileTime)
 import Vaultaire.Reader (getBuckets, readExtended)
 import Vaultaire.ReaderAlgorithms (mergeNoFilter)
 import Vaultaire.Types
@@ -79,7 +78,7 @@ enumerateOrigin origin =
     forM_ [0,2..internalStoreBuckets] $ \bucket -> do
         -- This is using the Reader so the profiled time is not exactly just
         -- Ceph waiting time, but also some reader checking.
-        buckets <- lift $ profileTime ContentsEnumerateCeph
+        buckets <- lift $ profileTime ContentsEnumerateCeph origin
                  $ getBuckets (namespace origin) 0 bucket
         case buckets of
             Nothing -> return ()
