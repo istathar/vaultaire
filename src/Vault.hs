@@ -222,15 +222,14 @@ main = do
         Writer roll_over_size ->
             if   profile
             then runWriterDaemon pool user broker roll_over_size quit name Nothing
-            else runWriterDaemon pool user broker roll_over_size quit name (Just prof)
+            else runWriterDaemon pool user broker roll_over_size quit name (Just period)
 
         Contents ->
             if   profile
             then runContentsDaemon pool user broker quit name Nothing
-            else runContentsDaemon pool user broker quit name (Just prof)
+            else runContentsDaemon pool user broker quit name (Just period)
 
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"
     _ <- waitDaemon a
     debugM "Main.main" "End"
-    where prof = undefined
