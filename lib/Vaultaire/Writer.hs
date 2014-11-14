@@ -104,15 +104,26 @@ processBatch bucket_size (Message reply origin payload)
         Just s -> do
             profileTime  WriterCephLatency origin
                        $ write origin True s
+            wt1 <- liftIO getCurrentTime
+            write origin True s
+            wt2 <- liftIO getCurrentTime
+            liftIO . (debugM "Writer.processBatch") $ concat [
+                "Wrote simple objects at ",
+                fmtWriteRate bytes wt2 wt1,
+                " kB/s"]
             reply OnDisk
 
     t2 <- liftIO getCurrentTime
-    let delta = diffUTCTime t2 t1
-    let delta_float = (fromRational . toRational) bytes / (fromRational . toRational) delta / 1000 :: Float
-    let delta_padded = printf "%9.1f" delta_float
+    let delta_padded = fmtWriteRate bytes t2 t1
     liftIO $ infoM "Writer.processBatch"
                 (show origin ++ " Finished   " ++ delta_padded ++ " kB/s")
     return result
+  where
+    fmtWriteRate :: Int -> UTCTime -> UTCTime -> String
+    fmtWriteRate bytes end start = (printf "%9.1f") . (writeRate bytes) $ diffUTCTime end start
+
+    writeRate :: Int -> NominalDiffTime -> Float
+    writeRate bytes d = (((fromRational . toRational) bytes) / ((fromRational . toRational) d)) / 1000
 
 
 processPoints :: MonadState BatchState m
