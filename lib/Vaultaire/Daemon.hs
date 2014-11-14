@@ -45,9 +45,8 @@ module Vaultaire.Daemon
     profileTime,
     profileCount,
     profileCountN,
-    profileTime_,
-    profileCount_,
-    profileCountN_,
+    profileReport,
+    elapsed,
     -- * Smart constructors
     daemonArgs,
     daemonArgsDefault
@@ -456,7 +455,7 @@ daemonArgsDefault full_broker_uri user pool shutdown
 profileCount :: TeleMsgType -> Origin -> Daemon ()
 profileCount t g = do
     (_, prof) <- ask
-    profCountN prof t g 1
+    profCount  prof t g 1
 {-# INLINE profileCount #-}
 
 -- | Send an n-count for this telemtric type to the profiler for this daemon
@@ -464,7 +463,7 @@ profileCount t g = do
 profileCountN :: TeleMsgType -> Origin -> Int -> Daemon ()
 profileCountN t g c = do
     (_, prof) <- ask
-    profCountN prof t g c
+    profCount  prof t g c
 {-# INLINE profileCountN #-}
 
 -- | Measure the timelapse for a daemon operation and
@@ -476,23 +475,16 @@ profileTime  t g act = do
     profTime prof t g act
 {-# INLINE profileTime #-}
 
--- | Like @profileCount@, but allows an arbitrary profiling interface,
---   so it can be use in any monad.
+-- | Measure the timelapse for a daemon operation.
 --
-profileCount_ :: MonadIO m => TeleMsgType -> Origin -> ProfilingInterface -> m ()
-profileCount_ t g p = profCountN p t g 1
-{-# INLINE profileCount_ #-}
+elapsed :: Daemon r -> Daemon (r, Word64)
+elapsed act = do
+    (_, prof) <- ask
+    measureTime prof act
+{-# INLINE elapsed #-}
 
--- | Like @profileCount@, but allows an arbitrary profiling interface,
---   so it can be use in any monad.
---
-profileCountN_ :: MonadIO m => TeleMsgType -> Origin -> Int -> ProfilingInterface -> m ()
-profileCountN_ t g c p = profCountN p t g c
-{-# INLINE profileCountN_ #-}
-
--- | Like @profileTime@, but allows an arbitrary profiling interface,
---   so it can be use in any monad.
---
-profileTime_ :: MonadIO m => TeleMsgType -> Origin -> ProfilingInterface -> m r -> m r
-profileTime_ t g p act = profTime p t g act
-{-# INLINE profileTime_ #-}
+profileReport :: TeleMsgType -> Origin -> Word64 -> Daemon ()
+profileReport t g p = do
+    (_, prof) <- ask
+    report prof t g p
+{-# INLINE profileReport #-}

@@ -3,6 +3,7 @@
 {-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TupleSections #-}
 
 module Vaultaire.Profiler
      ( Profiler
@@ -62,11 +63,16 @@ startProfiler env@(ProfilingEnv{..}) =
       runProfiler env $ profile sock
 
 -- | Interface exposed to worker threads so they can report to the profiler.
+--   in case of no profiling, these functions should be basically noops.
+--
 data ProfilingInterface = ProfilingInterface
-   -- Dictionary of reporting functions.
-   -- without profiling, they should become no-op's.
-   { profCountN :: MonadIO m => TeleMsgType -> Origin -> Int -> m ()
-   , profTime   :: MonadIO m => TeleMsgType -> Origin -> m r -> m r }
+   { -- Reporting functions, they will perform the necessary measurements
+     -- and send them to the profiler.
+     profCount   :: MonadIO m => TeleMsgType -> Origin -> Int -> m ()
+   , profTime    :: MonadIO m => TeleMsgType -> Origin -> m r -> m r
+     -- Raw measurement and sending functions.
+   , measureTime :: MonadIO m => m r -> m (r, Word64)
+   , report      :: MonadIO m => TeleMsgType -> Origin -> Word64 -> m () }
 
 -- | Arguments needed to be specified by the user for profiling
 --   (name, publishing port, period)
@@ -100,8 +106,10 @@ noProfiler
           , _input    = Input  { recv =         return Nothing }
           , _seal     = return () }
     , ProfilingInterface
-          { profCountN = const $ const $ const $ return ()
-          , profTime   = const $ const id } )
+          { profCount   = const $ const $ const $ return ()
+          , profTime    = const $ const id
+          , measureTime = (>>= return . (,0)) . id
+          , report      = const $ const $ const $ return () } )
 
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
 hasProfiler (name, broker, period) =  do
@@ -125,21 +133,35 @@ hasProfiler (name, broker, period) =  do
                , _input    = input
                , _seal     = liftIO $ atomically sealchan }
          , ProfilingInterface
-               { profCountN = f output
-               , profTime   = h output } )
+               { profCount   = sendCount   output
+               , profTime    = sendElapsed output
+               , measureTime = elapsed
+               , report      = sendIt      output } )
 
-  where f output teletype origin count = liftIO $ do
-          _ <- atomically (send output $ Tele $ TeleMsg origin teletype $ fromIntegral count)
+  where sendCount output teletype origin count = do
+          -- sending to the profiler shouldn't fail (as the buffer is @Newest@)
+          -- but if it does there is nothing the worker could do about it
+          _ <- liftIO $ atomically $ send output
+             $ Tele $ TeleMsg origin teletype $ fromIntegral count
           return ()
-        h output teletype origin act = do
+
+        sendIt output teletype origin payload = do
+          _ <- liftIO $ atomically $ send output
+             $ Tele $ TeleMsg origin teletype payload
+          return ()
+
+        elapsed act = do
           !t1 <- liftIO $ getUnixTime
           r   <- act
           !t2 <- liftIO $ getUnixTime
-          _  <- liftIO $ atomically $ send output $ Tele
-             $  TeleMsg origin teletype
-             $  diffTimeInMs
-             $  diffUnixTime t2 t1
+          return (r, diffTimeInMs $ diffUnixTime t2 t1)
+
+        sendElapsed output teletype origin act = do
+          (r, t) <- elapsed act
+          _      <- liftIO $ atomically $ send output $ Tele
+                 $  TeleMsg origin teletype t
           return r
+
         diffTimeInMs :: UnixDiffTime -> Word64
         diffTimeInMs u
           = let secInMilliSec  = (raw $ udtSeconds u) * 1000

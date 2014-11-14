@@ -105,10 +105,16 @@ performUpdateRequest reply o a input
     liftIO $ infoM "Contents.performUpdateRequest"
                 (show o ++ " UpdateRequest " ++ show a)
 
-    result <- retreiveSourceTagsForAddress o a
+    (result, readTime) <- elapsed $ retreiveSourceTagsForAddress o a
 
     case result of
-        Nothing -> writeSourceTagsForAddress o a input
+        Nothing -> do
+            (_, writeTime) <- elapsed $ writeSourceTagsForAddress o a input
+            -- NOTE: measurement of Ceph latency for Contents is not as accurate as
+            --       for Reader/Writer, since these times include cycles spent in
+            --       Reader/Writer as well as Rados.
+            profileReport ContentsUpdateCeph o (readTime + writeTime)
+
         Just current -> do
             -- items in first SourceDict (the passed in update from user) win
             let update = unionSource input current
