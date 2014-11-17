@@ -97,16 +97,14 @@ optionsParser Options{..} = Options <$> parsePool
 
     parseProfile = switch $
            long "profiling"
-        <> short 'p'
         <> help "Enables profiling"
 
     parsePeriod = O.option auto $
            long "period"
-        <> short 't'
         <> metavar "PERIOD"
         <> value period
         <> showDefault
-        <> help "How often the profiler reports telemetric data, in milliseconds. This argument only has an effect when '-p' is specified."
+        <> help "How often the profiler reports telemetric data, in milliseconds. This argument only has an effect when '--profiling' is specified."
 
     parseName = strOption $
            long "name"
