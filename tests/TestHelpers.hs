@@ -37,7 +37,7 @@ import Network.URI
 import System.Rados.Monadic
 import System.ZMQ4.Monadic
 import Vaultaire.Broker
-import Vaultaire.Daemon
+import Vaultaire.Daemon hiding (shutdown)
 import Vaultaire.Reader (startReader)
 import Vaultaire.RollOver
 import Vaultaire.Util
