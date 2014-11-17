@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Vaultaire.Profiler
      ( Profiler
@@ -21,6 +22,7 @@ import           Control.Concurrent hiding (yield)
 import           Control.Monad.Reader
 import           Control.Monad.State.Strict
 import qualified Data.Map.Strict as M
+import qualified Data.List as L
 import           Data.Maybe
 import           Data.Monoid
 import           Data.UnixTime
@@ -35,6 +37,7 @@ import           System.Log.Logger
 import qualified System.ZMQ4 as Z
 
 import           Vaultaire.Types
+
 
 -- | The profiler will publish on this socket.
 type PublishSock = Z.Socket Z.Pub
@@ -220,7 +223,10 @@ fromInputUntil n chan = evalStateP 0 go
 --
 aggregate :: Monad m => Producer TeleMsg m () -> m [TeleMsg]
 aggregate = evalStateT $ foldAll
-    (\acc x -> M.insertWith (go $ _type x) (_origin x, _type x) (1, _payload x) acc)
+    (\acc x -> M.insertWith (go $ _type x)
+                            (_origin x, _type x)
+                            (1, [_payload x])
+                            acc)
     (M.empty)
     (map (uncurry extract) . M.toList)
     where go WriterSimplePoints       = count
@@ -239,25 +245,42 @@ aggregate = evalStateT $ foldAll
           go ContentsUpdateLatency    = keep
           go ContentsEnumerateCeph    = keep
           go ContentsUpdateCeph       = keep
-          extract k@(_, WriterSimplePoints      ) = msg k <$> (fst                )
-          extract k@(_, WriterExtendedPoints    ) = msg k <$> (fst                )
-          extract k@(_, WriterRequest           ) = msg k <$> (fst                )
-          extract k@(_, WriterRequestLatency    ) = msg k <$> (div <$> snd <*> fst)
-          extract k@(_, WriterCephLatency       ) = msg k <$> (div <$> snd <*> fst)
-          extract k@(_, ReaderSimplePoints      ) = msg k <$> (fst                )
-          extract k@(_, ReaderExtendedPoints    ) = msg k <$> (fst                )
-          extract k@(_, ReaderRequest           ) = msg k <$> (fst                )
-          extract k@(_, ReaderRequestLatency    ) = msg k <$> (div <$> snd <*> fst)
-          extract k@(_, ReaderCephLatency       ) = msg k <$> (div <$> snd <*> fst)
-          extract k@(_, ContentsEnumerate       ) = msg k <$> (fst                )
-          extract k@(_, ContentsUpdate          ) = msg k <$> (fst                )
-          extract k@(_, ContentsEnumerateLatency) = msg k <$> (div <$> snd <*> fst)
-          extract k@(_, ContentsUpdateLatency   ) = msg k <$> (div <$> snd <*> fst)
-          extract k@(_, ContentsEnumerateCeph   ) = msg k <$> (div <$> snd <*> fst)
-          extract k@(_, ContentsUpdateCeph      ) = msg k <$> (div <$> snd <*> fst)
-          count (c1, _)  (c2, _)  = (c1 + c2, 0)
-          keep  (c1, v1) (c2, v2) = (c1 + c2, v1 + v2)
-          msg (x,y) z = TeleMsg x y z
+          extract k@(_, WriterSimplePoints      ) = total  k
+          extract k@(_, WriterExtendedPoints    ) = total  k
+          extract k@(_, WriterRequest           ) = total  k
+          extract k@(_, WriterRequestLatency    ) = median k
+          extract k@(_, WriterCephLatency       ) = median k
+          extract k@(_, ReaderSimplePoints      ) = total  k
+          extract k@(_, ReaderExtendedPoints    ) = total  k
+          extract k@(_, ReaderRequest           ) = total  k
+          extract k@(_, ReaderRequestLatency    ) = median k
+          extract k@(_, ReaderCephLatency       ) = median k
+          extract k@(_, ContentsEnumerate       ) = total  k
+          extract k@(_, ContentsUpdate          ) = total  k
+          extract k@(_, ContentsEnumerateLatency) = median k
+          extract k@(_, ContentsUpdateLatency   ) = median k
+          extract k@(_, ContentsEnumerateCeph   ) = median k
+          extract k@(_, ContentsUpdateCeph      ) = median k
+          count (c1, x)  (c2, _)   = (c1 + c2, x)
+          keep  (c1, vs) (c2, vs') = (c1 + c2, vs' ++ vs)
+          total  k                 = msg k <$> fst
+          median k                 = msg k <$> mid
+          msg   (x,y)    z         = TeleMsg x y z
+          -- median is:
+          -- - middle element if list is odd
+          -- - average of the two middles if the list is even
+          -- these lists of latency values should not be too long, this code
+          -- can be optimised if there's a performance issue with the profiler.
+          -- in particular, the median can be calculated in O(n).
+          mid :: (Word64, [Word64]) -> Word64
+          mid   (0, [])   = 0
+          mid   (c, v)    = let len = (fromIntegral c :: Int)
+                                vs  = L.sort v
+                             in if   len `mod` 2 == 0
+                                then let l = vs !! (len `div` 2)
+                                         r = vs !! (len `div` 2 + 1)
+                                     in  (l + r) `div` 2
+                                else vs !! (len `div` 2)
 
 milliDelay :: Int -> IO ()
 milliDelay = threadDelay . (*1000)
