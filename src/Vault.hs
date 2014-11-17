@@ -14,7 +14,6 @@
 
 module Main where
 
-import Control.Concurrent.Async
 import Control.Monad
 import Data.Maybe (fromJust)
 import Data.Word (Word64)
@@ -23,6 +22,7 @@ import qualified Options.Applicative as O
 import System.Directory
 import System.Log.Logger
 import Text.Trifecta
+import Text.Read
 
 import DaemonRunners
 import Package (package, version)
@@ -35,6 +35,9 @@ data Options = Options
   , broker    :: String
   , debug     :: Bool
   , quiet     :: Bool
+  , profile   :: Bool
+  , period    :: Int
+  , name      :: String
   , component :: Component }
 
 data Component = Broker
@@ -53,6 +56,9 @@ optionsParser Options{..} = Options <$> parsePool
                                     <*> parseBroker
                                     <*> parseDebug
                                     <*> parseQuiet
+                                    <*> parseProfile
+                                    <*> parsePeriod
+                                    <*> parseName
                                     <*> parseComponents
   where
     parsePool = strOption $
@@ -88,6 +94,25 @@ optionsParser Options{..} = Options <$> parsePool
            long "quiet"
         <> short 'q'
         <> help "Only emit warnings or fatal messages"
+
+    parseProfile = switch $
+           long "profiling"
+        <> help "Enables profiling"
+
+    parsePeriod = O.option auto $
+           long "period"
+        <> metavar "PERIOD"
+        <> value period
+        <> showDefault
+        <> help "How often the profiler reports telemetric data, in milliseconds. This argument only has an effect when '--profiling' is specified."
+
+    parseName = strOption $
+           long "name"
+        <> short 'n'
+        <> metavar "NAME"
+        <> value name
+        <> showDefault
+        <> help "Identifiable name for the daemon. Useful for telemetrics."
 
     parseComponents = subparser
        (  parseBrokerComponent
@@ -134,13 +159,17 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost" False False Broker
+    defaultConfig = Options "vaultaire" "vaultaire" "localhost"
+                            False False True 10000 "" Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
                 <*> lookup "broker" ls `mplus` pure broker
                 <*> pure debug
                 <*> pure quiet
+                <*> pure profile
+                <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
+                <*> lookup "name" ls `mplus` pure name
                 <*> pure Broker
 
 configParser :: Parser [(String, String)]
@@ -184,15 +213,23 @@ main = do
     a <- case component of
         Broker ->
             runBrokerDaemon quit
+
         Reader ->
-            runReaderDaemon pool user broker quit
+            if   profile
+            then runReaderDaemon pool user broker quit name Nothing
+            else runReaderDaemon pool user broker quit name (Just period)
+
         Writer roll_over_size ->
-            runWriterDaemon pool user broker roll_over_size quit
+            if   profile
+            then runWriterDaemon pool user broker roll_over_size quit name Nothing
+            else runWriterDaemon pool user broker roll_over_size quit name (Just period)
+
         Contents ->
-            runContentsDaemon pool user broker quit
+            if   profile
+            then runContentsDaemon pool user broker quit name Nothing
+            else runContentsDaemon pool user broker quit name (Just period)
 
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"
-    _ <- wait a
+    _ <- waitDaemon a
     debugM "Main.main" "End"
-

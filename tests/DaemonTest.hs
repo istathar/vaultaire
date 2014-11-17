@@ -7,16 +7,20 @@ import Control.Concurrent.MVar
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.List.NonEmpty (fromList)
+import Data.Maybe
+import Network.URI
 import System.Rados.Monadic hiding (async)
 import System.ZMQ4.Monadic hiding (async)
 import Test.Hspec
-import TestHelpers
+
 import Vaultaire.Broker
 import Vaultaire.Daemon hiding (async)
 import Vaultaire.DayMap
 import Vaultaire.RollOver
 import Vaultaire.Types
 import Vaultaire.Util
+import TestHelpers
+
 
 main :: IO ()
 main = do
@@ -119,8 +123,9 @@ suite = do
 withReplier :: IO a -> IO a
 withReplier f = do
     shutdown <- newEmptyMVar
-    linkThread $
-        handleMessages "tcp://localhost:5561" Nothing "test" shutdown handler
+    args     <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
+                                   Nothing "test" shutdown
+    linkThread $ handleMessages args handler
     r <- f
     putMVar shutdown ()
     return r

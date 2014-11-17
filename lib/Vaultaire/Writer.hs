@@ -18,9 +18,10 @@ module Vaultaire.Writer
 ) where
 
 import Control.Applicative
-import Control.Concurrent (MVar)
 import Control.Monad
+import Control.Monad.Reader
 import Control.Monad.State.Strict
+import qualified Control.Monad.Trans.State.Strict as TS
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.ByteString.Lazy (toStrict)
@@ -58,24 +59,21 @@ data BatchState = BatchState
 data Event = Msg Message | Tick
 
 -- | Start a writer daemon, runs until shutdown.
-startWriter :: String           -- ^ Broker
-            -> Maybe ByteString -- ^ Username for Ceph
-            -> ByteString       -- ^ Pool name for Ceph
-            -> Word64           -- ^ Maximum bytes in bucket before rollover
-            -> MVar ()          -- ^ Shutdown signal
-            -> IO ()
-startWriter broker user pool bucket_size shutdown = do
-    handleMessages broker user pool shutdown (processBatch bucket_size)
+startWriter :: DaemonArgs -> BucketSize -> IO ()
+startWriter args bucket_size = handleMessages args (processBatch bucket_size)
 
-batchStateNow :: Word64 -> (DayMap, DayMap) -> IO BatchState
+batchStateNow :: BucketSize -> (DayMap, DayMap) -> IO BatchState
 batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
-processBatch :: Word64 -> Message -> Daemon ()
-processBatch bucket_size (Message reply origin payload) = do
-    let bytes = S.length payload
-    t1 <- liftIO getCurrentTime
+processBatch :: BucketSize -> Message -> Daemon ()
+processBatch bucket_size (Message reply origin payload)
+  = profileTime  WriterRequestLatency origin $ do
+    profileCount WriterRequest        origin
 
+    let bytes = S.length payload
+
+    t1 <- liftIO getCurrentTime
     liftIO $ infoM "Writer.processBatch"
                 (show origin ++ " Processing " ++ printf "%9d" bytes ++ " B")
 
@@ -92,15 +90,21 @@ processBatch bucket_size (Message reply origin payload) = do
                 -- extended buckets.
 
                 s <- liftIO $ batchStateNow bucket_size dms
+                let ((sp, ep), s') = flip runState s
+                                   $  processPoints 0 payload (dayMaps s) origin
+                                                    (latestSimple s) (latestExtended s)
 
-                return . Just . flip execState s $
-                    processPoints 0 payload (dayMaps s) origin (latestSimple s) (latestExtended s)
+                profileCountN WriterSimplePoints  origin sp
+                profileCountN WriterExtendedPoints origin ep
+
+                return $ Just s'
 
     result <- case write_state of
         Nothing -> reply InvalidWriteOrigin
         Just s -> do
             wt1 <- liftIO getCurrentTime
-            write origin True s
+            profileTime  WriterCephLatency origin
+                       $ write origin True s
             wt2 <- liftIO getCurrentTime
             liftIO . (debugM "Writer.processBatch") $ concat [
                 "Wrote simple objects at ",
@@ -120,12 +124,21 @@ processBatch bucket_size (Message reply origin payload) = do
     writeRate :: Int -> NominalDiffTime -> Float
     writeRate bytes d = (((fromRational . toRational) bytes) / ((fromRational . toRational) d)) / 1000
 
+
 processPoints :: MonadState BatchState m
-              => Word64 -> ByteString -> (DayMap, DayMap) -> Origin -> TimeStamp -> TimeStamp -> m ()
+              => Word64
+              -> ByteString
+              -> (DayMap, DayMap)
+              -> Origin
+              -> TimeStamp
+              -> TimeStamp
+              -> m (Int, Int)      -- ^ Number of (simple, extended) points processed
 processPoints offset message day_maps origin latest_simple latest_ext
-    | fromIntegral offset >= S.length message = modify (\s -> s{ latestSimple = latest_simple
-                                                                , latestExtended = latest_ext })
-    | otherwise = do
+    | fromIntegral offset >= S.length message = do
+        modify (\s -> s { latestSimple   = latest_simple
+                        , latestExtended = latest_ext })
+        return (0,0)
+    | otherwise = flip evalStateT (0::Int,0::Int) $ do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (simple_epoch, simple_buckets) = lookupFirst time (fst day_maps)
 
@@ -139,17 +152,21 @@ processPoints offset message day_maps origin latest_simple latest_ext
                             runUnpacking (getBytesAt (offset + 24) len) message
                 let (ext_epoch, ext_buckets) = lookupFirst time (snd day_maps)
                 let ext_bucket = calculateBucketNumber ext_buckets address
-                appendExtended ext_epoch ext_bucket address time len str
+                lift $ appendExtended ext_epoch ext_bucket address time len str
+                TS.modify $ \(s,e) -> (s,e+1)
+
                 let !t | time > latest_ext = time
                        | otherwise         = latest_ext
-                processPoints (offset + 24 + len) message day_maps origin latest_simple t
+                lift $ processPoints (offset + 24 + len) message day_maps origin latest_simple t
             else do
                 let message_bytes = runUnpacking (getBytesAt offset 24) message
                 let simple_bucket = calculateBucketNumber simple_buckets address
-                appendSimple simple_epoch simple_bucket message_bytes
+                lift $ appendSimple simple_epoch simple_bucket message_bytes
+                TS.modify $ \(s,e) -> (s+1,e)
+
                 let !t | time > latest_simple = time
                        | otherwise            = latest_simple
-                processPoints (offset + 24) message day_maps origin t latest_ext
+                lift $ processPoints (offset + 24) message day_maps origin t latest_ext
 
 parseMessageAt :: Word64 -> Unpacking (Address, TimeStamp, Payload)
 parseMessageAt offset = do

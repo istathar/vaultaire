@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.5.7
+version:             2.6.0
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
@@ -30,7 +30,8 @@ library
                      Vaultaire.Reader,
                      Vaultaire.ReaderAlgorithms,
                      Vaultaire.InternalStore,
-                     Vaultaire.Contents
+                     Vaultaire.Contents,
+                     Vaultaire.Profiler
 
   build-depends:     base >=4.7.0.1 && <5,
                      bytestring,
@@ -40,6 +41,7 @@ library
                      pipes-parse,
                      pipes,
                      mtl,
+                     transformers,
                      unordered-containers,
                      primitive,
                      vector-algorithms,
@@ -55,6 +57,8 @@ library
                      vaultaire-common >= 2.7.2,
                      text,
                      unix,
+                     unix-time,
+                     network-uri,
                      rados-haskell >= 3.0.3
 
   ghc-options:       -O2
@@ -85,6 +89,7 @@ executable vault
                      hslogger >= 1.2.4,
                      async,
                      unix,
+                     network-uri,
                      vaultaire
 
   ghc-options:       -O2
@@ -114,6 +119,7 @@ executable inspect
                      hslogger >= 1.2.4,
                      async,
                      unix,
+                     network-uri,
                      vaultaire
 
   ghc-options:       -O2
@@ -154,6 +160,25 @@ executable demowave
 
   ghc-prof-options:  -fprof-auto
 
+executable telemetry
+  hs-source-dirs:    src
+  main-is:           TelemetryProgram.hs
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     network-uri,
+                     zeromq4-haskell,
+                     vaultaire-common >= 2.7.2,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
+  ghc-prof-options:  -fprof-auto
+
 test-suite           daemon-test
   hs-source-dirs:    tests
   main-is:           DaemonTest.hs
@@ -166,6 +191,7 @@ test-suite           daemon-test
                      vaultaire-common >= 2.7.2,
                      semigroups,
                      bytestring,
+                     network-uri,
                      vaultaire,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1
@@ -208,6 +234,7 @@ test-suite           writer-test
                      zeromq4-haskell,
                      mtl,
                      bytestring,
+                     network-uri,
                      unordered-containers,
                      rados-haskell >= 3.0.1,
                      vaultaire
@@ -237,6 +264,7 @@ test-suite           reader-test
                      zeromq4-haskell,
                      mtl,
                      bytestring,
+                     network-uri,
                      unordered-containers,
                      rados-haskell >= 3.0.1,
                      vaultaire
@@ -292,6 +320,7 @@ test-suite           internal-store-test
                      mtl,
                      vaultaire-common >= 2.7.2,
                      bytestring,
+                     network-uri,
                      zeromq4-haskell,
                      vaultaire
 
@@ -321,6 +350,7 @@ test-suite           contents-test
                      mtl,
                      marquise >= 3.0.2,
                      bytestring,
+                     network-uri,
                      zeromq4-haskell,
                      vaultaire-common >= 2.7.2,
                      pipes,
@@ -349,6 +379,7 @@ test-suite           integration-test
                      pipes,
                      semigroups,
                      async,
+                     network-uri,
                      hslogger >= 1.2.4,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
@@ -417,6 +448,34 @@ benchmark contents-listing
                      zeromq4-haskell,
                      vaultaire-common >= 2.7.2,
                      marquise >= 2.8.3,
+                     vaultaire
+
+  ghc-options:       -O2
+                     -threaded
+                     -Wall
+                     -Wwarn
+                     -fwarn-tabs
+
+test-suite           profiler-test
+  hs-source-dirs:    tests,src
+  main-is:           ProfilerTest.hs
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+
+  build-depends:     base >=3 && <5,
+                     hspec,
+                     QuickCheck,
+                     marquise >= 3.0.2,
+                     bytestring,
+                     pipes,
+                     semigroups,
+                     async,
+                     zeromq4-haskell,
+                     rados-haskell >= 3.0.1,
+                     network-uri,
+                     mtl,
+                     transformers,
+                     vaultaire-common >= 2.7.2,
                      vaultaire
 
   ghc-options:       -O2

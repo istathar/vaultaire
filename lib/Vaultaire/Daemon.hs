@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE Rank2Types                 #-}
 
 -- | Encapsulates runtime requirements of a generic vaultaire daemon
@@ -15,11 +16,14 @@ module Vaultaire.Daemon
 (
     -- * Types
     Daemon,
+    DaemonArgs(..),
+    DaemonEnv,
     Message(..),
     ReplyF,
     Address(..),
     Payload,
     Bucket,
+    BucketSize,
     -- * Functions
     runDaemon,
     handleMessages,
@@ -38,6 +42,14 @@ module Vaultaire.Daemon
     extendedDayOID,
     bucketOID,
     withPool,
+    profileTime,
+    profileCount,
+    profileCountN,
+    profileReport,
+    elapsed,
+    -- * Smart constructors
+    daemonArgs,
+    daemonArgsDefault
 ) where
 
 import Control.Applicative
@@ -51,7 +63,9 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.List.NonEmpty (fromList)
 import Data.Maybe
+import Data.Monoid
 import Data.Word (Word64)
+import Network.URI
 import System.Log.Logger
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
@@ -63,21 +77,36 @@ import Text.Printf
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
 import Vaultaire.Types
+import Vaultaire.Profiler
 import Vaultaire.Util
+
 
 -- User facing API
 
 -- | The 'Daemon' monad stores per 'Origin' 'DayMap's and queues for message
 -- retrieval and reply. The underlying base monad is a rados 'Pool', you can
 -- lift to this via 'liftPool'.
-newtype Daemon a = Daemon (StateT OriginDays (ReaderT SharedConnection Pool) a)
-  deriving ( Functor, Applicative, Monad, MonadIO, MonadReader SharedConnection,
-             MonadState OriginDays)
+--
+newtype Daemon a = Daemon (StateT OriginDays (ReaderT DaemonEnv Pool) a)
+  deriving ( Functor, Applicative, Monad, MonadIO
+           , MonadReader DaemonEnv, MonadState OriginDays)
+
+-- | Arguments needed to be supplied by user to run a daemon
+data DaemonArgs = DaemonArgs
+   { broker    :: URI                -- ^ Broker, e.g. tcp://example.com:5550
+   , ceph_user :: Maybe ByteString   -- ^ Username for Ceph
+   , ceph_pool :: ByteString         -- ^ Pool name for Ceph
+   , shutdown  :: MVar ()            -- ^ Shutdown signal
+   , profiler  :: ProfilingInterface -- ^ Profiler interface to use for this daemon
+   }
+
+-- | Environment in which to run a daemon
+type DaemonEnv = (SharedConnection, ProfilingInterface)
 
 -- | Handle to commuicate with the 0MQ router.
 type SharedConnection = MVar (ZMQ.Socket ZMQ.Router)
 
--- Simple and extended day maps
+-- | Simple and extended day maps
 type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
 
 -- | Represents a request made by a client. This could be a request to write a
@@ -86,15 +115,17 @@ type OriginDays = OriginMap ((FileSize, DayMap), (FileSize, DayMap))
 -- All mesages follow the same asyncronous response, reply pattern.
 data Message = Message
     { messageReplyF  :: ReplyF -- ^ Queue a reply to this message. This
-                        --   will be transmitted automatically
-                        --   at a later point.
+                               --   will be transmitted automatically
+                               --   at a later point.
     , messageOrigin  :: Origin
     , messagePayload :: ByteString
     }
 
-type ReplyF  = WireFormat w => w -> Daemon ()
-type Payload = Word64
-type Bucket  = Word64
+type ReplyF     = WireFormat w => w -> Daemon ()
+type Payload    = Word64
+type Bucket     = Word64
+type BucketSize = Word64
+
 
 -- | Handle messages using an arbitrary concurrency abstraction.
 --
@@ -105,14 +136,11 @@ type Bucket  = Word64
 --
 -- This prohibits any multi-message requests, if this is what you want you had
 -- best define your own concurrency mechanism.
-handleMessages :: String                 -- ^ Broker for ZMQ
-               -> Maybe ByteString       -- ^ Username for Ceph
-               -> ByteString             -- ^ Pool name for Ceph
-               -> MVar ()                -- ^ Shutdown signal
-               -> (Message -> Daemon ()) -- ^ Message handling function
+--
+handleMessages :: DaemonArgs             -- ^ Run the daemon with these arguments
+               -> (Message -> Daemon ()) -- ^ Handle messages with this handler
                -> IO ()
-handleMessages broker ceph_user pool shutdown f =
-    runDaemon broker ceph_user pool loop
+handleMessages args@(DaemonArgs{..}) f = runDaemon args loop
   where
     -- Dumb, no concurrency for now. WARNING we originally had tryReadMVar but
     -- it was causing non-deterministic asynchronous delayed hangs. We'll come
@@ -125,22 +153,21 @@ handleMessages broker ceph_user pool shutdown f =
                     Nothing -> loop
                     Just msg -> f msg >> loop
 
--- | This will go as far as to connect to Ceph and begin listening for
--- messages.
-runDaemon :: String           -- ^ Broker for ZMQ
-          -> Maybe ByteString -- ^ Username for Ceph
-          -> ByteString       -- ^ Pool name for Ceph
-          -> Daemon a
+-- | Encapsulating the lifetime of a daemon.
+--   This will go as far as to connect to Ceph and begin listening for messages.
+--
+runDaemon :: DaemonArgs -- ^ With these arguments
+          -> Daemon a   -- ^ Run this daemon
           -> IO a
-runDaemon broker ceph_user pool (Daemon a) =
+runDaemon DaemonArgs{..} (Daemon a) = do
     bracket (setupSharedConnection broker)
             (\(ctx, conn) -> do
                 sock <- takeMVar conn
                 ZMQ.close sock
                 ZMQ.shutdown ctx)
-            (\(_, conn) ->
-                withPool ceph_user pool $
-                    runReaderT (evalStateT a emptyOriginMap) conn)
+            (\(_, conn) -> withPool ceph_user ceph_pool
+                         $ flip runReaderT (conn, profiler)
+                         $ evalStateT a emptyOriginMap)
 
 -- Connect to ceph and run your pool action
 withPool :: Maybe ByteString -> ByteString -> Pool a -> IO a
@@ -158,7 +185,7 @@ liftPool = Daemon . lift . lift
 --   4. The client's payload.
 nextMessage :: Daemon (Maybe Message)
 nextMessage = do
-    conn <- ask
+    conn <- fst <$> ask
     liftIO $ withMVar conn $ \c -> do
         result <- ZMQ.poll 10 [ZMQ.Sock c [ZMQ.In] Nothing]
         case result of
@@ -174,7 +201,7 @@ nextMessage = do
                         -- http://www.haskell.org/pipermail/haskell-cafe/2012-August/103041.html
                         let send r = flip ZMQ.sendMulti (fromList [env_a, env_b, toWire r])
                         in return . Just $
-                            Message (\r -> do var <- ask
+                            Message (\r -> do var <- fst <$> ask
                                               liftIO $ withMVar var (send r))
                                     (Origin origin)
                                     payload
@@ -236,7 +263,7 @@ refreshOriginDays origin' = do
     Lock management
 -}
 
-timeout :: Int 
+timeout :: Int
 timeout = 600 -- 10 minutes
 
 release :: Double
@@ -369,20 +396,96 @@ simpleDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_simple_d
 extendedDayOID :: Origin -> ByteString
 extendedDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_extended_days"
 
--- | Build the 'SharedConnection' for use by potentially many consumers within
--- this 'Daemon'.
-setupSharedConnection :: String -- ^ Broker name
-                      -> IO (ZMQ.Context, SharedConnection)
-setupSharedConnection broker = do
-    ctx <- ZMQ.context
-    sock <- ZMQ.socket ctx ZMQ.Router
-    ZMQ.connect sock broker
-    mvar <- newMVar sock
-    return (ctx, mvar)
-
 bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
 bucketOID (Origin origin') epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
                                                          (BS.unpack origin')
                                                          bucket
                                                          epoch
                                                          kind
+
+-- | Build the 'SharedConnection' for use by potentially many consumers within
+-- this 'Daemon'.
+setupSharedConnection :: URI -- ^ Broker name
+                      -> IO (ZMQ.Context, SharedConnection)
+setupSharedConnection broker = do
+    ctx <- ZMQ.context
+    sock <- ZMQ.socket ctx ZMQ.Router
+    ZMQ.connect sock $ show broker
+    mvar <- newMVar sock
+    return (ctx, mvar)
+
+
+-- Convenience/Smart constructors and interface
+
+-- | Construct necessary arguments to start a daemon
+daemonArgs
+  :: URI                  -- ^ Full broker URI, e.g. @tcp://example.com:9990@
+  -> Maybe String         -- ^ Ceph user
+  -> String               -- ^ Ceph pool
+  -> MVar ()              -- ^ Shutdown signal
+  -> Maybe String         -- ^ Indentifiable daemon name, e.g. @vault.example.com-writer-01@
+  -> Maybe (Int, Period)  -- ^ If has profiling, (port, profile period)
+  -> IO (DaemonArgs, ProfilingEnv)
+daemonArgs brokerd user pool end dname pargs = do
+    (env, interface)  <- maybe (return noProfiler)
+                               (\(pport, pperiod) -> hasProfiler ( maybe mempty id dname
+                                                                 , modPort brokerd pport
+                                                                 , pperiod
+                                                                 , end )) pargs
+    return ( DaemonArgs brokerd
+                        (BS.pack <$> user)
+                        (BS.pack     pool)
+                        end
+                        interface
+           , env)
+    where -- could probably lens this, if network.uri has lens support
+          modPort u i = u { uriAuthority = fmap (\x -> x { uriPort = ':':show i }) $ uriAuthority u }
+
+-- | Construct default daemon arguments, with no profiler, no name.
+daemonArgsDefault
+  :: URI                    -- ^ Full broker URI, e.g. tcp://example.com:9999
+  -> Maybe String           -- ^ Ceph user
+  -> String                 -- ^ Ceph pool
+  -> MVar ()                -- ^ Shutdown Signal
+  -> IO DaemonArgs
+daemonArgsDefault full_broker_uri user pool shutdown
+  = fst <$> daemonArgs full_broker_uri user pool shutdown Nothing Nothing
+
+-- | Send a one-count for this telemtric type to the profiler for this daemon
+--
+profileCount :: TeleMsgType -> Origin -> Daemon ()
+profileCount t g = do
+    (_, prof) <- ask
+    profCount  prof t g 1
+{-# INLINE profileCount #-}
+
+-- | Send an n-count for this telemtric type to the profiler for this daemon
+--
+profileCountN :: TeleMsgType -> Origin -> Int -> Daemon ()
+profileCountN t g c = do
+    (_, prof) <- ask
+    profCount  prof t g c
+{-# INLINE profileCountN #-}
+
+-- | Measure the timelapse for a daemon operation and
+--   send the result to the profiler
+--
+profileTime :: TeleMsgType -> Origin -> Daemon r -> Daemon r
+profileTime  t g act = do
+    (_, prof) <- ask
+    profTime prof t g act
+{-# INLINE profileTime #-}
+
+-- | Measure the timelapse for a daemon operation.
+--
+elapsed :: Daemon r -> Daemon (r, Word64)
+elapsed act = do
+    (_, prof) <- ask
+    measureTime prof act
+{-# INLINE elapsed #-}
+
+profileReport :: TeleMsgType -> Origin -> Word64 -> Daemon ()
+profileReport t g p = do
+    (_, prof) <- ask
+    report prof t g p
+{-# INLINE profileReport #-}

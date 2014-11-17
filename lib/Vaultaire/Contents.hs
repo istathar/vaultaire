@@ -13,15 +13,13 @@
 {-# LANGUAGE RankNTypes        #-}
 
 module Vaultaire.Contents
-(
-    startContents,
-) where
+     ( -- * Contents Daemon
+       startContents
+     ) where
 
 import Control.Applicative
-import Control.Concurrent (MVar)
 import Control.Exception
 import Data.Bits
-import Data.ByteString (ByteString)
 import Data.Maybe (isJust)
 import Data.Monoid (mempty)
 import Data.Word (Word64)
@@ -32,25 +30,25 @@ import Vaultaire.Daemon
 import qualified Vaultaire.InternalStore as InternalStore
 import Vaultaire.Types
 
--- | Start a writer daemon, never returns.
-startContents
-    :: String           -- ^ Broker
-    -> Maybe ByteString -- ^ Username for Ceph
-    -> ByteString       -- ^ Pool name for Ceph
-    -> MVar ()
-    -> IO ()
-startContents broker user pool shutdown = do
-    handleMessages broker user pool shutdown handleRequest
+-- | Start a contents daemon, never returns.
+--
+startContents :: DaemonArgs -> IO ()
+startContents = flip handleMessages handleRequest
 
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply origin payload) =
+handleRequest (Message reply origin payload) = do
     case fromWire payload of
         Left err -> liftIO $ errorM "Contents.handleRequest" $
                                     "bad request: " ++ show err
         Right op -> case op of
-            ContentsListRequest   -> performListRequest reply origin
+            ContentsListRequest   -> profileCount ContentsEnumerate origin
+                                  >> performListRequest reply origin
+
             GenerateNewAddress    -> performRegisterRequest reply origin
-            UpdateSourceTag a s   -> performUpdateRequest reply origin a s
+
+            UpdateSourceTag a s   -> profileCount ContentsUpdate origin
+                                  >> performUpdateRequest reply origin a s
+
             RemoveSourceTag a s   -> performRemoveRequest reply origin a s
 
 {-
@@ -64,7 +62,9 @@ handleRequest (Message reply origin payload) =
     times, so each reply here represents one Address,SourceDict pair.
 -}
 performListRequest :: ReplyF -> Origin ->  Daemon ()
-performListRequest reply o = do
+performListRequest reply o
+  = profileTime ContentsEnumerateLatency o $ do
+
     liftIO $ infoM "Contents.performListRequest"
                 (show o ++ " ContentsListRequest")
 
@@ -100,14 +100,22 @@ performUpdateRequest
     -> Address
     -> SourceDict
     -> Daemon ()
-performUpdateRequest reply o a input = do
+performUpdateRequest reply o a input
+  = profileTime ContentsUpdateLatency o $ do
+
     liftIO $ infoM "Contents.performUpdateRequest"
                 (show o ++ " UpdateRequest " ++ show a)
 
-    result <- retreiveSourceTagsForAddress o a
+    (result, readTime) <- elapsed $ retreiveSourceTagsForAddress o a
 
     case result of
-        Nothing -> writeSourceTagsForAddress o a input
+        Nothing -> do
+            (_, writeTime) <- elapsed $ writeSourceTagsForAddress o a input
+            -- NOTE: measurement of Ceph latency for Contents is not as accurate as
+            --       for Reader/Writer, since these times include cycles spent in
+            --       Reader/Writer as well as Rados.
+            profileReport ContentsUpdateCeph o (readTime + writeTime)
+
         Just current -> do
             -- items in first SourceDict (the passed in update from user) win
             let update = unionSource input current

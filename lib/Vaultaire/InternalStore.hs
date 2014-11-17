@@ -31,7 +31,7 @@ import Data.Word (Word64)
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as Pipes
-import Vaultaire.Daemon (Daemon)
+import Vaultaire.Daemon (Daemon, profileTime)
 import Vaultaire.Reader (getBuckets, readExtended)
 import Vaultaire.ReaderAlgorithms (mergeNoFilter)
 import Vaultaire.Types
@@ -76,7 +76,10 @@ readFrom origin addr =
 enumerateOrigin :: Origin -> Producer (Address, ByteString) Daemon ()
 enumerateOrigin origin =
     forM_ [0,2..internalStoreBuckets] $ \bucket -> do
-        buckets <- lift $ getBuckets (namespace origin) 0 bucket
+        -- This is using the Reader so the profiled time is not exactly just
+        -- Ceph waiting time, but also some reader checking.
+        buckets <- lift $ profileTime ContentsEnumerateCeph origin
+                 $ getBuckets (namespace origin) 0 bucket
         case buckets of
             Nothing -> return ()
             Just (s,e) -> mergeNoFilter s e
