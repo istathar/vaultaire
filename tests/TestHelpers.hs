@@ -127,23 +127,23 @@ sendTestMsg = runZMQ $ do
     receiveMulti s
 
 startTestDaemons :: MVar () -> IO ()
-startTestDaemons shutdownSig = do
+startTestDaemons shutdown = do
     linkThread $ do
         runZMQ $ startProxy (Router,"tcp://*:5560")
                             (Dealer,"tcp://*:5561")
                             "tcp://*:5000"
-        readMVar shutdownSig
+        readMVar shutdown
 
     linkThread $ do
         runZMQ $ startProxy (Router,"tcp://*:5570")
                             (Dealer,"tcp://*:5571")
                             "tcp://*:5001"
-        readMVar shutdownSig
+        readMVar shutdown
 
     argsw <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5561")
-                               Nothing "test" shutdownSig
+                               Nothing "test" shutdown
     argsr <- daemonArgsDefault (fromJust $ parseURI "tcp://localhost:5571")
-                               Nothing "test" shutdownSig
+                               Nothing "test" shutdown
 
     linkThread $ startWriter argsw 0
     linkThread $ startReader argsr

@@ -13,8 +13,9 @@
 {-# LANGUAGE RankNTypes        #-}
 
 module Vaultaire.Contents
-     ( startContents )
-where
+     ( -- * Contents Daemon
+       startContents
+     ) where
 
 import Control.Applicative
 import Control.Exception

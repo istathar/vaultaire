@@ -106,6 +106,7 @@ optionsParser Options{..} = Options <$> parsePool
         <> metavar "PERIOD"
         <> value period
         <> showDefault
+        <> help "How often the profiler reports telemetric data, in milliseconds. This argument only has an effect when '-p' is specified."
 
     parseName = strOption $
            long "name"
