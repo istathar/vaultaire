@@ -111,7 +111,7 @@ runWorkerDaemon
     -> String                -- ^ Broker URI
     -> MVar ()               -- ^ Shutdown
     -> String                -- ^ Optional daemon name
-    -> Maybe Period          -- ^ Optional profiler
+    -> Maybe (Period,Int)    -- ^ Optional profiler (period, channel bound)
     -> (DaemonArgs -> IO ()) -- ^ Run this worker daemon
     -> IO (DaemonProcess ())
 runWorkerDaemon pool user brok down name prof daemon = do
@@ -119,9 +119,10 @@ runWorkerDaemon pool user brok down name prof daemon = do
                                          (parseURI brok))
                               (Just user) pool down
                               (if name == "" then Nothing else Just name)
-                              ((profilingPort,) <$> prof)
+                              (trip profilingPort <$> prof)
     forkThreads (daemon args)
                 (fmap (const $ startProfiler env) prof)
+    where trip x (y,z) = (x,y,z)
 
 runWriterDaemon pool user brok rollover down name prof = do
     infoM "Daemons.runWriterDaemon" "Writer daemon starting"

@@ -419,19 +419,21 @@ setupSharedConnection broker = do
 
 -- | Construct necessary arguments to start a daemon
 daemonArgs
-  :: URI                  -- ^ Full broker URI, e.g. @tcp://example.com:9990@
-  -> Maybe String         -- ^ Ceph user
-  -> String               -- ^ Ceph pool
-  -> MVar ()              -- ^ Shutdown signal
-  -> Maybe String         -- ^ Indentifiable daemon name, e.g. @vault.example.com-writer-01@
-  -> Maybe (Int, Period)  -- ^ If has profiling, (port, profile period)
+  :: URI                       -- ^ Full broker URI, e.g. @tcp://example.com:9990@
+  -> Maybe String              -- ^ Ceph user
+  -> String                    -- ^ Ceph pool
+  -> MVar ()                   -- ^ Shutdown signal
+  -> Maybe String              -- ^ Indentifiable daemon name, e.g. @vault.example.com-writer-01@
+  -> Maybe (Int, Period, Int)  -- ^ If has profiling, (port, profile period, profiling channel bound)
   -> IO (DaemonArgs, ProfilingEnv)
 daemonArgs brokerd user pool end dname pargs = do
     (env, interface)  <- maybe (return noProfiler)
-                               (\(pport, pperiod) -> hasProfiler ( maybe mempty id dname
-                                                                 , modPort brokerd pport
-                                                                 , pperiod
-                                                                 , end )) pargs
+                               (\(pport, pperiod, pbound)
+                                   -> hasProfiler ( maybe mempty id dname
+                                                  , modPort brokerd pport
+                                                  , pperiod
+                                                  , pbound
+                                                  , end )) pargs
     return ( DaemonArgs brokerd
                         (BS.pack <$> user)
                         (BS.pack     pool)

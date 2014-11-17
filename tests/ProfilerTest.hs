@@ -63,7 +63,7 @@ testTelemetry = async $ do
     where go sock = do
               x <- liftIO $ receive sock
               case (fromWire x :: Either SomeException TeleResp) of
-                Right y -> modify ((_type $ _msg y):)
+                Right y -> liftIO (print y) >> modify ((_type $ _msg y):)
                 _       -> error "Unrecognised telemetric response"
 
 testWriter :: MVar () -> IO () -> IO (Async (), Async ())
@@ -77,7 +77,7 @@ testWriter quit act = do
     -- start the testWriter daemon and its profiler
     (args, prof) <- daemonArgs (fromJust $ parseURI "tcp://localhost:5561")
                                 Nothing "test" quit
-                               (Just "writer-test") (Just (6661, 1000))
+                               (Just "writer-test") (Just (6661, 1000, 2048))
     w <- async $ startWriter args 0
     p <- async $ startProfiler prof
 

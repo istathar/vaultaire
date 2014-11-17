@@ -76,9 +76,9 @@ data ProfilingInterface = ProfilingInterface
     , report      :: MonadIO m => TeleMsgType -> Origin -> Word64 -> m () }
 
 -- | Arguments needed to be specified by the user for profiling
---   (name, publishing port, period, shutdown signal)
+--   (name, publishing port, period, bound, shutdown signal)
 --
-type ProfilerArgs = (String, URI, Period, MVar ())
+type ProfilerArgs = (String, URI, Period, Int, MVar ())
 
 -- | Profiling environment.
 data ProfilingEnv = ProfilingEnv
@@ -118,7 +118,7 @@ noProfiler
             , report      = const $ const $ const $ return () } )
 
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
-hasProfiler (name, broker, period, quit) =  do
+hasProfiler (name, broker, period, bound, quit) =  do
     n <- maybe (do errorM  "Daemon.setupProfiler"
                           ("The daemon name given is invalid: " ++ name ++
                            ". An empty name has been given to the daemon.")
@@ -129,11 +129,11 @@ hasProfiler (name, broker, period, quit) =  do
     -- so that old reports will be removed if the buffer is full.
     -- This means the profiler will lose precision but not have
     -- an impact on performance if there is too much activity.
-    (output, input, sealchan) <- spawn' $ Newest 1024
+    (output, input, sealchan) <- spawn' $ Newest bound
     return ( ProfilingEnv
                  { _aname    = n
                  , _publish  = broker
-                 , _bound    = 1024
+                 , _bound    = bound
                  , _sleep    = period
                  , _output   = output
                  , _input    = input

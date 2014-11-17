@@ -37,6 +37,7 @@ data Options = Options
   , quiet     :: Bool
   , profile   :: Bool
   , period    :: Int
+  , bound     :: Int
   , name      :: String
   , component :: Component }
 
@@ -58,6 +59,7 @@ optionsParser Options{..} = Options <$> parsePool
                                     <*> parseQuiet
                                     <*> parseProfile
                                     <*> parsePeriod
+                                    <*> parseBound
                                     <*> parseName
                                     <*> parseComponents
   where
@@ -105,6 +107,13 @@ optionsParser Options{..} = Options <$> parsePool
         <> value period
         <> showDefault
         <> help "How often the profiler reports telemetric data, in milliseconds. This argument only has an effect when '--profiling' is specified."
+
+    parseBound = O.option auto $
+           long "bound"
+        <> metavar "BOUND"
+        <> value bound
+        <> showDefault
+        <> help "How many stat reports the profiler can handle per period before it starts losing accuracy. This argument only has an effect when '--profiling' is specified."
 
     parseName = strOption $
            long "name"
@@ -160,7 +169,7 @@ parseConfig fp = do
         else return defaultConfig
   where
     defaultConfig = Options "vaultaire" "vaultaire" "localhost"
-                            False False True 10000 "" Broker
+                            False False True 1000 2048 "" Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
@@ -169,6 +178,7 @@ parseConfig fp = do
                 <*> pure quiet
                 <*> pure profile
                 <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
+                <*> (join $ readMaybe <$> lookup "bound" ls)  `mplus` pure period
                 <*> lookup "name" ls `mplus` pure name
                 <*> pure Broker
 
@@ -217,17 +227,17 @@ main = do
         Reader ->
             if   profile
             then runReaderDaemon pool user broker quit name Nothing
-            else runReaderDaemon pool user broker quit name (Just period)
+            else runReaderDaemon pool user broker quit name (Just (period,bound))
 
         Writer roll_over_size ->
             if   profile
             then runWriterDaemon pool user broker roll_over_size quit name Nothing
-            else runWriterDaemon pool user broker roll_over_size quit name (Just period)
+            else runWriterDaemon pool user broker roll_over_size quit name (Just (period,bound))
 
         Contents ->
             if   profile
             then runContentsDaemon pool user broker quit name Nothing
-            else runContentsDaemon pool user broker quit name (Just period)
+            else runContentsDaemon pool user broker quit name (Just (period,bound))
 
     -- Block until shutdown triggered
     debugM "Main.main" "Running until shutdown"
