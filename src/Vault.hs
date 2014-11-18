@@ -35,7 +35,7 @@ data Options = Options
   , broker    :: String
   , debug     :: Bool
   , quiet     :: Bool
-  , profile   :: Bool
+  , noprofile :: Bool
   , period    :: Int
   , bound     :: Int
   , name      :: String
@@ -57,7 +57,7 @@ optionsParser Options{..} = Options <$> parsePool
                                     <*> parseBroker
                                     <*> parseDebug
                                     <*> parseQuiet
-                                    <*> parseProfile
+                                    <*> parseNoprofile
                                     <*> parsePeriod
                                     <*> parseBound
                                     <*> parseName
@@ -97,23 +97,23 @@ optionsParser Options{..} = Options <$> parsePool
         <> short 'q'
         <> help "Only emit warnings or fatal messages"
 
-    parseProfile = switch $
-           long "profiling"
-        <> help "Enables profiling"
+    parseNoprofile = switch $
+           long "no-profiling"
+        <> help "Disables profiling"
 
     parsePeriod = O.option auto $
            long "period"
         <> metavar "PERIOD"
         <> value period
         <> showDefault
-        <> help "How often the profiler reports telemetric data, in milliseconds. This argument only has an effect when '--profiling' is specified."
+        <> help "How often the noprofiler reports telemetric data, in milliseconds."
 
     parseBound = O.option auto $
            long "bound"
         <> metavar "BOUND"
         <> value bound
         <> showDefault
-        <> help "How many stat reports the profiler can handle per period before it starts losing accuracy. This argument only has an effect when '--profiling' is specified."
+        <> help "How many stat reports the noprofiler can handle per period before it starts losing accuracy."
 
     parseName = strOption $
            long "name"
@@ -169,14 +169,14 @@ parseConfig fp = do
         else return defaultConfig
   where
     defaultConfig = Options "vaultaire" "vaultaire" "localhost"
-                            False False True 1000 2048 "" Broker
+                            False False False 1000 2048 "" Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
                 <*> lookup "broker" ls `mplus` pure broker
                 <*> pure debug
                 <*> pure quiet
-                <*> pure profile
+                <*> pure noprofile
                 <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
                 <*> (join $ readMaybe <$> lookup "bound" ls)  `mplus` pure period
                 <*> lookup "name" ls `mplus` pure name
@@ -225,17 +225,17 @@ main = do
             runBrokerDaemon quit
 
         Reader ->
-            if   profile
+            if   noprofile
             then runReaderDaemon pool user broker quit name Nothing
             else runReaderDaemon pool user broker quit name (Just (period,bound))
 
         Writer roll_over_size ->
-            if   profile
+            if   noprofile
             then runWriterDaemon pool user broker roll_over_size quit name Nothing
             else runWriterDaemon pool user broker roll_over_size quit name (Just (period,bound))
 
         Contents ->
-            if   profile
+            if   noprofile
             then runContentsDaemon pool user broker quit name Nothing
             else runContentsDaemon pool user broker quit name (Just (period,bound))
 

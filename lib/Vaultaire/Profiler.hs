@@ -52,8 +52,10 @@ newtype Profiler a = Profiler (ReaderT ProfilingEnv IO a)
 --
 runProfiler :: ProfilingEnv -> Profiler a -> IO a
 runProfiler e (Profiler x) = do
+    debugM "Profiler.runProfiler" "Profiler starting."
     r <- runReaderT x e
     _ <- _seal e
+    debugM "Profiler.runProfiler" "Profiler sealed and cleaned up."
     return r
 
 startProfiler :: ProfilingEnv -> IO ()
@@ -198,7 +200,9 @@ profile sock = do
             return $ TeleResp t n msg
 
           pub :: TeleResp -> Profiler ()
-          pub resp = liftIO $ Z.send sock [] $ toWire resp
+          pub resp = liftIO $ do
+            debugM "Profiler.profile" "Publishing a telemetric"
+            Z.send sock [] $ toWire resp
 
 -- | Reads from input until we either hit a barrier or reach the cap.
 --   Like pipes-concurrency's @fromInput@ but non-blocking.

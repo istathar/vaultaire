@@ -1,3 +1,8 @@
+# 2.6.1
+
+## User interface
+To disable profiling, run ``vault --no-profiling``. By default, profiling is enabled with a period of 1s and an accuracy bound of 2048 telemetric stats per second.
+
 # 2.6.0
 
 ## User interface
