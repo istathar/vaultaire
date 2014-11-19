@@ -2,12 +2,9 @@
 import           Control.Exception
 import           Network.URI
 import           System.ZMQ4 hiding (shutdown)
-import           System.ZMQ4.Monadic (runZMQ)
 import           System.Environment
 
-import           Vaultaire.Broker
 import           Vaultaire.Types
-import           Vaultaire.Util
 
 main :: IO ()
 main = do
@@ -19,12 +16,6 @@ main = do
 
 runTelemetrySub :: URI -> IO ()
 runTelemetrySub broker = do
-    -- setup a broker for telemetry
-    linkThread $ do
-        runZMQ $ startProxy (XPub,"tcp://*:6660")
-                            (XSub,"tcp://*:6661")
-                            "tcp://*:6000"
-
     -- connect to the broker for telemtrics
     withContext $ \ctx ->
       withSocket ctx Sub $ \sock -> do

@@ -101,7 +101,7 @@ runBrokerDaemon end =
 
             -- Telemetry proxy.
             linkThreadZMQ $ startProxy
-                (XSub,  "tcp://*:6660") (XPub,"tcp://*:6661") "tcp://*:6000"
+                (XPub,  "tcp://*:6660") (XSub,"tcp://*:6661") "tcp://*:6000"
 
         readMVar end
 
