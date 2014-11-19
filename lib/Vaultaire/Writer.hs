@@ -21,7 +21,6 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import qualified Control.Monad.Trans.State.Strict as TS
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S
 import Data.ByteString.Lazy (toStrict)
