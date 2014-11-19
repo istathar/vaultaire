@@ -91,8 +91,8 @@ processBatch bucket_size (Message reply origin payload)
 
                 s <- liftIO $ batchStateNow bucket_size dms
                 let ((sp, ep), s') = flip runState s
-                                   $  processPoints 0 payload (dayMaps s) origin
-                                                    (latestSimple s) (latestExtended s)
+                                   $ processPoints 0 payload (dayMaps s) origin
+                                                   (latestSimple s) (latestExtended s)
 
                 profileCountN WriterSimplePoints  origin sp
                 profileCountN WriterExtendedPoints origin ep
@@ -138,7 +138,7 @@ processPoints offset message day_maps origin latest_simple latest_ext
         modify (\s -> s { latestSimple   = latest_simple
                         , latestExtended = latest_ext })
         return (0,0)
-    | otherwise = flip evalStateT (0::Int,0::Int) $ do
+    | otherwise = do
         let (address, time, payload) = runUnpacking (parseMessageAt offset) message
         let (simple_epoch, simple_buckets) = lookupFirst time (fst day_maps)
 
@@ -152,21 +152,20 @@ processPoints offset message day_maps origin latest_simple latest_ext
                             runUnpacking (getBytesAt (offset + 24) len) message
                 let (ext_epoch, ext_buckets) = lookupFirst time (snd day_maps)
                 let ext_bucket = calculateBucketNumber ext_buckets address
-                lift $ appendExtended ext_epoch ext_bucket address time len str
-                TS.modify $ \(s,e) -> (s,e+1)
-
+                appendExtended ext_epoch ext_bucket address time len str
                 let !t | time > latest_ext = time
                        | otherwise         = latest_ext
-                lift $ processPoints (offset + 24 + len) message day_maps origin latest_simple t
+                (s,e) <- processPoints (offset + 24 + len) message day_maps origin latest_simple t
+                return (s,e+1)
+
             else do
                 let message_bytes = runUnpacking (getBytesAt offset 24) message
                 let simple_bucket = calculateBucketNumber simple_buckets address
-                lift $ appendSimple simple_epoch simple_bucket message_bytes
-                TS.modify $ \(s,e) -> (s+1,e)
-
+                appendSimple simple_epoch simple_bucket message_bytes
                 let !t | time > latest_simple = time
                        | otherwise            = latest_simple
-                lift $ processPoints (offset + 24) message day_maps origin t latest_ext
+                (s,e) <- processPoints (offset + 24) message day_maps origin t latest_ext
+                return (s+1,e)
 
 parseMessageAt :: Word64 -> Unpacking (Address, TimeStamp, Payload)
 parseMessageAt offset = do
