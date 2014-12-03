@@ -58,6 +58,7 @@ library
                      text,
                      unix,
                      unix-time,
+                     network,
                      network-uri,
                      rados-haskell >= 3.0.3
 
@@ -89,6 +90,7 @@ executable vault
                      hslogger >= 1.2.4,
                      async,
                      unix,
+                     network,
                      network-uri,
                      vaultaire
 
@@ -119,6 +121,7 @@ executable inspect
                      hslogger >= 1.2.4,
                      async,
                      unix,
+                     network,
                      network-uri,
                      vaultaire
 
@@ -166,6 +169,7 @@ executable telemetry
   default-language:  Haskell2010
 
   build-depends:     base >=3 && <5,
+                     network,
                      network-uri,
                      zeromq4-haskell,
                      vaultaire-common >= 2.8.1,
@@ -191,6 +195,7 @@ test-suite           daemon-test
                      vaultaire-common >= 2.8.1,
                      semigroups,
                      bytestring,
+                     network,
                      network-uri,
                      vaultaire,
                      zeromq4-haskell,
@@ -234,6 +239,7 @@ test-suite           writer-test
                      zeromq4-haskell,
                      mtl,
                      bytestring,
+                     network,
                      network-uri,
                      unordered-containers,
                      rados-haskell >= 3.0.1,
@@ -264,6 +270,7 @@ test-suite           reader-test
                      zeromq4-haskell,
                      mtl,
                      bytestring,
+                     network,
                      network-uri,
                      unordered-containers,
                      rados-haskell >= 3.0.1,
@@ -320,6 +327,7 @@ test-suite           internal-store-test
                      mtl,
                      vaultaire-common >= 2.8.1,
                      bytestring,
+                     network,
                      network-uri,
                      zeromq4-haskell,
                      vaultaire
@@ -350,6 +358,7 @@ test-suite           contents-test
                      mtl,
                      marquise >= 3.0.2,
                      bytestring,
+                     network,
                      network-uri,
                      zeromq4-haskell,
                      vaultaire-common >= 2.8.1,
@@ -379,6 +388,7 @@ test-suite           integration-test
                      pipes,
                      semigroups,
                      async,
+                     network,
                      network-uri,
                      hslogger >= 1.2.4,
                      zeromq4-haskell,
@@ -472,6 +482,7 @@ test-suite           profiler-test
                      async,
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
+                     network,
                      network-uri,
                      mtl,
                      transformers,
