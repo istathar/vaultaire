@@ -106,14 +106,14 @@ optionsParser Options{..} = Options <$> parsePool
         <> metavar "PERIOD"
         <> value period
         <> showDefault
-        <> help "How often the noprofiler reports telemetric data, in milliseconds."
+        <> help "How often the profiler reports telemetric data, in milliseconds."
 
     parseBound = O.option auto $
            long "bound"
         <> metavar "BOUND"
         <> value bound
         <> showDefault
-        <> help "How many stat reports the noprofiler can handle per period before it starts losing accuracy."
+        <> help "How many stat reports the profiler can handle per period before it starts losing accuracy."
 
     parseName = strOption $
            long "name"
