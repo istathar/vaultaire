@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.6.1.2
+version:             2.6.1.3
 synopsis:            Data vault for metrics
 license:             BSD3
 author:              Anchor Engineering <engineering@anchor.com.au>
@@ -42,6 +42,7 @@ library
      build-depends: network-uri < 2.6, network < 2.6
   build-depends:     base >=4.7.0.1 && <5,
                      bytestring,
+                     blaze-markup <= 0.6.2,
                      random,
                      zeromq4-haskell,
                      containers,
@@ -61,7 +62,7 @@ library
                      stm,
                      semigroups,
                      hslogger >= 1.2.4,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      text,
                      unix,
                      unix-time,
@@ -94,7 +95,7 @@ executable vault
                      directory,
                      marquise >= 3.0.2,
                      containers,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      pipes,
                      hslogger >= 1.2.4,
                      async,
@@ -127,7 +128,7 @@ executable inspect
                      directory,
                      marquise >= 3.0.2,
                      containers,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      pipes,
                      hslogger >= 1.2.4,
                      async,
@@ -156,7 +157,7 @@ executable demowave
                      directory,
                      marquise >= 3.0.2,
                      containers,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      pipes,
                      hslogger,
                      time,
@@ -181,7 +182,7 @@ executable telemetry
                      network,
                      network-uri,
                      zeromq4-haskell,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      vaultaire
 
   ghc-options:       -O2
@@ -205,7 +206,7 @@ test-suite           daemon-test
   build-depends:     base >=3 && <5,
                      hspec,
                      async,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      semigroups,
                      bytestring,
                      vaultaire,
@@ -250,7 +251,7 @@ test-suite           writer-test
                      pipes,
                      pipes-parse,
                      semigroups,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      zeromq4-haskell,
                      mtl,
                      bytestring,
@@ -283,7 +284,7 @@ test-suite           reader-test
                      pipes,
                      pipes-parse,
                      semigroups,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      zeromq4-haskell,
                      mtl,
                      bytestring,
@@ -309,7 +310,7 @@ test-suite           reader-algorithms-test
                      containers,
                      QuickCheck,
                      primitive,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      spool,
                      vector,
                      mtl,
@@ -344,7 +345,7 @@ test-suite           internal-store-test
                      locators >= 0.2.4,
                      pipes-parse,
                      mtl,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      bytestring,
                      zeromq4-haskell,
                      vaultaire
@@ -380,7 +381,7 @@ test-suite           contents-test
                      marquise >= 3.0.2,
                      bytestring,
                      zeromq4-haskell,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      pipes,
                      vaultaire
 
@@ -415,7 +416,7 @@ test-suite           integration-test
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
                      directory,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      vaultaire
 
   ghc-options:       -O2
@@ -436,7 +437,7 @@ benchmark writer-bench
                      semigroups,
                      rados-haskell,
                      criterion,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      vaultaire
 
   ghc-options:       -O2
@@ -477,7 +478,7 @@ benchmark contents-listing
                      bytestring,
                      criterion,
                      zeromq4-haskell,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      marquise >= 2.8.3,
                      vaultaire
 
@@ -509,7 +510,7 @@ test-suite           profiler-test
                      rados-haskell >= 3.0.1,
                      mtl,
                      transformers,
-                     vaultaire-common >= 2.8.1,
+                     vaultaire-common >= 2.8.2,
                      vaultaire
 
   ghc-options:       -O2
