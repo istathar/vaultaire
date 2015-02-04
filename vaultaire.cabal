@@ -28,6 +28,7 @@ library
                      Vaultaire.RollOver,
                      Vaultaire.Broker,
                      Vaultaire.DayMap,
+                     Vaultaire.Origin,
                      Vaultaire.OriginMap,
                      Vaultaire.Writer,
                      Vaultaire.Reader,

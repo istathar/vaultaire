@@ -20,6 +20,7 @@ import System.Rados.Monadic
 
 import Vaultaire.Daemon
 import Vaultaire.DayMap
+import Vaultaire.Origin
 import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
 import Vaultaire.Types
 
@@ -96,7 +97,7 @@ readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
 readExtended origin addr start end = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
-    buckets <- lift $ getBuckets origin epoch bucket
+    buckets <- lift $ getBuckets False origin epoch bucket
     case buckets of
         Nothing -> return ()
         Just (s,e) -> do
@@ -105,13 +106,15 @@ readExtended origin addr start end = forever $ do
             yieldNotNull bs
 
 -- | Retrieve simple and extended buckets in parallel
-getBuckets :: Origin
+getBuckets :: Bool
+           -> Origin
            -> Epoch
            -> Bucket
            -> Daemon (Maybe (ByteString, ByteString))
-getBuckets origin epoch bucket = do
-    let simple_oid = bucketOID origin epoch bucket "simple"
-    let extended_oid = bucketOID origin epoch bucket "extended"
+getBuckets internal origin epoch bucket = do
+    let namespaced_origin = namespaceOrigin internal origin
+    let simple_oid = bucketOID namespaced_origin epoch bucket "simple"
+    let extended_oid = bucketOID namespaced_origin epoch bucket "extended"
 
     -- Request both async
     (a_simple, a_extended) <- profileTime ReaderCephLatency origin

@@ -40,7 +40,7 @@ import Vaultaire.Writer (BatchState (..), appendExtended, write)
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon ()
 writeTo origin addr payload =
-    write (namespace origin) False makeState
+    write True origin False makeState
   where
     makeState :: BatchState
     makeState =
@@ -79,7 +79,7 @@ enumerateOrigin origin =
         -- This is using the Reader so the profiled time is not exactly just
         -- Ceph waiting time, but also some reader checking.
         buckets <- lift $ profileTime ContentsEnumerateCeph origin
-                 $ getBuckets (namespace origin) 0 bucket
+                 $ getBuckets True origin 0 bucket
         case buckets of
             Nothing -> return ()
             Just (s,e) -> mergeNoFilter s e

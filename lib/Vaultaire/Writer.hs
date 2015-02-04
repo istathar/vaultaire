@@ -37,6 +37,7 @@ import System.Rados.Monadic hiding (async)
 import Text.Printf
 import Vaultaire.Daemon
 import Vaultaire.DayMap
+import Vaultaire.Origin
 import Vaultaire.RollOver
 import Vaultaire.Types
 import Vaultaire.Util (fatal)
@@ -65,7 +66,9 @@ batchStateNow :: BucketSize -> (DayMap, DayMap) -> IO BatchState
 batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
-processBatch :: BucketSize -> Message -> Daemon ()
+processBatch :: BucketSize
+             -> Message
+             -> Daemon ()
 processBatch bucket_size (Message reply origin payload)
   = profileTime  WriterRequestLatency origin $ do
     profileCount WriterRequest        origin
@@ -85,6 +88,7 @@ processBatch bucket_size (Message reply origin payload)
             Just dms -> do
                 -- Most messages simply need to be placed into the correct epoch
                 -- and bucket, extended ones are a little more complex in that they
+
                 -- have to be stored as an offset to a pending write to the
                 -- extended buckets.
 
@@ -103,7 +107,7 @@ processBatch bucket_size (Message reply origin payload)
         Just s -> do
             wt1 <- liftIO getCurrentTime
             profileTime  WriterCephLatency origin
-                       $ write origin True s
+                       $ write False origin True s
             wt2 <- liftIO getCurrentTime
             liftIO . (debugM "Writer.processBatch") $ concat [
                 "Wrote simple objects at ",
@@ -225,18 +229,19 @@ appendExtended epoch bucket (Address address) (TimeStamp time) len string = do
 --   2. Simple buckets are written to disk with the pending writes applied.
 --   3. Acks are sent
 --   4. Any rollovers are done
-write :: Origin -> Bool -> BatchState -> Daemon ()
-write origin do_rollovers s = do
-    extended_offsets <- writeExtendedBuckets
+write :: Bool -> Origin -> Bool -> BatchState -> Daemon ()
+write internal origin do_rollovers s = do
+    let namespaced_origin = namespaceOrigin internal origin
+    extended_offsets <- writeExtendedBuckets namespaced_origin
 
     let simple_buckets = applyOffsets extended_offsets (simple s) (pending s)
-    simple_offsets <- stepTwo simple_buckets
+    simple_offsets <- stepTwo simple_buckets namespaced_origin
 
     -- Update latest files after the writes have gone down to disk, in case
     -- something happens between now and sending all the acks.
     when do_rollovers $ do
-        updateSimpleLatest origin (latestSimple s)
-        updateExtendedLatest origin (latestExtended s)
+        updateSimpleLatest namespaced_origin (latestSimple s)
+        updateExtendedLatest namespaced_origin (latestExtended s)
 
     -- 4. Do any rollovers
     when do_rollovers $ do
@@ -244,16 +249,16 @@ write origin do_rollovers s = do
         -- We want to ensure that the rollover only happens if an offset is
         -- exceeded for the latest epoch, otherwise we get duplicate
         -- rollovers.
-        (simple_epoch, n_simple_buckets) <- getLatestEpoch withSimpleDayMap
-        (extended_epoch, n_extended_buckets) <- getLatestEpoch withExtendedDayMap
+        (simple_epoch, n_simple_buckets) <- getLatestEpoch withSimpleDayMap namespaced_origin
+        (extended_epoch, n_extended_buckets) <- getLatestEpoch withExtendedDayMap namespaced_origin
 
         when (offsetExceeded simple_offsets simple_epoch limit)
-                (rollOverSimpleDay origin n_simple_buckets)
+                (rollOverSimpleDay namespaced_origin n_simple_buckets)
         when (offsetExceeded extended_offsets extended_epoch limit)
-                 (rollOverExtendedDay origin n_extended_buckets)
+                 (rollOverExtendedDay namespaced_origin n_extended_buckets)
   where
-    getLatestEpoch f =
-        f origin (lookupFirst maxBound) >>= mustBucket
+    getLatestEpoch f o =
+        f o (lookupFirst maxBound) >>= mustBucket
 
     mustBucket = maybe (error "could not find n_buckets for roll over") return
 
@@ -268,15 +273,15 @@ write origin do_rollovers s = do
 
     -- 1. Write extended buckets. We lock the entire origin for write as we
     -- will be operating on most buckets most of the time.
-    writeExtendedBuckets =
-        withLockExclusive (writeLockOID origin) $ liftPool $ do
+    writeExtendedBuckets o =
+        withLockExclusive (writeLockOID o) $ liftPool $ do
             -- First pass to get current offsets
             offsets <- forWithKey (extended s) $ \epoch buckets -> do
 
                 -- Make requests for the entire epoch
                 liftIO $ debugM "Writer.writeExtendedBuckets" "Stat extended objects"
                 stats <- forWithKey buckets $ \bucket _ ->
-                    extendedOffset origin epoch bucket
+                    extendedOffset o epoch bucket
 
                 -- Then extract the fileSize from those requests
                 for stats $ \async_stat -> do
@@ -295,7 +300,7 @@ write origin do_rollovers s = do
                 liftIO $ debugM "Writer.writeExtendedBuckets" "Write extended objects"
                 writes <- forWithKey buckets $ \bucket builder -> do
                     let payload = toStrict $ toLazyByteString builder
-                    writeExtended origin epoch bucket payload
+                    writeExtended o epoch bucket payload
 
                 for writes $ \async_write -> do
                     result <- waitSafe async_write
@@ -327,12 +332,12 @@ write origin do_rollovers s = do
                     in HashMap.insert epoch simple_buckets' simple_map''
 
     -- Final write,
-    stepTwo simple_buckets = liftPool $
+    stepTwo simple_buckets o = liftPool $
         forWithKey simple_buckets $ \epoch buckets -> do
             liftIO $ debugM "Writer.stepTwo" "Write simple objects"
             writes <- forWithKey buckets $ \bucket builder -> do
                 let payload = toStrict $ toLazyByteString builder
-                writeSimple origin epoch bucket payload
+                writeSimple o epoch bucket payload
             for writes $ \(async_stat, async_write) -> do
                 w <- waitSafe async_write
                 case w of
