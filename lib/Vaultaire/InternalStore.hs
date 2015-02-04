@@ -12,7 +12,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | This is a way for vaultaire components to store data within the Vault
--- itself.
+--   itself.
 module Vaultaire.InternalStore
 (
     writeTo,
@@ -83,6 +83,3 @@ enumerateOrigin origin =
         case buckets of
             Nothing -> return ()
             Just (s,e) -> mergeNoFilter s e
-
-namespace :: Origin -> Origin
-namespace = Origin . (`BS.append` "_INTERNAL") . unOrigin
