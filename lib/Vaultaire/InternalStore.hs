@@ -32,7 +32,7 @@ import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as Pipes
 import Vaultaire.Daemon (Daemon, profileTime)
-import Vaultaire.Reader (getBuckets, readExtended)
+import Vaultaire.Reader (getBuckets, readExtendedInternal)
 import Vaultaire.ReaderAlgorithms (mergeNoFilter)
 import Vaultaire.Types
 import Vaultaire.Writer (BatchState (..), appendExtended, write)
@@ -59,7 +59,7 @@ internalStoreBuckets = 128
 readFrom :: Origin -> Address -> Daemon (Maybe ByteString)
 readFrom origin addr =
     evalStateT draw $ yield (0, internalStoreBuckets)
-                      >-> readExtended (namespace origin) addr 0 0
+                      >-> readExtendedInternal origin addr 0 0
                       >-> Pipes.map extractPayload
   where
     extractPayload bs = attemptUnpacking bs $ do

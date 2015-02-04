@@ -5,6 +5,7 @@ module Vaultaire.Reader
 (
     startReader,
     readExtended,
+    readExtendedInternal,
     getBuckets,
 ) where
 
@@ -95,20 +96,33 @@ processExtended addr start end origin reply_f = do
                             (lift . reply_f . ExtendedStream . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
--- | readExtended reads ExtendedPoints in a given time range. Cannot be
---   used to read internal buckets.
-readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
-             -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtended origin addr start end = forever $ do
+-- | readExtended' reads extended points from either an internal or an
+--   external bucket, depending on the value of the first parameter.
+readExtended' :: Bool -> Origin -> Address -> TimeStamp -> TimeStamp
+              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
+readExtended' internal origin addr start end = forever $ do
+    let namespaced_origin = namespaceOrigin internal origin
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
-    buckets <- lift $ getBuckets False origin epoch bucket
+    buckets <- lift $ getBuckets internal origin epoch bucket
     case buckets of
         Nothing -> return ()
         Just (s,e) -> do
             let bs = runST $ mergeSimpleExtended s e addr start end
             lift $ profileCountN ReaderExtendedPoints origin (S.length bs `div` 24)
             yieldNotNull bs
+
+-- | readExtended reads ExtendedPoints in a given time range. Cannot be
+--   used to read internal buckets.
+readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
+             -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
+readExtended = readExtended' False
+
+-- | readExtendedInternal reads internal ExtendedPoints in a given time range.
+--   Cannot be used to read regular buckets.
+readExtendedInternal :: Origin -> Address -> TimeStamp -> TimeStamp
+                     -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
+readExtendedInternal = readExtended' True
 
 -- | Retrieve simple and extended buckets in parallel. Can be used for
 --   either regular or internal buckets (controlled by the 'internal'
