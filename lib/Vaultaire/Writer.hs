@@ -66,6 +66,8 @@ batchStateNow :: BucketSize -> (DayMap, DayMap) -> IO BatchState
 batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
+-- | Writes a batch of points. Will only write to regular
+--   (non-internal) buckets.
 processBatch :: BucketSize
              -> Message
              -> Daemon ()
@@ -229,7 +231,14 @@ appendExtended epoch bucket (Address address) (TimeStamp time) len string = do
 --   2. Simple buckets are written to disk with the pending writes applied.
 --   3. Acks are sent
 --   4. Any rollovers are done
-write :: Bool -> Origin -> Bool -> BatchState -> Daemon ()
+--
+--   This function is used to write both internal and external buckets;
+--   this is controlled by the first parameter.
+write :: Bool       -- ^ Is the bucket internal?
+      -> Origin
+      -> Bool
+      -> BatchState
+      -> Daemon ()
 write internal origin do_rollovers s = do
     let namespaced_origin = namespaceOrigin internal origin
     extended_offsets <- writeExtendedBuckets namespaced_origin

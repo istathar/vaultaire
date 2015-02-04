@@ -62,6 +62,9 @@ processSimple addr start end origin reply_f = do
                             (lift . reply_f . SimpleStream . SimpleBurst)
         Nothing -> reply_f InvalidReadOrigin
 
+-- | readSimple reads SimplePoints in a given time range from the vault.
+--   Cannot be used to read from internal (contents) buckets; regular
+--   time series only.
 readSimple :: Origin -> Address -> TimeStamp -> TimeStamp
            -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readSimple origin addr start end = forever $ do
@@ -92,6 +95,8 @@ processExtended addr start end origin reply_f = do
                             (lift . reply_f . ExtendedStream . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
+-- | readExtended reads ExtendedPoints in a given time range. Cannot be
+--   used to read internal buckets.
 readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readExtended origin addr start end = forever $ do
@@ -105,8 +110,10 @@ readExtended origin addr start end = forever $ do
             lift $ profileCountN ReaderExtendedPoints origin (S.length bs `div` 24)
             yieldNotNull bs
 
--- | Retrieve simple and extended buckets in parallel
-getBuckets :: Bool
+-- | Retrieve simple and extended buckets in parallel. Can be used for
+--   either regular or internal buckets (controlled by the 'internal'
+--   flag).
+getBuckets :: Bool   -- ^ Is the bucket internal?
            -> Origin
            -> Epoch
            -> Bucket
