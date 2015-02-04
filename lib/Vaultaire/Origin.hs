@@ -10,11 +10,11 @@ import qualified Data.ByteString.Char8 as BS
 
 import Vaultaire.Types
 
+-- | Suffix appended to the origin segment of a bucket name to indicate
+--   that it's for internal use, e.g., for metadata buckets read/written
+--   by the contents daemon.
 internalNamespace :: ByteString
 internalNamespace = "_INTERNAL"
-
-internalOrigin :: Origin -> Origin
-internalOrigin = Origin . (`BS.append` internalNamespace) . unOrigin
 
 -- | Convert a raw origin to the raw origin used as a bucket prefix. If
 --   the desired operation is on an internal bucket, the origin is
@@ -23,5 +23,5 @@ internalOrigin = Origin . (`BS.append` internalNamespace) . unOrigin
 namespaceOrigin :: Bool   -- ^ Is the operation internal?
                 -> Origin
                 -> Origin
-namespaceOrigin True = internalOrigin
+namespaceOrigin True = Origin . (`BS.append` internalNamespace) . unOrigin
 namespaceOrigin False = id
