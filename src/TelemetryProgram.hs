@@ -1,21 +1,35 @@
 {-# LANGUAGE OverloadedStrings #-}
-import           Control.Exception
-import           Network.URI
-import           System.ZMQ4 hiding (shutdown)
-import           System.Environment
 
-import           Vaultaire.Types
+import Control.Exception
+import Network.URI
+import Options.Applicative
+import System.ZMQ4 hiding (shutdown)
+
+import Vaultaire.Types
+
+helpfulParser :: ParserInfo String
+helpfulParser = info (helper <*> optionsParser) fullDesc
+
+optionsParser :: Parser String
+optionsParser = parseBroker
+  where
+    parseBroker = strOption $
+           long "broker"
+        <> short 'b'
+        <> metavar "BROKER"
+        <> value "localhost"
+        <> showDefault
+        <> help "Vault broker host name or IP address"
 
 main :: IO ()
 main = do
-    args <- getArgs
-    case args of broker:_ -> maybe (putStrLn "Invalid broker URI")
-                                   (runTelemetrySub)
-                                   (parseURI $ "tcp://" ++ broker ++ ":6660")
-                 _        -> putStrLn "Specify a broker URI."
+    broker <- execParser helpfulParser
+    maybe (putStrLn "Invalid broker URI")
+          runTelemetrySub
+          (parseURI $ "tcp://" ++ broker ++ ":6660")
 
 runTelemetrySub :: URI -> IO ()
-runTelemetrySub broker = do
+runTelemetrySub broker =
     -- connect to the broker for telemtrics
     withContext $ \ctx ->
       withSocket ctx Sub $ \sock -> do

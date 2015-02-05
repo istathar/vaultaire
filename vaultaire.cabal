@@ -181,6 +181,7 @@ executable telemetry
   build-depends:     base >=3 && <5,
                      network,
                      network-uri,
+                     optparse-applicative >= 0.11.0,
                      zeromq4-haskell,
                      vaultaire-common >= 2.8.2,
                      vaultaire
