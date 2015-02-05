@@ -2,7 +2,9 @@ cabal-version:       >= 1.10
 name:                vaultaire
 version:             2.6.1.3
 synopsis:            Data vault for metrics
+description:         Data vault for metrics
 license:             BSD3
+license-file:        LICENCE
 author:              Anchor Engineering <engineering@anchor.com.au>
 maintainer:          Anchor Engineering <engineering@anchor.com.au>
 copyright:           © 2013-2014 Anchor Systems, Pty Ltd and Others
@@ -69,7 +71,6 @@ library
                      rados-haskell >= 3.0.3
 
   ghc-options:       -O2
-                     -threaded
                      -Wall
                      -Wwarn
                      -fwarn-tabs
