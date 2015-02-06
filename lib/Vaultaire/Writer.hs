@@ -90,7 +90,6 @@ processBatch bucket_size (Message reply origin payload)
             Just dms -> do
                 -- Most messages simply need to be placed into the correct epoch
                 -- and bucket, extended ones are a little more complex in that they
-
                 -- have to be stored as an offset to a pending write to the
                 -- extended buckets.
 
