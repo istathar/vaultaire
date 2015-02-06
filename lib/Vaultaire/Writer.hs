@@ -67,7 +67,7 @@ batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
 -- | Writes a batch of points. Will only write to regular
---   (non-internal) buckets.
+--   (external) buckets.
 processBatch :: BucketSize
              -> Message
              -> Daemon ()
@@ -108,7 +108,7 @@ processBatch bucket_size (Message reply origin payload)
         Just s -> do
             wt1 <- liftIO getCurrentTime
             profileTime  WriterCephLatency origin
-                       $ write False origin True s
+                       $ write External origin True s
             wt2 <- liftIO getCurrentTime
             liftIO . (debugM "Writer.processBatch") $ concat [
                 "Wrote simple objects at ",
@@ -233,13 +233,13 @@ appendExtended epoch bucket (Address address) (TimeStamp time) len string = do
 --
 --   This function is used to write both internal and external buckets;
 --   this is controlled by the first parameter.
-write :: Bool       -- ^ Is the bucket internal?
+write :: Namespace
       -> Origin
       -> Bool
       -> BatchState
       -> Daemon ()
-write internal origin do_rollovers s = do
-    let namespaced_origin = namespaceOrigin internal origin
+write ns origin do_rollovers s = do
+    let namespaced_origin = namespaceOrigin ns origin
     extended_offsets <- writeExtendedBuckets namespaced_origin
 
     let simple_buckets = applyOffsets extended_offsets (simple s) (pending s)

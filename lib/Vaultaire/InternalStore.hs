@@ -18,7 +18,7 @@ module Vaultaire.InternalStore
     writeTo,
     readFrom,
     enumerateOrigin,
-    internalStoreBuckets,
+    internalStoreBuckets
 ) where
 
 import Control.Monad.State.Strict
@@ -32,6 +32,7 @@ import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as Pipes
 import Vaultaire.Daemon (Daemon, profileTime)
+import Vaultaire.Origin
 import Vaultaire.Reader (getBuckets, readExtendedInternal)
 import Vaultaire.ReaderAlgorithms (mergeNoFilter)
 import Vaultaire.Types
@@ -40,7 +41,7 @@ import Vaultaire.Writer (BatchState (..), appendExtended, write)
 -- | Given an origin and an address, write the given bytes.
 writeTo :: Origin -> Address -> ByteString -> Daemon ()
 writeTo origin addr payload =
-    write True origin False makeState
+    write Internal origin False makeState
   where
     makeState :: BatchState
     makeState =
@@ -79,7 +80,7 @@ enumerateOrigin origin =
         -- This is using the Reader so the profiled time is not exactly just
         -- Ceph waiting time, but also some reader checking.
         buckets <- lift $ profileTime ContentsEnumerateCeph origin
-                 $ getBuckets True origin 0 bucket
+                 $ getBuckets Internal origin 0 bucket
         case buckets of
             Nothing -> return ()
             Just (s,e) -> mergeNoFilter s e

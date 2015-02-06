@@ -98,13 +98,16 @@ processExtended addr start end origin reply_f = do
 
 -- | readExtended' reads extended points from either an internal or an
 --   external bucket, depending on the value of the first parameter.
-readExtended' :: Bool -> Origin -> Address -> TimeStamp -> TimeStamp
+readExtended' :: Namespace
+              -> Origin
+              -> Address
+              -> TimeStamp
+              -> TimeStamp
               -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtended' internal origin addr start end = forever $ do
-    let namespaced_origin = namespaceOrigin internal origin
+readExtended' ns origin addr start end = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
-    buckets <- lift $ getBuckets internal origin epoch bucket
+    buckets <- lift $ getBuckets ns origin epoch bucket
     case buckets of
         Nothing -> return ()
         Just (s,e) -> do
@@ -116,24 +119,24 @@ readExtended' internal origin addr start end = forever $ do
 --   used to read internal buckets.
 readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtended = readExtended' False
+readExtended = readExtended' External
 
 -- | readExtendedInternal reads internal ExtendedPoints in a given time range.
 --   Cannot be used to read regular buckets.
 readExtendedInternal :: Origin -> Address -> TimeStamp -> TimeStamp
                      -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtendedInternal = readExtended' True
+readExtendedInternal = readExtended' Internal
 
 -- | Retrieve simple and extended buckets in parallel. Can be used for
 --   either regular or internal buckets (controlled by the 'internal'
 --   flag).
-getBuckets :: Bool   -- ^ Is the bucket internal?
+getBuckets :: Namespace
            -> Origin
            -> Epoch
            -> Bucket
            -> Daemon (Maybe (ByteString, ByteString))
-getBuckets internal origin epoch bucket = do
-    let namespaced_origin = namespaceOrigin internal origin
+getBuckets ns origin epoch bucket = do
+    let namespaced_origin = namespaceOrigin ns origin
     let simple_oid = bucketOID namespaced_origin epoch bucket "simple"
     let extended_oid = bucketOID namespaced_origin epoch bucket "extended"
 
