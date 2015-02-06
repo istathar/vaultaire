@@ -124,16 +124,38 @@ runWorkerDaemon pool user brok down name prof daemon = do
                 (fmap (const $ startProfiler env) prof)
     where trip x (y,z) = (x,y,z)
 
+runWriterDaemon :: String
+                -> String
+                -> [Char]
+                -> BucketSize
+                -> MVar ()
+                -> String
+                -> Maybe (Period, Int)
+                -> IO (DaemonProcess ())
 runWriterDaemon pool user brok rollover down name prof = do
     infoM "Daemons.runWriterDaemon" "Writer daemon starting"
     runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5561")
                     down name prof (flip startWriter rollover)
 
+runReaderDaemon :: String
+                -> String
+                -> [Char]
+                -> MVar ()
+                -> String
+                -> Maybe (Period, Int)
+                -> IO (DaemonProcess ())
 runReaderDaemon pool user brok down name prof = do
     infoM "Daemons.runReaderDaemon" "Reader daemon starting"
     runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5571")
                     down name prof startReader
 
+runContentsDaemon :: String
+                  -> String
+                  -> [Char]
+                  -> MVar ()
+                  -> String
+                  -> Maybe (Period, Int)
+                  -> IO (DaemonProcess ())
 runContentsDaemon pool user brok down name prof = do
     infoM "Daemons.runContentsDaemon" "Contents daemon starting"
     runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5581")
