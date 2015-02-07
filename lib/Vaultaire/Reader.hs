@@ -5,6 +5,7 @@ module Vaultaire.Reader
 (
     startReader,
     readExtended,
+    readExtendedInternal,
     getBuckets,
 ) where
 
@@ -20,6 +21,7 @@ import System.Rados.Monadic
 
 import Vaultaire.Daemon
 import Vaultaire.DayMap
+import Vaultaire.Origin
 import Vaultaire.ReaderAlgorithms (mergeSimpleExtended, processBucket)
 import Vaultaire.Types
 
@@ -61,6 +63,9 @@ processSimple addr start end origin reply_f = do
                             (lift . reply_f . SimpleStream . SimpleBurst)
         Nothing -> reply_f InvalidReadOrigin
 
+-- | readSimple reads SimplePoints in a given time range from the vault.
+--   Cannot be used to read from internal (contents) buckets; regular
+--   time series only.
 readSimple :: Origin -> Address -> TimeStamp -> TimeStamp
            -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
 readSimple origin addr start end = forever $ do
@@ -91,12 +96,18 @@ processExtended addr start end origin reply_f = do
                             (lift . reply_f . ExtendedStream . ExtendedBurst)
         Nothing -> reply_f InvalidReadOrigin
 
-readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
-             -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
-readExtended origin addr start end = forever $ do
+-- | readExtended' reads extended points from either an internal or an
+--   external bucket, depending on the value of the first parameter.
+readExtended' :: Namespace
+              -> Origin
+              -> Address
+              -> TimeStamp
+              -> TimeStamp
+              -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
+readExtended' ns origin addr start end = forever $ do
     (epoch, num_buckets) <- await
     let bucket = calculateBucketNumber num_buckets addr
-    buckets <- lift $ getBuckets origin epoch bucket
+    buckets <- lift $ getBuckets ns origin epoch bucket
     case buckets of
         Nothing -> return ()
         Just (s,e) -> do
@@ -104,14 +115,30 @@ readExtended origin addr start end = forever $ do
             lift $ profileCountN ReaderExtendedPoints origin (S.length bs `div` 24)
             yieldNotNull bs
 
--- | Retrieve simple and extended buckets in parallel
-getBuckets :: Origin
+-- | readExtended reads ExtendedPoints in a given time range. Cannot be
+--   used to read internal buckets.
+readExtended :: Origin -> Address -> TimeStamp -> TimeStamp
+             -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
+readExtended = readExtended' External
+
+-- | readExtendedInternal reads internal ExtendedPoints in a given time range.
+--   Cannot be used to read regular buckets.
+readExtendedInternal :: Origin -> Address -> TimeStamp -> TimeStamp
+                     -> Pipe (Epoch, NumBuckets) ByteString Daemon ()
+readExtendedInternal = readExtended' Internal
+
+-- | Retrieve simple and extended buckets in parallel. Can be used for
+--   either regular or internal buckets (controlled by the 'internal'
+--   flag).
+getBuckets :: Namespace
+           -> Origin
            -> Epoch
            -> Bucket
            -> Daemon (Maybe (ByteString, ByteString))
-getBuckets origin epoch bucket = do
-    let simple_oid = bucketOID origin epoch bucket "simple"
-    let extended_oid = bucketOID origin epoch bucket "extended"
+getBuckets ns origin epoch bucket = do
+    let namespaced_origin = namespaceOrigin ns origin
+    let simple_oid = bucketOID namespaced_origin epoch bucket "simple"
+    let extended_oid = bucketOID namespaced_origin epoch bucket "extended"
 
     -- Request both async
     (a_simple, a_extended) <- profileTime ReaderCephLatency origin
