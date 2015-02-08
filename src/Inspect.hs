@@ -234,10 +234,9 @@ main :: IO ()
 main = do
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
-    level
-        | debug     = Debug
-        | quiet     = Quiet
-        | otherwise = Normal
+    let level | debug     = Debug
+              | quiet     = Quiet
+              | otherwise = Normal
 
     quit <- initializeProgram (package ++ "-" ++ version) level
 
