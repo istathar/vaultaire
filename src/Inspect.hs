@@ -42,7 +42,7 @@ data Options = Options
   , quiet     :: Bool
   , component :: Component }
 
-data Component = 
+data Component =
                  None
                | RegisterOrigin { origin  :: Origin
                                 , buckets :: Word64
@@ -234,11 +234,10 @@ main :: IO ()
 main = do
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
-    let level = if debug
-        then Debug
-        else if quiet
-            then Quiet
-            else Normal
+    level
+        | debug     = Debug
+        | quiet     = Quiet
+        | otherwise = Normal
 
     quit <- initializeProgram (package ++ "-" ++ version) level
 

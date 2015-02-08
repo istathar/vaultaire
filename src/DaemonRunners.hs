@@ -9,8 +9,8 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE RankNTypes    #-}
+{-# LANGUAGE TupleSections #-}
 
 --
 -- | This module encapsulates the various daemons that you might want to start
@@ -39,13 +39,13 @@ import System.Log.Logger
 import System.ZMQ4.Monadic hiding (async)
 import qualified System.ZMQ4.Monadic as Z
 
-import Vaultaire.Daemon
 import Vaultaire.Broker
 import Vaultaire.Contents (startContents)
-import Vaultaire.Reader   (startReader)
-import Vaultaire.Writer   (startWriter)
+import Vaultaire.Daemon
 import Vaultaire.Profiler
+import Vaultaire.Reader (startReader)
 import Vaultaire.Util
+import Vaultaire.Writer (startWriter)
 
 
 type DaemonProcess a = ( Async a           -- worker thread
@@ -126,7 +126,7 @@ runWorkerDaemon pool user brok down name prof daemon = do
 
 runWriterDaemon :: String
                 -> String
-                -> [Char]
+                -> String
                 -> BucketSize
                 -> MVar ()
                 -> String
@@ -139,7 +139,7 @@ runWriterDaemon pool user brok rollover down name prof = do
 
 runReaderDaemon :: String
                 -> String
-                -> [Char]
+                -> String
                 -> MVar ()
                 -> String
                 -> Maybe (Period, Int)
@@ -151,7 +151,7 @@ runReaderDaemon pool user brok down name prof = do
 
 runContentsDaemon :: String
                   -> String
-                  -> [Char]
+                  -> String
                   -> MVar ()
                   -> String
                   -> Maybe (Period, Int)

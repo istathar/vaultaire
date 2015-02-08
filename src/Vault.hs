@@ -21,8 +21,8 @@ import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
 import System.Log.Logger
-import Text.Trifecta
 import Text.Read
+import Text.Trifecta
 
 import DaemonRunners
 import Package (package, version)
@@ -204,11 +204,10 @@ main :: IO ()
 main = do
     Options{..} <- parseArgsWithConfig "/etc/vaultaire.conf"
 
-    let level = if debug
-        then Debug
-        else if quiet
-            then Quiet
-            else Normal
+    level
+        | debug     = Debug
+        | quiet     = Quiet
+        | otherwise = Normal
 
     quit <- initializeProgram (package ++ "-" ++ version) level
 
