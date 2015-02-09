@@ -21,7 +21,31 @@ problem diagnosis, abnormality detection, metering/billing, forecasting
 and capacity planning. We're looking forward to letting clients write to
 it as well.
 
-# Building
+# Design
+
+Vaultaire is a fault-tolerant, distributed, scalable system. A few key
+architectural decisions enable this:
+
+ * Data points are immutable. Once you've written a metric you don't go
+   changing it. If a business decision is made to value that data
+   differently, then that's a job for analytics later.
+ 
+ * Writes operations are idempotent. Under the hood we _append_ every
+   time we write, and do de-duplication when we read. If you aren't
+   trying to to update or sort in time order when saving points, the on
+   disk data structures become very simple indeed. And with idempotent
+   operations, it means that should a client not receive an
+   acknowledgment of write it can re-send that point.
+ 
+ * No state is held by daemons. Vaultaire has quite a number of moving
+   parts, but all of them can be multiply provisioned and none of them
+   carry any state, so a single failure does not take down the system.
+   Scaling under load can be done by adding more daemons horizontally.
+   The only place state is held is in the Ceph cluster (which, by
+   definition, is consistent and redundant).
+
+
+# Deployment
 
 ## System dependencies
 
@@ -47,7 +71,7 @@ cabal install
 You'll need to add the sandbox's `bin` directory to your `$PATH`, or
 else replace the `vault` command with a fully-qualified path.
 
-# Running
+## Running
 
 You need to run four components: the `broker`, plus one or more of each
 of the `writer`, `reader` and `contents` daemons. These can be on the
@@ -87,29 +111,6 @@ interfaces:
    analytics-focused query DSL.
  - [Machiavelli](https://github.com/anchor/machiavelli) - graphing
    engine with support for using Sieste as a backend.
-
-# Design
-
-Vaultaire is a fault-tolerant, distributed, scalable system. A few key
-architectural decisions enable this:
-
- * Data points are immutable. Once you've written a metric you don't go
-   changing it. If a business decision is made to value that data
-   differently, then that's a job for analytics later.
- 
- * Writes operations are idempotent. Under the hood we _append_ every
-   time we write, and do de-duplication when we read. If you aren't
-   trying to to update or sort in time order when saving points, the on
-   disk data structures become very simple indeed. And with idempotent
-   operations, it means that should a client not receive an
-   acknowledgment of write it can re-send that point.
- 
- * No state is held by daemons. Vaultaire has quite a number of moving
-   parts, but all of them can be multiply provisioned and none of them
-   carry any state, so a single failure does not take down the system.
-   Scaling under load can be done by adding more daemons horizontally.
-   The only place state is held is in the Ceph cluster (which, by
-   definition, is consistent and redundant).
 
 # Implementation
 
