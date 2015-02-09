@@ -1,9 +1,9 @@
+{-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TupleSections              #-}
 
 module Vaultaire.Profiler
      ( Profiler
@@ -16,25 +16,25 @@ module Vaultaire.Profiler
      , hasProfiler )
 where
 
-import           Control.Applicative
-import           Control.Concurrent hiding (yield)
-import           Control.Monad.Reader
-import           Control.Monad.State.Strict
+import Control.Applicative
+import Control.Concurrent hiding (yield)
+import Control.Monad.Reader
+import Control.Monad.State.Strict
 import qualified Data.Map.Strict as M
-import           Data.Maybe
-import           Data.Monoid
-import           Data.UnixTime
-import           Data.Word
-import           Foreign.C.Types (CTime(..))
-import           Network.URI
-import           Pipes
-import           Pipes.Lift
-import           Pipes.Concurrent
-import           Pipes.Parse (foldAll)
-import           System.Log.Logger
+import Data.Maybe
+import Data.Monoid
+import Data.UnixTime
+import Data.Word
+import Foreign.C.Types (CTime (..))
+import Network.URI
+import Pipes
+import Pipes.Concurrent
+import Pipes.Lift
+import Pipes.Parse (foldAll)
+import System.Log.Logger
 import qualified System.ZMQ4 as Z
 
-import           Vaultaire.Types
+import Vaultaire.Types
 
 -- | The profiler will publish on this socket.
 type PublishSock = Z.Socket Z.Pub
@@ -84,14 +84,14 @@ type ProfilerArgs = (String, URI, Period, Int, MVar ())
 
 -- | Profiling environment.
 data ProfilingEnv = ProfilingEnv
-    { _aname     :: AgentID         -- ^ Identifiable name for this daemon
-    , _publish   :: URI             -- ^ Broker for telemetrics
-    , _bound     :: Int             -- ^ Max telemetric messages from worker per period
-    , _sleep     :: Int             -- ^ Period, in milliseconds
-    , _output    :: Output ChanMsg  -- ^ Send to the profiler via this output
-    , _input     :: Input  ChanMsg  -- ^ Receive messages sent to the profiler via this input
-    , _seal      :: IO ()           -- ^ Seal the profiler chan
-    , _shutdown  :: MVar ()         -- ^ Shutdown signal
+    { _aname    :: AgentID         -- ^ Identifiable name for this daemon
+    , _publish  :: URI             -- ^ Broker for telemetrics
+    , _bound    :: Int             -- ^ Max telemetric messages from worker per period
+    , _sleep    :: Int             -- ^ Period, in milliseconds
+    , _output   :: Output ChanMsg  -- ^ Send to the profiler via this output
+    , _input    :: Input  ChanMsg  -- ^ Receive messages sent to the profiler via this input
+    , _seal     :: IO ()           -- ^ Seal the profiler chan
+    , _shutdown :: MVar ()         -- ^ Shutdown signal
     }
 
 -- | Values that can be sent to the profiling channel.
@@ -116,7 +116,7 @@ noProfiler
       , ProfilingInterface
             { profCount   = const $ const $ const $ return ()
             , profTime    = const $ const id
-            , measureTime = (>>= return . (,0)) . id
+            , measureTime = (>>= return . (,0))
             , report      = const $ const $ const $ return () } )
 
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
@@ -196,7 +196,7 @@ profile sock = do
 
     where mkResp :: MonadIO m => AgentID -> TeleMsg -> m TeleResp
           mkResp n msg = do
-            t      <- liftIO $ getCurrentTimeNanoseconds
+            t      <- liftIO getCurrentTimeNanoseconds
             return $ TeleResp t n msg
 
           pub :: TeleResp -> Profiler ()

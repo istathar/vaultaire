@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE RecordWildCards            #-}
 
 -- | Encapsulates runtime requirements of a generic vaultaire daemon
 --
@@ -67,17 +67,17 @@ import Data.Monoid
 import Data.Word (Word64)
 import Network.URI
 import System.Log.Logger
+import System.Posix.Signals
 import System.Rados.Monadic (Pool, fileSize, parseConfig, readFull,
                              runConnect, runObject, runObject, runPool, stat,
                              withExclusiveLock, withSharedLock)
-import System.Posix.Signals
 import qualified System.Rados.Monadic as Rados
 import qualified System.ZMQ4 as ZMQ
 import Text.Printf
 import Vaultaire.DayMap
 import Vaultaire.OriginMap
-import Vaultaire.Types
 import Vaultaire.Profiler
+import Vaultaire.Types
 import Vaultaire.Util
 
 

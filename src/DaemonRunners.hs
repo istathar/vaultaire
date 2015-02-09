@@ -9,8 +9,8 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE RankNTypes    #-}
+{-# LANGUAGE TupleSections #-}
 
 --
 -- | This module encapsulates the various daemons that you might want to start
@@ -39,13 +39,13 @@ import System.Log.Logger
 import System.ZMQ4.Monadic hiding (async)
 import qualified System.ZMQ4.Monadic as Z
 
-import Vaultaire.Daemon
 import Vaultaire.Broker
 import Vaultaire.Contents (startContents)
-import Vaultaire.Reader   (startReader)
-import Vaultaire.Writer   (startWriter)
+import Vaultaire.Daemon
 import Vaultaire.Profiler
+import Vaultaire.Reader (startReader)
 import Vaultaire.Util
+import Vaultaire.Writer (startWriter)
 
 
 type DaemonProcess a = ( Async a           -- worker thread
@@ -124,16 +124,38 @@ runWorkerDaemon pool user brok down name prof daemon = do
                 (fmap (const $ startProfiler env) prof)
     where trip x (y,z) = (x,y,z)
 
+runWriterDaemon :: String
+                -> String
+                -> String
+                -> BucketSize
+                -> MVar ()
+                -> String
+                -> Maybe (Period, Int)
+                -> IO (DaemonProcess ())
 runWriterDaemon pool user brok rollover down name prof = do
     infoM "Daemons.runWriterDaemon" "Writer daemon starting"
     runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5561")
                     down name prof (flip startWriter rollover)
 
+runReaderDaemon :: String
+                -> String
+                -> String
+                -> MVar ()
+                -> String
+                -> Maybe (Period, Int)
+                -> IO (DaemonProcess ())
 runReaderDaemon pool user brok down name prof = do
     infoM "Daemons.runReaderDaemon" "Reader daemon starting"
     runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5571")
                     down name prof startReader
 
+runContentsDaemon :: String
+                  -> String
+                  -> String
+                  -> MVar ()
+                  -> String
+                  -> Maybe (Period, Int)
+                  -> IO (DaemonProcess ())
 runContentsDaemon pool user brok down name prof = do
     infoM "Daemons.runContentsDaemon" "Contents daemon starting"
     runWorkerDaemon pool user ("tcp://" ++ brok ++ ":5581")
