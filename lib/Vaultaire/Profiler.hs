@@ -286,13 +286,12 @@ quickselect k (x:xs) | k < pl    = quickselect k leftPart
     pl                    = length leftPart
 
 quickMedian :: (Ord a, Integral a) => Int -> [a] -> a
-quickMedian 0 _ = 0
+quickMedian 0 [] = 0
 quickMedian len xs
     | len `mod` 2 == 0 =  (quickselect (len `div` 2 - 1) xs
-                         + (quickselect (len `div` 2) xs))
+                         + quickselect (len `div` 2) xs)
                            `div` 2
     | otherwise        = quickselect (len `div` 2) xs
-
 
 milliDelay :: Int -> IO ()
 milliDelay = threadDelay . (*1000)
