@@ -14,7 +14,8 @@ module Vaultaire.Profiler
      , Period
      , startProfiler
      , noProfiler
-     , hasProfiler )
+     , hasProfiler
+     , quickMedian)
 where
 
 import           Control.Applicative
@@ -273,14 +274,25 @@ aggregate = evalStateT $ foldAll
           -- can be optimised if there's a performance issue with the profiler.
           -- in particular, the median can be calculated in O(n).
           mid :: (Word64, [Word64]) -> Word64
-          mid   (0, [])   = 0
           mid   (c, v)    = let len = (fromIntegral c :: Int)
-                                vs  = L.sort v
-                             in if   len `mod` 2 == 0
-                                then let l = vs !! (len `div` 2)
-                                         r = vs !! (len `div` 2 + 1)
-                                     in  (l + r) `div` 2
-                                else vs !! (len `div` 2)
+                             in fromIntegral $ quickMedian len v
+
+quickselect :: Ord a => Int -> [a] -> a
+quickselect k (x:xs) | k < pl    = quickselect k leftPart
+                     | k > pl    = quickselect (k-pl-1) rightPart
+                     | otherwise = x
+  where
+    (leftPart, rightPart) = L.partition (< x) xs
+    pl                    = length leftPart
+
+quickMedian :: (Ord a, Integral a) => Int -> [a] -> a
+quickMedian 0 _ = 0
+quickMedian len xs
+    | len `mod` 2 == 0 =  (quickselect (len `div` 2 - 1) xs
+                         + (quickselect (len `div` 2) xs))
+                           `div` 2
+    | otherwise        = quickselect (len `div` 2) xs
+
 
 milliDelay :: Int -> IO ()
 milliDelay = threadDelay . (*1000)
