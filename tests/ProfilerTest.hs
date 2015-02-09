@@ -37,7 +37,11 @@ suite = do
             putMVar sig ()
             x       <- wait client
             x `shouldBe` expected
-
+    describe "quickMedian" $ do
+        it "calculates median for list of odd length" $
+            (quickMedian 5 [8,2,4,2,12]) `shouldBe` 4
+        it "calculates median for list of even length" $
+            (quickMedian 6 [8,2,1,4,2,12]) `shouldBe` 3
 
 expected :: [TeleMsgType]
 expected = [ WriterSimplePoints
