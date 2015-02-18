@@ -13,6 +13,7 @@ module Vaultaire.RollOver
 import Control.Monad.State
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Monoid
 import Data.Packer
 import System.Rados.Monadic
 import Vaultaire.Daemon
@@ -76,7 +77,7 @@ rollOver origin day_file latest_file buckets =
                 error $ "corrupt latest file in origin': " ++ show origin
 
             app <- liftPool . runObject day_file $
-                append (latest `BS.append` build buckets)
+                append (latest <> build buckets)
 
             case app of
                 Just e  -> error $ "failed to append for rollover: " ++ show e
@@ -91,9 +92,9 @@ originLockOID = simpleLatestOID
 
 simpleLatestOID :: Origin -> ByteString
 simpleLatestOID (Origin origin') =
-    "02_" `BS.append` origin' `BS.append` "_simple_latest"
+    "02_" <> origin' <> "_simple_latest"
 
 extendedLatestOID :: Origin -> ByteString
 extendedLatestOID (Origin origin') =
-    "02_" `BS.append` origin' `BS.append` "_extended_latest"
+    "02_" <> origin' <> "_extended_latest"
 
