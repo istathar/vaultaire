@@ -20,32 +20,36 @@ import Vaultaire.DayMap
 import Vaultaire.Types
 
 -- | Roll the cluster onto a new "vault day", this will block until all other
--- daemons are synchronized at acquiring any shared locks.
+--   daemons are synchronized at acquiring any shared locks.
 --
--- All day maps will be invalidated on roll over, it is up to you to ensure
--- that they are reloaded before next use.
+--   All day maps will be invalidated on roll over, it is up to you to ensure
+--   that they are reloaded before next use.
 rollOverSimpleDay :: Origin -> NumBuckets -> Daemon ()
 rollOverSimpleDay origin' =
     rollOver origin' (simpleDayOID origin') (simpleLatestOID origin')
 
+-- | Equivalent of 'rollOverSimpleDay' for extended buckets.
 rollOverExtendedDay :: Origin -> NumBuckets -> Daemon ()
 rollOverExtendedDay origin' =
     rollOver origin' (extendedDayOID origin') (extendedLatestOID origin')
 
 -- | This compares the given time against the latest one in ceph, and updates
--- if larger.
+--   if larger.
 --
--- You should only call this once with the maximum time of whatever data set
--- you are writing down. This should be done within the same lock as that
--- write.
+--   You should only call this once with the maximum time of whatever data set
+--   you are writing down. This should be done within the same lock as that
+--   write.
 updateSimpleLatest :: Origin -> TimeStamp -> Daemon ()
 updateSimpleLatest origin' = updateLatest (simpleLatestOID origin')
 
+-- | Equivalent of 'updateSimpleLatest' for extended buckets.
 updateExtendedLatest :: Origin -> TimeStamp -> Daemon ()
 updateExtendedLatest origin' = updateLatest (extendedLatestOID origin')
 
 -- Internal
 
+-- | Updates the latest time specified Ceph object to the provided
+--   'TimeStamp', if it is later than the one the object already has.
 updateLatest :: ByteString -> TimeStamp -> Daemon ()
 updateLatest oid (TimeStamp time) = withLockExclusive oid . liftPool $ do
     result <- runObject oid readFull

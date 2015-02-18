@@ -38,7 +38,7 @@ lookupFirst :: TimeStamp -> DayMap -> (Epoch, NumBuckets)
 lookupFirst start dm = fst $ splitRemainder start dm
 
 -- | Return first entry and the remainder that is later than the provided
---   'TimeStamp'..
+--   'TimeStamp'.
 splitRemainder :: TimeStamp -> DayMap -> ((Epoch, NumBuckets), DayMap)
 splitRemainder (TimeStamp t) (DayMap m) =
     let (left, middle, right) = Map.splitLookup t m
