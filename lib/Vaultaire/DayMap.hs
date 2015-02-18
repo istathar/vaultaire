@@ -33,7 +33,7 @@ loadDayMap bs
 
 
 lookupFirst :: TimeStamp -> DayMap -> (Epoch, NumBuckets)
-lookupFirst = (fst .) . splitRemainder
+lookupFirst ts dm = fst $ splitRemainder ts dm
 
 -- Return first and the remainder that is later than that.
 splitRemainder :: TimeStamp -> DayMap -> ((Epoch, NumBuckets), DayMap)
