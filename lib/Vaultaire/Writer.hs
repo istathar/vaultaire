@@ -393,4 +393,4 @@ writeSimple o e b payload =
 -- | Object ID of the write lock object for an origin.
 writeLockOID :: Origin -> ByteString
 writeLockOID (Origin o') =
-    "02_" `S.append` o' `S.append` "_write_lock"
+    "02_" <> o' <> "_write_lock"
