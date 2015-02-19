@@ -263,9 +263,11 @@ refreshOriginDays origin' = do
     Lock management
 -}
 
+-- | Lock timeout period, in seconds.
 timeout :: Int
 timeout = 600 -- 10 minutes
 
+-- | Duration of lock, in seconds.
 release :: Double
 release = fromIntegral $ timeout + 5
 
@@ -390,12 +392,15 @@ dayMapsFromCeph origin' = do
         Right day_map ->
             return $ Right (fromIntegral (BS.length contents), day_map)
 
+-- | Ceph object ID of the origin's Simple DayMap.
 simpleDayOID :: Origin -> ByteString
 simpleDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_simple_days"
 
+-- | Ceph object ID of the origin's Extended DayMap.
 extendedDayOID :: Origin -> ByteString
 extendedDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_extended_days"
 
+-- | Ceph object ID of the bucket at the provided epoch.
 bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
 bucketOID (Origin origin') epoch bucket kind = BS.pack $ printf "02_%s_%020d_%020d_%s"
                                                          (BS.unpack origin')

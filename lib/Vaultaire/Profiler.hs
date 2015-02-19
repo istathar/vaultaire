@@ -58,6 +58,8 @@ runProfiler e (Profiler x) = do
     debugM "Profiler.runProfiler" "Profiler sealed and cleaned up."
     return r
 
+-- | Runs the profiling loop which reads reports from the worker and
+--   publishes them via ZeroMQ.
 startProfiler :: ProfilingEnv -> IO ()
 startProfiler env@(ProfilingEnv{..}) =
     Z.withContext $ \ctx ->
@@ -71,10 +73,14 @@ data ProfilingInterface = ProfilingInterface
     { -- Reporting functions, they will perform the necessary measurements
       -- and send them to the profiler.
       profCount   :: MonadIO m => TeleMsgType -> Origin -> Int -> m ()
+      -- ^ Queue sending a count profiling message.
     , profTime    :: MonadIO m => TeleMsgType -> Origin -> m r -> m r
+      -- ^ Report the time taken by an action.
       -- Raw measurement and sending functions.
     , measureTime :: MonadIO m => m r -> m (r, Word64)
+      -- ^ Measure the time elapsed for the provided action (in ms).
     , report      :: MonadIO m => TeleMsgType -> Origin -> Word64 -> m () }
+      -- ^ Send a profiling report to be queued.
 
 -- | Arguments needed to be specified by the user for profiling
 --   (name, publishing port, period, bound, shutdown signal).
