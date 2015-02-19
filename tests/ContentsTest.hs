@@ -15,7 +15,7 @@
 
 module Main where
 
-import System.ZMQ4.Monadic hiding (Event)
+import System.ZMQ4.Monadic
 
 import Test.Hspec hiding (pending)
 

@@ -13,6 +13,7 @@ module Vaultaire.RollOver
 import Control.Monad.State
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Monoid
 import Data.Packer
 import System.Rados.Monadic
 import Vaultaire.Daemon
@@ -20,32 +21,36 @@ import Vaultaire.DayMap
 import Vaultaire.Types
 
 -- | Roll the cluster onto a new "vault day", this will block until all other
--- daemons are synchronized at acquiring any shared locks.
+--   daemons are synchronized at acquiring any shared locks.
 --
--- All day maps will be invalidated on roll over, it is up to you to ensure
--- that they are reloaded before next use.
+--   All day maps will be invalidated on roll over, it is up to you to ensure
+--   that they are reloaded before next use.
 rollOverSimpleDay :: Origin -> NumBuckets -> Daemon ()
 rollOverSimpleDay origin' =
     rollOver origin' (simpleDayOID origin') (simpleLatestOID origin')
 
+-- | Equivalent of 'rollOverSimpleDay' for extended buckets.
 rollOverExtendedDay :: Origin -> NumBuckets -> Daemon ()
 rollOverExtendedDay origin' =
     rollOver origin' (extendedDayOID origin') (extendedLatestOID origin')
 
 -- | This compares the given time against the latest one in ceph, and updates
--- if larger.
+--   if larger.
 --
--- You should only call this once with the maximum time of whatever data set
--- you are writing down. This should be done within the same lock as that
--- write.
+--   You should only call this once with the maximum time of whatever data set
+--   you are writing down. This should be done within the same lock as that
+--   write.
 updateSimpleLatest :: Origin -> TimeStamp -> Daemon ()
 updateSimpleLatest origin' = updateLatest (simpleLatestOID origin')
 
+-- | Equivalent of 'updateSimpleLatest' for extended buckets.
 updateExtendedLatest :: Origin -> TimeStamp -> Daemon ()
 updateExtendedLatest origin' = updateLatest (extendedLatestOID origin')
 
 -- Internal
 
+-- | Updates the latest time specified Ceph object to the provided
+--   'TimeStamp', if it is later than the one the object already has.
 updateLatest :: ByteString -> TimeStamp -> Daemon ()
 updateLatest oid (TimeStamp time) = withLockExclusive oid . liftPool $ do
     result <- runObject oid readFull
@@ -60,6 +65,8 @@ updateLatest oid (TimeStamp time) = withLockExclusive oid . liftPool $ do
     value = runPacking 8 (putWord64LE time)
     parse = either (const 0) id . tryUnpacking getWord64LE
 
+-- | Roll an origin over to a new "vault day" - append an entry to the
+--   'DayMap' file with the most recent timestamp and bucket count.
 rollOver :: Origin -> ByteString -> ByteString -> NumBuckets -> Daemon ()
 rollOver origin day_file latest_file buckets =
     withLockExclusive (originLockOID origin) $ do
@@ -72,7 +79,7 @@ rollOver origin day_file latest_file buckets =
                 error $ "corrupt latest file in origin': " ++ show origin
 
             app <- liftPool . runObject day_file $
-                append (latest `BS.append` build buckets)
+                append (latest <> build buckets)
 
             case app of
                 Just e  -> error $ "failed to append for rollover: " ++ show e
@@ -82,14 +89,18 @@ rollOver origin day_file latest_file buckets =
     mustLatest = either (\e -> error $ "could not get latest_file" ++ show e)
                         return
 
+-- | Identifier of the object used to lock an origin during rollover.
 originLockOID :: Origin -> ByteString
 originLockOID = simpleLatestOID
 
+-- | Construct the ID of the Ceph object storing the timestamp of the
+--   latest 'SimplePoint' which was written to an origin (note that this is
+--   the timestamp of the point, not the time at which it was written).
 simpleLatestOID :: Origin -> ByteString
 simpleLatestOID (Origin origin') =
-    "02_" `BS.append` origin' `BS.append` "_simple_latest"
+    "02_" <> origin' <> "_simple_latest"
 
+-- | Analogous to 'simpleLatestOID' for extended points.
 extendedLatestOID :: Origin -> ByteString
 extendedLatestOID (Origin origin') =
-    "02_" `BS.append` origin' `BS.append` "_extended_latest"
-
+    "02_" <> origin' <> "_extended_latest"

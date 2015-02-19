@@ -29,6 +29,8 @@ import Vaultaire.Types
 startReader :: DaemonArgs -> IO ()
 startReader = flip handleMessages handleRequest
 
+-- | Accepts a request 'Message' from a client (either Simple or
+--   Extended) and replies with a response terminated by 'EndOfStream'.
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply_f origin payload)
   = profileTime  ReaderRequestLatency origin $ do
@@ -47,9 +49,13 @@ handleRequest (Message reply_f origin payload)
             liftIO . errorM "Reader.handleRequest" $
                             "failed to decode request: " ++ show e
 
+-- | Yields the ByteString argument to the output Pipe if it's not
+--   empty; otherwise yields nothing.
 yieldNotNull :: Monad m => ByteString -> Pipe i ByteString m ()
 yieldNotNull bs = unless (S.null bs) (yield bs)
 
+-- | processSimple handles a request for a series of simple points,
+--   sending the result back to the client.
 processSimple :: Address -> TimeStamp -> TimeStamp -> Origin -> ReplyF -> Daemon ()
 processSimple addr start end origin reply_f = do
     profileCount ReaderSimplePoints origin
@@ -86,6 +92,8 @@ readSimple origin addr start end = forever $ do
             lift $ profileCountN ReaderSimplePoints origin (S.length bs `div` 24)
             yieldNotNull bs
 
+-- | processExtended handles a read request for a series of extended
+--   points, sending a response back to the client.
 processExtended :: Address -> TimeStamp -> TimeStamp -> Origin -> ReplyF -> Daemon ()
 processExtended addr start end origin reply_f = do
     refreshOriginDays origin

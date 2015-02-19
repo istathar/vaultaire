@@ -35,6 +35,8 @@ import Vaultaire.Types
 startContents :: DaemonArgs -> IO ()
 startContents = flip handleMessages handleRequest
 
+-- | Perform the action requested in the 'Message' and send the
+--   appropriate response to the client.
 handleRequest :: Message -> Daemon ()
 handleRequest (Message reply origin payload) = do
     case fromWire payload of
@@ -72,6 +74,8 @@ performListRequest reply o
                     (lift . reply . uncurry ContentsListBypass)
     reply EndOfContentsList
 
+-- | A request has been made to allocate a new unique address; do this
+--   and return it to the client.
 performRegisterRequest :: ReplyF -> Origin -> Daemon ()
 performRegisterRequest reply o = do
     liftIO $ infoM "Contents.performRegisterRequest"
@@ -79,6 +83,8 @@ performRegisterRequest reply o = do
 
     allocateNewAddressInVault o >>= reply . RandomAddress
 
+-- | Generate a random address, make sure it's unused, and write an
+--   empty source dict for it so it is no longer unused.
 allocateNewAddressInVault :: Origin -> Daemon Address
 allocateNewAddressInVault o = do
     a <- Address . (`clearBit` 0) <$> liftIO rollDice
@@ -94,6 +100,10 @@ allocateNewAddressInVault o = do
     rollDice = getStdRandom (randomR (0, maxBound :: Word64))
     isAddressInVault a = isJust <$> InternalStore.readFrom o a
 
+-- | Update the sourcedict associated with the provided address. New
+--   tags will be added; new values for existing names will be updated
+--   (in the case of sourcedict objects only, last write wins);
+--   no tags will be removed.
 performUpdateRequest
     :: ReplyF
     -> Origin
@@ -124,6 +134,9 @@ performUpdateRequest reply o a input
                 else writeSourceTagsForAddress o a update
     reply UpdateSuccess
 
+-- | Remove the tags specified in the provided sourcedict from the
+--   provided address. Tags not specified in the provided sourcedict
+--   will remain.
 performRemoveRequest
     :: ReplyF
     -> Origin
@@ -148,6 +161,7 @@ performRemoveRequest reply o a input = do
                 (show o ++ " Complete")
     reply RemoveSuccess
 
+-- | Read the sourcedict associated with an address.
 retreiveSourceTagsForAddress :: Origin -> Address -> Daemon (Maybe SourceDict)
 retreiveSourceTagsForAddress o a = do
     result <- InternalStore.readFrom o a
@@ -155,6 +169,9 @@ retreiveSourceTagsForAddress o a = do
         Just b'     -> either throw Just (fromWire b')
         Nothing     -> Nothing
 
+-- | Pack the tags in the provided sourcedict and write them to Ceph.
+--   This will overwrite any previously-associated sourcedict for that
+--   address.
 writeSourceTagsForAddress :: Origin -> Address -> SourceDict -> Daemon ()
 writeSourceTagsForAddress o a s = do
     liftIO $ infoM "Contents.writeSourceTagsForAddress"

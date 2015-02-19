@@ -16,7 +16,7 @@ import Data.Maybe
 import Data.Time
 import Network.URI
 import System.Rados.Monadic
-import System.ZMQ4.Monadic hiding (Event)
+import System.ZMQ4.Monadic
 import Test.Hspec hiding (pending)
 
 import TestHelpers
