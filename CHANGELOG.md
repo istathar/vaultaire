@@ -1,6 +1,15 @@
+# 2.6.2
+
+## User interface
+
+The CEPH_KEYRING environment variable no longer needs to be manually
+specified; it can be passed in as the `--ceph-keyring` command-line
+option to the `vault` program.
+
 # 2.6.1
 
 ## User interface
+
 To disable profiling, run ``vault --no-profiling``. By default,
 profiling is enabled with a period of 1s and an accuracy bound of 2048
 telemetric stats per second.
