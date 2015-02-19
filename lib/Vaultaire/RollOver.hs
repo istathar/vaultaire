@@ -93,10 +93,9 @@ rollOver origin day_file latest_file buckets =
 originLockOID :: Origin -> ByteString
 originLockOID = simpleLatestOID
 
--- | Construct the ID of the Ceph object storing the time at which the
---   latest 'SimplePoint' was written to an origin (note that this is
---   the time at which the point was written, *not* the timestamp of the
---   point itself).
+-- | Construct the ID of the Ceph object storing the timestamp of the
+--   latest 'SimplePoint' which was written to an origin (note that this is
+--   the timestamp of the point, not the time at which it was written).
 simpleLatestOID :: Origin -> ByteString
 simpleLatestOID (Origin origin') =
     "02_" <> origin' <> "_simple_latest"
