@@ -20,6 +20,7 @@ import Data.Word (Word64)
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
+import System.Environment
 import System.Log.Logger
 import Text.Read
 import Text.Trifecta
@@ -30,16 +31,17 @@ import Vaultaire.Program
 
 
 data Options = Options
-  { pool      :: String
-  , user      :: String
-  , broker    :: String
-  , debug     :: Bool
-  , quiet     :: Bool
-  , noprofile :: Bool
-  , period    :: Int
-  , bound     :: Int
-  , name      :: String
-  , component :: Component }
+  { pool         :: String
+  , user         :: String
+  , broker       :: String
+  , debug        :: Bool
+  , quiet        :: Bool
+  , noprofile    :: Bool
+  , period       :: Int
+  , bound        :: Int
+  , name         :: String
+  , ceph_keyring :: String
+  , component    :: Component }
 
 data Component = Broker
                | Reader
@@ -61,6 +63,7 @@ optionsParser Options{..} = Options <$> parsePool
                                     <*> parsePeriod
                                     <*> parseBound
                                     <*> parseName
+                                    <*> parseKeyring
                                     <*> parseComponents
   where
     parsePool = strOption $
@@ -123,6 +126,13 @@ optionsParser Options{..} = Options <$> parsePool
         <> showDefault
         <> help "Identifiable name for the daemon. Useful for telemetrics."
 
+    parseKeyring = strOption $
+           long "ceph-keyring"
+        <> short 'k'
+        <> metavar "CEPH-KEYRING"
+        <> value ""
+        <> help "Path to Ceph keyring file. If set, this will override the CEPH_KEYRING environment variable."
+
     parseComponents = subparser
        (  parseBrokerComponent
        <> parseReaderComponent
@@ -169,7 +179,7 @@ parseConfig fp = do
         else return defaultConfig
   where
     defaultConfig = Options "vaultaire" "vaultaire" "localhost"
-                            False False False 1000 2048 "" Broker
+                            False False False 1000 2048 "" "" Broker
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
@@ -180,6 +190,7 @@ parseConfig fp = do
                 <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
                 <*> (join $ readMaybe <$> lookup "bound" ls)  `mplus` pure period
                 <*> lookup "name" ls `mplus` pure name
+                <*> lookup "ceph_keyring" ls `mplus` pure ceph_keyring
                 <*> pure Broker
 
 configParser :: Parser [(String, String)]
@@ -196,6 +207,11 @@ possibleKeys =
 parseArgsWithConfig :: FilePath -> IO Options
 parseArgsWithConfig = parseConfig >=> execParser . helpfulParser
 
+-- If set, override CEPH_KEYRING envvar (used by librados).
+updateCephKeyring :: String -> IO ()
+updateCephKeyring "" = return ()
+updateCephKeyring k  = setEnv "CEPH_KEYRING" k
+
 --
 -- Main program entry point
 --
@@ -207,6 +223,8 @@ main = do
     let level | debug     = Debug
               | quiet     = Quiet
               | otherwise = Normal
+
+    updateCephKeyring ceph_keyring
 
     quit <- initializeProgram (package ++ "-" ++ version) level
 
