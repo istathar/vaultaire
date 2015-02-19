@@ -65,6 +65,8 @@ updateLatest oid (TimeStamp time) = withLockExclusive oid . liftPool $ do
     value = runPacking 8 (putWord64LE time)
     parse = either (const 0) id . tryUnpacking getWord64LE
 
+-- | Roll an origin over to a new "vault day" - append an entry to the
+--   'DayMap' file with the most recent timestamp and bucket count.
 rollOver :: Origin -> ByteString -> ByteString -> NumBuckets -> Daemon ()
 rollOver origin day_file latest_file buckets =
     withLockExclusive (originLockOID origin) $ do
@@ -87,14 +89,18 @@ rollOver origin day_file latest_file buckets =
     mustLatest = either (\e -> error $ "could not get latest_file" ++ show e)
                         return
 
+-- | Identifier of the object used to lock an origin during rollover.
 originLockOID :: Origin -> ByteString
 originLockOID = simpleLatestOID
 
+-- | Construct the ID of the Ceph object storing the timestamp of the
+--   latest 'SimplePoint' written to an origin.
 simpleLatestOID :: Origin -> ByteString
 simpleLatestOID (Origin origin') =
     "02_" <> origin' <> "_simple_latest"
 
+-- | Construct the ID of the Ceph object storing the timestamp of the
+--   latest 'ExtendedPoint' written to an origin.
 extendedLatestOID :: Origin -> ByteString
 extendedLatestOID (Origin origin') =
     "02_" <> origin' <> "_extended_latest"
-
