@@ -45,13 +45,14 @@ import Vaultaire.Util (fatal)
 type EpochMap = HashMap Epoch
 type BucketMap = HashMap Bucket
 
+-- | State used by the writer when processing a batch of points.
 data BatchState = BatchState
     { simple         :: !(EpochMap (BucketMap Builder))
     , extended       :: !(EpochMap (BucketMap Builder))
     , pending        :: !(EpochMap (BucketMap (Word64, [Word64 -> Builder])))
     , latestSimple   :: !TimeStamp
     , latestExtended :: !TimeStamp
-    , dayMaps        :: !(DayMap, DayMap) -- Simple, extended
+    , dayMaps        :: !(DayMap, DayMap) -- ^ Simple, extended
     , bucketSize     :: !Word64
     , start          :: !UTCTime
     }
@@ -62,7 +63,11 @@ data Event = Msg Message | Tick
 startWriter :: DaemonArgs -> BucketSize -> IO ()
 startWriter args bucket_size = handleMessages args (processBatch bucket_size)
 
-batchStateNow :: BucketSize -> (DayMap, DayMap) -> IO BatchState
+-- | Gets the relevant batch state for a given BucketSize and simple
+--   and extended DayMaps. The 'start' time is the current time.
+batchStateNow :: BucketSize
+              -> (DayMap, DayMap) -- ^ (simple daymap, extended daymap)
+              -> IO BatchState
 batchStateNow bucket_size dms =
     BatchState mempty mempty mempty 0 0 dms bucket_size <$> getCurrentTime
 
@@ -128,14 +133,15 @@ processBatch bucket_size (Message reply origin payload)
     writeRate :: Int -> NominalDiffTime -> Float
     writeRate bytes d = (((fromRational . toRational) bytes) / ((fromRational . toRational) d)) / 1000
 
-
+-- | Given a message consisting of one or more simple or extended
+--   points, write them to the vault.
 processPoints :: MonadState BatchState m
-              => Word64
-              -> ByteString
-              -> (DayMap, DayMap)
-              -> Origin
-              -> TimeStamp
-              -> TimeStamp
+              => Word64            -- ^ Offset
+              -> ByteString        -- ^ Raw message
+              -> (DayMap, DayMap)  -- ^ (simple daymap, extended daymap)
+              -> Origin            -- ^ Origin to write to
+              -> TimeStamp         -- ^ Latest simple timestamp
+              -> TimeStamp         -- ^ Latest extended timestamp
               -> m (Int, Int)      -- ^ Number of (simple, extended) points processed
 processPoints offset message day_maps origin latest_simple latest_ext
     | fromIntegral offset >= S.length message = do
@@ -171,20 +177,26 @@ processPoints offset message day_maps origin latest_simple latest_ext
                 (s,e) <- processPoints (offset + 24) message day_maps origin t latest_ext
                 return (s+1,e)
 
+-- | Unpacks a message starting from the given offset. If it corresponds
+--   to a simple point, the 'Payload' will be the value; if extended,
+--   the 'Payload' will be the number of bytes in the value.
 parseMessageAt :: Word64 -> Unpacking (Address, TimeStamp, Payload)
 parseMessageAt offset = do
     unpackSetPosition (fromIntegral offset)
     (,,) <$> (Address <$> getWord64LE) <*> (TimeStamp <$> getWord64LE) <*> getWord64LE
 
-
-getBytesAt :: Word64 -> Word64 -> Unpacking ByteString
+-- | Gets the specified number of bytes, starting from the specified
+--   offset.
+getBytesAt :: Word64 -- ^ Offset
+           -> Word64 -- ^ Number of bytes
+           -> Unpacking ByteString
 getBytesAt offset len = do
     unpackSetPosition (fromIntegral offset)
     getBytes (fromIntegral len)
 
 -- | This one is pretty simple, simply append to the builder within the bucket
--- map, which is within an epoch map itself. Yes, this is two map lookups per
--- insert.
+--   map, which is within an epoch map itself. Yes, this is two map lookups per
+--   insert.
 appendSimple :: MonadState BatchState m
              => Epoch -> Bucket -> ByteString -> m ()
 appendSimple epoch bucket bytes = do
@@ -195,6 +207,7 @@ appendSimple epoch bucket bytes = do
     let !simple' = HashMap.insert epoch simple_map' (simple s)
     put $ s { simple = simple' }
 
+-- | Analogous to 'appendSimple' for extended points.
 appendExtended :: MonadState BatchState m
                => Epoch -> Bucket -> Address -> TimeStamp -> Word64 -> ByteString -> m ()
 appendExtended epoch bucket (Address address) (TimeStamp time) len string = do
@@ -361,19 +374,23 @@ write ns origin do_rollovers s = do
 
     forWithKey = flip HashMap.traverseWithKey
 
+-- | Get the file size and mtime of an extended bucket.
 extendedOffset :: Origin -> Epoch -> Bucket -> Pool (AsyncRead StatResult)
 extendedOffset o e b =
     runAsync $ runObject (bucketOID o e b "extended") stat
 
+-- | Writes an extended point to a bucket.
 writeExtended :: Origin -> Epoch -> Bucket -> ByteString -> Pool AsyncWrite
 writeExtended o e b payload =
     runAsync $ runObject (bucketOID o e b "extended") (append payload)
 
+-- | Writes a simple point to a bucket.
 writeSimple :: Origin -> Epoch -> Bucket -> ByteString -> Pool (AsyncRead StatResult, AsyncWrite)
 writeSimple o e b payload =
     runAsync $ runObject (bucketOID o e b "simple") $
         (,) <$> stat <*> append payload
 
+-- | Object ID of the write lock object for an origin.
 writeLockOID :: Origin -> ByteString
 writeLockOID (Origin o') =
     "02_" `S.append` o' `S.append` "_write_lock"
