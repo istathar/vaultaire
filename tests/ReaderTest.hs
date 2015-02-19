@@ -7,7 +7,7 @@ import Control.Concurrent
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (fromList)
-import System.ZMQ4.Monadic hiding (Event)
+import System.ZMQ4.Monadic
 import Test.Hspec hiding (pending)
 import TestHelpers
 

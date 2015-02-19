@@ -14,7 +14,6 @@ module Vaultaire.Writer
     write,
     batchStateNow,
     BatchState(..),
-    Event(..),
 ) where
 
 import Control.Applicative
@@ -56,8 +55,6 @@ data BatchState = BatchState
     , bucketSize     :: !Word64
     , start          :: !UTCTime
     }
-
-data Event = Msg Message | Tick
 
 -- | Start a writer daemon, runs until shutdown.
 startWriter :: DaemonArgs -> BucketSize -> IO ()
