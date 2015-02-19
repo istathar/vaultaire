@@ -67,7 +67,6 @@ startProfiler env@(ProfilingEnv{..}) =
 
 -- | Interface exposed to worker threads so they can report to the profiler.
 --   in case of no profiling, these functions should be basically noops.
---
 data ProfilingInterface = ProfilingInterface
     { -- Reporting functions, they will perform the necessary measurements
       -- and send them to the profiler.
@@ -78,8 +77,7 @@ data ProfilingInterface = ProfilingInterface
     , report      :: MonadIO m => TeleMsgType -> Origin -> Word64 -> m () }
 
 -- | Arguments needed to be specified by the user for profiling
---   (name, publishing port, period, bound, shutdown signal)
---
+--   (name, publishing port, period, bound, shutdown signal).
 type ProfilerArgs = (String, URI, Period, Int, MVar ())
 
 -- | Profiling environment.
@@ -95,11 +93,11 @@ data ProfilingEnv = ProfilingEnv
     }
 
 -- | Values that can be sent to the profiling channel.
---
 data ChanMsg = Barrier
              | Tele TeleMsg
              deriving Show
 
+-- | Dummy profiler, does nothing.
 noProfiler :: (ProfilingEnv, ProfilingInterface)
 noProfiler
     = ( ProfilingEnv
@@ -119,6 +117,8 @@ noProfiler
             , measureTime = (>>= return . (,0))
             , report      = const $ const $ const $ return () } )
 
+-- | Builds a (real, not-dummy) profiler interface. If the agent name
+--   provided is invalid, an empty name will be used.
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
 hasProfiler (name, broker, period, bound, quit) =  do
     n <- maybe (do errorM  "Daemon.setupProfiler"
@@ -178,6 +178,8 @@ hasProfiler (name, broker, period, bound, quit) =  do
               in  fromIntegral $ secInMilliSec + fromIntegral uSecInMilliSec
           raw (CTime x) = x
 
+-- | Reads profiling reports waiting in the channel, packs them into
+--   'TeleResp' messages and publishes them on the provided socket.
 profile :: PublishSock -> Profiler ()
 profile sock = do
     ProfilingEnv{..} <- ask
@@ -206,7 +208,6 @@ profile sock = do
 
 -- | Reads from input until we either hit a barrier or reach the cap.
 --   Like pipes-concurrency's @fromInput@ but non-blocking.
---
 fromInputUntil :: MonadIO m => Int -> Input ChanMsg -> Producer TeleMsg m ()
 fromInputUntil n chan = evalStateP 0 go
     where go = do
@@ -221,7 +222,6 @@ fromInputUntil n chan = evalStateP 0 go
 --   *NOTE* Technically we do not need to report number of requests received,
 --          since we can just count the number of latency samples,
 --          but to keep things simple and modular we will leave them separate.
---
 aggregate :: Monad m => Producer TeleMsg m () -> m [TeleMsg]
 aggregate = evalStateT $ foldAll
     (\acc x -> M.insertWith (go $ _type x) (_origin x, _type x) (1, _payload x) acc)
@@ -263,5 +263,6 @@ aggregate = evalStateT $ foldAll
           keep  (c1, v1) (c2, v2) = (c1 + c2, v1 + v2)
           msg (x,y) z = TeleMsg x y z
 
+-- | Suspends current thread for one millisecond.
 milliDelay :: Int -> IO ()
 milliDelay = threadDelay . (*1000)
