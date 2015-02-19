@@ -394,11 +394,11 @@ dayMapsFromCeph origin' = do
 
 -- | Ceph object ID of the origin's Simple DayMap.
 simpleDayOID :: Origin -> ByteString
-simpleDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_simple_days"
+simpleDayOID (Origin origin') = "02_" <> origin' <> "_simple_days"
 
 -- | Ceph object ID of the origin's Extended DayMap.
 extendedDayOID :: Origin -> ByteString
-extendedDayOID (Origin origin') = "02_" `BS.append` origin' `BS.append` "_extended_days"
+extendedDayOID (Origin origin') = "02_" <> origin' <> "_extended_days"
 
 -- | Ceph object ID of the bucket at the provided epoch.
 bucketOID :: Origin -> Epoch -> Bucket -> String -> ByteString
