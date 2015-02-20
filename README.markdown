@@ -80,9 +80,11 @@ you want to make the broker highly-available, use a TCP load-balancer).
 
 The defaults assume your Rados pool is called `vaultaire`, and you're
 connecting with the username `vaultaire`; if this isn't the case,
-override with `-p` and `-u` respectively. In either case, you'll need to
-have the environment variable `CEPH_KEYRING` pointing to the correct
-place.
+override with `-p` and `-u` respectively.
+
+Additionally, if your Ceph keyring is not at the default path used by
+librados (`/etc/ceph/keyring` as of Feburary 2015) you'll need to
+override it with `-k /path/to/your/keyring/file`.
 
 ```
 vault -d broker # Start broker in debug mode
