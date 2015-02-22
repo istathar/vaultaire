@@ -178,8 +178,17 @@ parseConfig fp = do
                 Nothing  -> error "Failed to parse config"
         else return defaultConfig
   where
-    defaultConfig = Options "vaultaire" "vaultaire" "localhost"
-                            False False False 1000 2048 "" "" Broker
+    defaultConfig = Options "vaultaire" -- Use 'vaultaire' rados pool.
+                            "vaultaire" -- Connect as 'vaultaire' user.
+                            "localhost" -- Default to broker on localhost.
+                            False       -- Don't print debug output.
+                            False       -- Don't suppress all output.
+                            False       -- Don't disable profiling.
+                            1000        -- Write telemetry every 1000ms.
+                            2048        -- Handle <= 2048 telemetry reports per period.
+                            ""          -- Use a blank agent name for telemetry.
+                            ""          -- Don't set CEPH_KEYRING.
+                            Broker      -- Run in broker mode.
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
