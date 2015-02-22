@@ -3,7 +3,7 @@
 ## User interface
 
  * The `CEPH_KEYRING` environment variable no longer needs to be manually
-   specified; it can be passed in as the `--ceph-keyring` command-line
+   specified; it can be passed in as the `--keyring` command-line
    option to the `vault` program.
 
  * The unused `Event` type has been removed from the `Vaultaire.Writer`

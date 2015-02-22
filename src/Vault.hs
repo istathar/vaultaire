@@ -40,7 +40,7 @@ data Options = Options
   , period       :: Int
   , bound        :: Int
   , name         :: String
-  , ceph_keyring :: String
+  , keyring      :: String
   , component    :: Component }
 
 data Component = Broker
@@ -127,9 +127,9 @@ optionsParser Options{..} = Options <$> parsePool
         <> help "Identifiable name for the daemon. Useful for telemetrics."
 
     parseKeyring = strOption $
-           long "ceph-keyring"
+           long "keyring"
         <> short 'k'
-        <> metavar "CEPH-KEYRING"
+        <> metavar "KEYRING"
         <> value ""
         <> help "Path to Ceph keyring file. If set, this will override the CEPH_KEYRING environment variable."
 
@@ -190,7 +190,7 @@ parseConfig fp = do
                 <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
                 <*> (join $ readMaybe <$> lookup "bound" ls)  `mplus` pure period
                 <*> lookup "name" ls `mplus` pure name
-                <*> lookup "ceph_keyring" ls `mplus` pure ceph_keyring
+                <*> lookup "keyring" ls `mplus` pure keyring
                 <*> pure Broker
 
 configParser :: Parser [(String, String)]
@@ -224,7 +224,7 @@ main = do
               | quiet     = Quiet
               | otherwise = Normal
 
-    updateCephKeyring ceph_keyring
+    updateCephKeyring keyring
 
     quit <- initializeProgram (package ++ "-" ++ version) level
 
