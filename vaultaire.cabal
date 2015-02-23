@@ -65,7 +65,7 @@ library
                      stm,
                      semigroups,
                      hslogger >= 1.2.4,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      text,
                      unix,
                      unix-time,
@@ -97,7 +97,7 @@ executable vault
                      directory,
                      marquise >= 3.0.2,
                      containers,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      pipes,
                      hslogger >= 1.2.4,
                      async,
@@ -130,7 +130,7 @@ executable inspect
                      directory,
                      marquise >= 3.0.2,
                      containers,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      pipes,
                      hslogger >= 1.2.4,
                      async,
@@ -159,7 +159,7 @@ executable demowave
                      directory,
                      marquise >= 3.0.2,
                      containers,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      pipes,
                      hslogger,
                      time,
@@ -185,7 +185,7 @@ executable telemetry
                      network-uri,
                      optparse-applicative >= 0.11.0,
                      zeromq4-haskell,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      vaultaire
 
   ghc-options:       -O2
@@ -209,7 +209,7 @@ test-suite           daemon-test
   build-depends:     base >=3 && <5,
                      hspec,
                      async,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      semigroups,
                      bytestring,
                      vaultaire,
@@ -254,7 +254,7 @@ test-suite           writer-test
                      pipes,
                      pipes-parse,
                      semigroups,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      zeromq4-haskell,
                      mtl,
                      bytestring,
@@ -287,7 +287,7 @@ test-suite           reader-test
                      pipes,
                      pipes-parse,
                      semigroups,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      zeromq4-haskell,
                      mtl,
                      bytestring,
@@ -313,7 +313,7 @@ test-suite           reader-algorithms-test
                      containers,
                      QuickCheck,
                      primitive,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      spool,
                      vector,
                      mtl,
@@ -348,7 +348,7 @@ test-suite           internal-store-test
                      locators >= 0.2.4,
                      pipes-parse,
                      mtl,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      bytestring,
                      zeromq4-haskell,
                      vaultaire
@@ -384,7 +384,7 @@ test-suite           contents-test
                      marquise >= 3.0.2,
                      bytestring,
                      zeromq4-haskell,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      pipes,
                      vaultaire
 
@@ -419,7 +419,7 @@ test-suite           integration-test
                      zeromq4-haskell,
                      rados-haskell >= 3.0.1,
                      directory,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      vaultaire
 
   ghc-options:       -O2
@@ -440,7 +440,7 @@ benchmark writer-bench
                      semigroups,
                      rados-haskell,
                      criterion,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      vaultaire
 
   ghc-options:       -O2
@@ -481,7 +481,7 @@ benchmark contents-listing
                      bytestring,
                      criterion,
                      zeromq4-haskell,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      marquise >= 2.8.3,
                      vaultaire
 
@@ -513,7 +513,7 @@ test-suite           profiler-test
                      rados-haskell >= 3.0.1,
                      mtl,
                      transformers,
-                     vaultaire-common >= 2.8.2,
+                     vaultaire-common >= 2.9,
                      vaultaire
 
   ghc-options:       -O2
