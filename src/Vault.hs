@@ -17,6 +17,7 @@ module Main where
 import Control.Monad
 import Data.Maybe (fromJust)
 import Data.Word (Word64)
+import Network.BSD (getHostName)
 import Options.Applicative hiding (Parser, option)
 import qualified Options.Applicative as O
 import System.Directory
@@ -28,7 +29,7 @@ import Text.Trifecta
 import DaemonRunners
 import Package (package, version)
 import Vaultaire.Program
-
+import Vaultaire.Types (agentIDLength)
 
 data Options = Options
   { pool         :: String
@@ -124,7 +125,7 @@ optionsParser Options{..} = Options <$> parsePool
         <> metavar "NAME"
         <> value name
         <> showDefault
-        <> help "Identifiable name for the daemon. Useful for telemetrics."
+        <> help "Identifiable name for the daemon used for telemetry messages."
 
     parseKeyring = strOption $
            long "keyring"
@@ -165,30 +166,32 @@ writerOptionsParser = Writer <$> parseBucketSize
         <> showDefault
         <> help "Maximum bytes in any given bucket before rollover"
 
-
 -- | Config file parsing
 parseConfig :: FilePath -> IO Options
 parseConfig fp = do
     exists <- doesFileExist fp
+    defaults <- liftM defaultConfig defaultAgentID
     if exists
         then do
             maybe_ls <- parseFromFile configParser fp
             case maybe_ls of
-                Just ls -> return $ mergeConfig ls defaultConfig
+                Just ls -> return $ mergeConfig ls defaults
                 Nothing  -> error "Failed to parse config"
-        else return defaultConfig
+        else return defaults
   where
-    defaultConfig = Options "vaultaire" -- Use 'vaultaire' rados pool.
-                            "vaultaire" -- Connect as 'vaultaire' user.
-                            "localhost" -- Default to broker on localhost.
-                            False       -- Don't print debug output.
-                            False       -- Don't suppress all output.
-                            False       -- Don't disable profiling.
-                            1000        -- Write telemetry every 1000ms.
-                            2048        -- Handle <= 2048 telemetry reports per period.
-                            ""          -- Use a blank agent name for telemetry.
-                            ""          -- Don't set CEPH_KEYRING.
-                            Broker      -- Run in broker mode.
+    defaultConfig host =
+        Options "vaultaire" -- Use 'vaultaire' rados pool.
+                "vaultaire" -- Connect as 'vaultaire' user.
+                "localhost" -- Default to broker on localhost.
+                False       -- Don't print debug output.
+                False       -- Don't suppress all output.
+                False       -- Don't disable profiling.
+                1000        -- Write telemetry every 1000ms.
+                2048        -- Handle <= 2048 telemetry reports per period.
+                host        -- Use our hostname for telemetry agent ID.
+                ""          -- Don't set CEPH_KEYRING.
+                Broker      -- Run in broker mode.
+
     mergeConfig ls Options{..} = fromJust $
         Options <$> lookup "pool" ls `mplus` pure pool
                 <*> lookup "user" ls `mplus` pure user
@@ -201,6 +204,10 @@ parseConfig fp = do
                 <*> lookup "name" ls `mplus` pure name
                 <*> lookup "keyring" ls `mplus` pure keyring
                 <*> pure Broker
+
+    -- | Construct a sensible default agent ID - the machine's hostname,
+    --   truncated to the max agent ID length.
+    defaultAgentID = fmap (take agentIDLength) getHostName
 
 configParser :: Parser [(String, String)]
 configParser = some $ liftA2 (,)
