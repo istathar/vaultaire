@@ -19,7 +19,6 @@ import Control.Monad
 import Data.Binary.IEEE754 (doubleToWord, wordToDouble)
 import qualified Data.ByteString.Char8 as S
 import Data.Word
-import Options.Applicative hiding (Parser, option)
 import Options.Applicative
 import System.Log.Logger
 import Text.Printf
@@ -65,7 +64,7 @@ main = do
 
     logM "Main.main" DEBUG "Starting generator"
 
-    spool <- withMarquiseHandler (error . show) (createSpoolFiles "demowave")
+    spool <- createSpoolFiles "demowave"
 
     let a = hashIdentifier "This is a test of the emergency broadcast system"
     loop quit spool a
@@ -79,7 +78,7 @@ loop shutdown spool address = do
     let v = demoWaveAt i
     let msg = printf "%s\t%d\t% 9.6f" (show address) (unTimeStamp i) (wordToDouble v)
     logM "Main.loop" DEBUG msg
-    withMarquiseHandler (error . show) (queueSimple spool address i v)
+    queueSimple spool address i v
 
     a1 <- async (do
         readMVar shutdown

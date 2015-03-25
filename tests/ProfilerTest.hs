@@ -1,34 +1,33 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import           Control.Applicative
-import           Control.Concurrent
-import           Control.Concurrent.Async
-import           Control.Exception
-import           Control.Monad
-import           Control.Monad.Reader
-import           Control.Monad.Trans.State
+import Control.Applicative
+import Control.Concurrent
+import Control.Concurrent.Async
+import Control.Exception
+import Control.Monad
+import Control.Monad.Reader
+import Control.Monad.Trans.State
 import qualified Data.List as L
-import           Data.Maybe
-import           Network.URI
-import           System.ZMQ4 hiding (shutdown)
+import Data.Maybe
+import Network.URI
+import System.ZMQ4 hiding (shutdown)
 import qualified System.ZMQ4.Monadic as Z
-import           Test.Hspec hiding (pending)
+import Test.Hspec hiding (pending)
 
-import           Vaultaire.Daemon
-import           Vaultaire.Broker
-import           Vaultaire.Writer
-import           Vaultaire.Profiler
-import           Vaultaire.Types
-import           Vaultaire.Util
-import           TestHelpers
+import TestHelpers
+import Vaultaire.Broker
+import Vaultaire.Daemon
+import Vaultaire.Profiler
+import Vaultaire.Types
+import Vaultaire.Util
+import Vaultaire.Writer
 
 main :: IO ()
-main = do
-    hspec suite
+main = hspec suite
 
 suite :: Spec
-suite = do
-    describe "Requests" $ do
+suite =
+    describe "Requests" $
         it "have corresponding telemetric data" $ do
             runTestDaemon "tcp://localhost:1234" loadState
             sig     <- newEmptyMVar
@@ -49,7 +48,7 @@ expected = [ WriterSimplePoints
 testTelemetry :: IO (Async [TeleMsgType])
 testTelemetry = async $ do
     -- setup a broker for telemetry
-    linkThread $ do
+    linkThread $
         Z.runZMQ $ startProxy (XPub,"tcp://*:6660")
                               (XSub,"tcp://*:6661")
                               "tcp://*:6000"
@@ -57,7 +56,7 @@ testTelemetry = async $ do
     -- connect to the broker for telemtrics
     withContext $ \ctx ->
       withSocket ctx Sub $ \sock -> do
-        connect sock $ "tcp://localhost:6660"
+        connect sock "tcp://localhost:6660"
         subscribe sock ""
         L.nub <$> L.sort <$> execStateT (forM expected $ const $ go sock) []
     where go sock = do
@@ -69,7 +68,7 @@ testTelemetry = async $ do
 testWriter :: MVar () -> IO () -> IO (Async (), Async ())
 testWriter quit act = do
     -- setup a broker so we can "send" to this testWriter daemon
-    linkThread $ do
+    linkThread $
         Z.runZMQ $ startProxy (Router,"tcp://*:5560")
                               (Dealer,"tcp://*:5561")
                               "tcp://*:5000"

@@ -1,13 +1,13 @@
-{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Main where
+import Control.Monad.ST
 import Criterion.Main
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import Data.Monoid
-import Control.Monad.ST
 import Data.Word
 import qualified Vaultaire.ReaderAlgorithms as A
 
@@ -24,7 +24,7 @@ makeSimplePoint n =
 
 runTest :: ByteString -> ByteString
 runTest bs = runST $ A.processBucket bs 4 minBound maxBound
-    
+
 
 main :: IO ()
 main = do

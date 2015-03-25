@@ -32,17 +32,17 @@ import Vaultaire.Program
 import Vaultaire.Types (agentIDLength)
 
 data Options = Options
-  { pool         :: String
-  , user         :: String
-  , broker       :: String
-  , debug        :: Bool
-  , quiet        :: Bool
-  , noprofile    :: Bool
-  , period       :: Int
-  , bound        :: Int
-  , name         :: String
-  , keyring      :: String
-  , component    :: Component }
+  { pool      :: String
+  , user      :: String
+  , broker    :: String
+  , debug     :: Bool
+  , quiet     :: Bool
+  , noprofile :: Bool
+  , period    :: Int
+  , bound     :: Int
+  , name      :: String
+  , keyring   :: String
+  , component :: Component }
 
 data Component = Broker
                | Reader
@@ -199,8 +199,8 @@ parseConfig fp = do
                 <*> pure debug
                 <*> pure quiet
                 <*> pure noprofile
-                <*> (join $ readMaybe <$> lookup "period" ls) `mplus` pure period
-                <*> (join $ readMaybe <$> lookup "bound" ls)  `mplus` pure period
+                <*> join (readMaybe <$> lookup "period" ls) `mplus` pure period
+                <*> join (readMaybe <$> lookup "bound"  ls) `mplus` pure period
                 <*> lookup "name" ls `mplus` pure name
                 <*> lookup "keyring" ls `mplus` pure keyring
                 <*> pure Broker

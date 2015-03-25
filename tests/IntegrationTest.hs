@@ -21,9 +21,9 @@ import Control.Concurrent.Async
 import Data.HashMap.Strict (fromList)
 import Data.Maybe
 import Data.Text
+import Network.URI
 import Pipes
 import qualified Pipes.Prelude as P
-import Network.URI
 import System.Directory
 import System.IO
 import Test.Hspec hiding (pending)
@@ -32,8 +32,8 @@ import CommandRunners
 import DaemonRunners
 import Marquise.Client
 import Marquise.Server
-import TestHelpers (daemonArgsTest, cleanup)
-import Vaultaire.Daemon hiding (shutdown, broker)
+import TestHelpers (cleanup, daemonArgsTest)
+import Vaultaire.Daemon hiding (broker, shutdown)
 
 pool :: String
 pool = "test"
@@ -71,14 +71,14 @@ startServerDaemons tmp shutdown =
     runRegisterOrigin pool user origin num_buckets step_size 0 0
 
 setupClientSide :: IO SpoolFiles
-setupClientSide = crashOnMarquiseErrors $ createSpoolFiles "integration"
+setupClientSide = createSpoolFiles "integration"
 
 --
 -- Sadly, the smazing standard library lacks a standardized way to create a
 -- temporary file. You'll need to remove this file when it's done.
 --
 
-createTempFile :: IO (FilePath)
+createTempFile :: IO FilePath
 createTempFile = do
     (name,h) <- openTempFile "." "cache_file-.tmp"
     hClose h
@@ -110,18 +110,17 @@ suite spool =
     timestamp = 1406078299651575183
     payload   = 42
   in do
-    describe "Generate data" $ do
+    describe "Generate data" $
         it "sends point via marquise" $ do
-            withMarquiseHandler (error . show) $ do
-                queueSimple spool address timestamp payload
-                flush spool
+            queueSimple spool address timestamp payload
+            flush spool
             pass
 
-    describe "Retreive data" $ do
+    describe "Retreive data" $
         it "reads point via marquise" $
           let
             go n = do
-                result <- withReaderConnection "localhost" $ \c -> withMarquiseHandler (error . show) $ do
+                result <- withReaderConnection "localhost" $ \c ->
                     P.head (readSimple address begin end origin c >-> decodeSimple)
 
                 case result of
@@ -130,7 +129,7 @@ suite spool =
                                 else do
                                     threadDelay 10000 -- 10 ms
                                     go (n+1)
-                    Just v  -> (simplePayload v) `shouldBe` payload
+                    Just v  -> simplePayload v `shouldBe` payload
           in
             go 1
 

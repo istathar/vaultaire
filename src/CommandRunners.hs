@@ -9,8 +9,7 @@
 -- the 3-clause BSD licence.
 --
 
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RankNTypes #-}
 
 module CommandRunners
 (

@@ -252,7 +252,7 @@ main = do
             None -> return ()
             RegisterOrigin origin buckets step begin end ->
                 runRegisterOrigin pool user origin buckets step begin end
-            Read _ _ _ _ ->
+            Read{} ->
                 error "Currently unimplemented. Use marquise's `data read` command"
             List _ ->
                 error "Currently unimplemented. Use marquise's `data list` command"

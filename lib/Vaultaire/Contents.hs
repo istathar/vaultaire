@@ -19,6 +19,7 @@ module Vaultaire.Contents
 
 import Control.Applicative
 import Control.Exception
+import Control.Monad
 import Data.Bits
 import Data.Maybe (isJust)
 import Data.Monoid (mempty)
@@ -38,7 +39,7 @@ startContents = flip handleMessages handleRequest
 -- | Perform the action requested in the 'Message' and send the
 --   appropriate response to the client.
 handleRequest :: Message -> Daemon ()
-handleRequest (Message reply origin payload) = do
+handleRequest (Message reply origin payload) =
     case fromWire payload of
         Left err -> liftIO $ errorM "Contents.handleRequest" $
                                     "bad request: " ++ show err
@@ -129,9 +130,7 @@ performUpdateRequest reply o a input
         Just current -> do
             -- items in first SourceDict (the passed in update from user) win
             let update = unionSource input current
-            if current == update
-                then return ()
-                else writeSourceTagsForAddress o a update
+            unless (current == update) (writeSourceTagsForAddress o a update)
     reply UpdateSuccess
 
 -- | Remove the tags specified in the provided sourcedict from the
@@ -153,9 +152,7 @@ performRemoveRequest reply o a input = do
         Nothing -> return ()
         Just current -> do
             let update = diffSource current input
-            if current == update
-                then return ()
-                else writeSourceTagsForAddress o a update
+            unless (current == update) (writeSourceTagsForAddress o a update)
 
     liftIO $ infoM "Contents.performRemoveRequest"
                 (show o ++ " Complete")

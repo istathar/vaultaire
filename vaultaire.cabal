@@ -1,6 +1,6 @@
 cabal-version:       >= 1.10
 name:                vaultaire
-version:             2.6.2.0
+version:             2.6.2.1
 synopsis:            Data vault for metrics
 description:         Data vault for metrics
 license:             BSD3
@@ -95,7 +95,7 @@ executable vault
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 3.0.2,
+                     marquise >= 4.0.0,
                      containers,
                      vaultaire-common >= 2.9,
                      pipes,
@@ -128,7 +128,7 @@ executable inspect
                      optparse-applicative,
                      trifecta >= 1.4.3,
                      directory,
-                     marquise >= 3.0.2,
+                     marquise >= 4.0.0,
                      containers,
                      vaultaire-common >= 2.9,
                      pipes,
@@ -157,7 +157,7 @@ executable demowave
                      optparse-applicative,
                      trifecta,
                      directory,
-                     marquise >= 3.0.2,
+                     marquise >= 4.0.0,
                      containers,
                      vaultaire-common >= 2.9,
                      pipes,
@@ -381,7 +381,7 @@ test-suite           contents-test
                      semigroups,
                      locators >= 0.2.4,
                      mtl,
-                     marquise >= 3.0.2,
+                     marquise >= 4.0.0,
                      bytestring,
                      zeromq4-haskell,
                      vaultaire-common >= 2.9,
@@ -410,7 +410,7 @@ test-suite           integration-test
                      unordered-containers,
                      text,
                      QuickCheck,
-                     marquise >= 3.0.2,
+                     marquise >= 4.0.0,
                      bytestring,
                      pipes,
                      semigroups,
@@ -482,7 +482,7 @@ benchmark contents-listing
                      criterion,
                      zeromq4-haskell,
                      vaultaire-common >= 2.9,
-                     marquise >= 2.8.3,
+                     marquise >= 4.0.0,
                      vaultaire
 
   ghc-options:       -O2
@@ -504,7 +504,7 @@ test-suite           profiler-test
   build-depends:     base >=3 && <5,
                      hspec,
                      QuickCheck,
-                     marquise >= 3.0.2,
+                     marquise >= 4.0.0,
                      bytestring,
                      pipes,
                      semigroups,

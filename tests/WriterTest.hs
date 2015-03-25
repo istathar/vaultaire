@@ -11,8 +11,8 @@ import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
 import qualified Data.HashMap.Strict as HashMap
 import Data.List (sort)
-import Data.Monoid
 import Data.Maybe
+import Data.Monoid
 import Data.Time
 import Network.URI
 import System.Rados.Monadic
