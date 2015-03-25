@@ -10,13 +10,13 @@
 --
 
 import Data.Char (toUpper)
-import Distribution.Text (display)
-import Distribution.PackageDescription (PackageDescription(..))
+import Distribution.PackageDescription (PackageDescription (..))
 import Distribution.Simple
 import Distribution.Simple.LocalBuildInfo (LocalBuildInfo)
 import Distribution.Simple.Setup (ConfigFlags)
 import Distribution.System (OS (..), buildOS)
-import System.IO (IOMode (..), Handle, hPutStrLn, withFile)
+import Distribution.Text (display)
+import System.IO (Handle, IOMode (..), hPutStrLn, withFile)
 
 main :: IO ()
 main = defaultMainWithHooks $ simpleUserHooks {

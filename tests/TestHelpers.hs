@@ -26,14 +26,14 @@ module TestHelpers
 where
 
 import Control.Applicative
-import Control.Monad
 import Control.Concurrent
+import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (fromList)
 import Data.Maybe
-import Numeric (showHex)
 import Network.URI
+import Numeric (showHex)
 import System.Rados.Monadic
 import System.ZMQ4.Monadic
 import Vaultaire.Broker

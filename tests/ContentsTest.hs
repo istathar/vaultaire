@@ -21,8 +21,8 @@ import Test.Hspec hiding (pending)
 
 import Control.Concurrent
 import Data.HashMap.Strict (fromList)
-import Data.String
 import Data.Maybe
+import Data.String
 import Data.Text
 import Network.URI
 import Pipes.Prelude (toListM)
@@ -82,10 +82,10 @@ suite = do
             cleanupTestEnvironment
 
             let o = Origin "PONY"
-            xs <- withContentsConnection "localhost" $ \c -> withMarquiseHandler (error . show ) $ do
+            xs <- withContentsConnection "localhost" $ \c -> do
                 updateSourceDict addr dict_a o c
                 updateSourceDict addr dict_b o c
-                toListM (enumerateOrigin NoRetry o c)
+                toListM (enumerateOrigin o c)
             case xs of
                 [(addr', dict)] -> do
                     dict `shouldBe` dict_b
@@ -104,9 +104,9 @@ propSourceDictUpdated addr dict = monadicIO $ do
         -- Clear out ceph
         cleanupTestEnvironment
         let o = Origin "PONY"
-        withContentsConnection "localhost" $ \c -> withMarquiseHandler (error . show ) $ do
+        withContentsConnection "localhost" $ \c -> do
             updateSourceDict addr dict o c
-            toListM (enumerateOrigin NoRetry o c)
+            toListM (enumerateOrigin o c)
     case xs of
         [(addr', dict')] -> assert (addr' == addr && dict' == dict)
         _                -> error "expected one"

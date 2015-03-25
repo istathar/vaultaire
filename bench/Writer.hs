@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
@@ -6,19 +6,19 @@ import Prelude hiding (words)
 
 import Control.Concurrent.MVar
 import Criterion.Main
-import Vaultaire.Broker
-import Vaultaire.Writer
-import Vaultaire.Util
-import Data.ByteString(ByteString)
-import Data.Word(Word64)
-import System.ZMQ4.Monadic
+import Data.Bits
+import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
 import Data.ByteString.Lazy.Builder
-import Data.ByteString.Lazy(toStrict)
 import Data.List.NonEmpty (fromList)
 import Data.Monoid
+import Data.Word (Word64)
 import System.Rados.Monadic
-import Data.Bits
+import System.ZMQ4.Monadic
 import TestHelpers (runTestDaemon, runTestPool)
+import Vaultaire.Broker
+import Vaultaire.Util
+import Vaultaire.Writer
 
 createDays :: Word64 -> Word64 -> IO ()
 createDays simple_buckets ext_buckets = runTestPool $ do
@@ -32,7 +32,7 @@ makeDayFile :: Word64 -> ByteString
 makeDayFile n = toStrict $ toLazyByteString b
   where
     b = word64LE 0 <> word64LE (n * 2)
-    
+
 runTest :: ByteString -> IO [ByteString]
 runTest msg =
     runZMQ $ do
@@ -45,7 +45,7 @@ simplePoints :: [Word64] -> ByteString
 simplePoints = toStrict . toLazyByteString . mconcat . map makeSimplePoint
 
 makeSimplePoint :: Word64 -> Builder
-makeSimplePoint n = 
+makeSimplePoint n =
     word64LE ((n `mod` uniqueAddresses) `clearBit` 0) -- address
     <> word64LE n                                     -- time
     <> word64LE n                                     -- payload
@@ -65,7 +65,7 @@ main = do
 
     let !points = simplePoints [0..10000]
 
-    defaultMain 
+    defaultMain
             [ bench "10000 simple points over 1000 addresses" $
                 nfIO $ runTest points
             ]

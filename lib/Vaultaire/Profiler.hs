@@ -126,13 +126,13 @@ noProfiler
 -- | Builds a (real, not-dummy) profiler interface. If the agent name
 --   provided is invalid, an empty name will be used.
 hasProfiler :: ProfilerArgs -> IO (ProfilingEnv, ProfilingInterface)
-hasProfiler (name, broker, period, bound, quit) =  do
-    n <- maybe (do errorM  "Daemon.setupProfiler"
-                          ("The daemon name given is invalid: " ++ name ++
-                           ". An empty name has been given to the daemon.")
-                   return mempty)
-               (return)
-               (agentID name)
+hasProfiler (name, broker, period, bound, quit) = do
+    let logEmpty = do
+            errorM "Daemon.setupProfiler"
+                   ("The daemon name given is invalid: " ++ name ++
+                    ". An empty name has been given to the daemon.")
+            return mempty
+    n <- maybe logEmpty return (agentID name)
     -- We use the @Newest@ buffer for the internal report queue
     -- so that old reports will be removed if the buffer is full.
     -- This means the profiler will lose precision but not have
@@ -166,9 +166,9 @@ hasProfiler (name, broker, period, bound, quit) =  do
             return ()
 
           elapsed act = do
-            !t1 <- liftIO $ getUnixTime
+            !t1 <- liftIO getUnixTime
             r   <- act
-            !t2 <- liftIO $ getUnixTime
+            !t2 <- liftIO getUnixTime
             return (r, diffTimeInMs $ diffUnixTime t2 t1)
 
           sendElapsed output teletype origin act = do
@@ -179,8 +179,8 @@ hasProfiler (name, broker, period, bound, quit) =  do
 
           diffTimeInMs :: UnixDiffTime -> Word64
           diffTimeInMs u
-            = let secInMilliSec  = (raw $ udtSeconds u) * 1000
-                  uSecInMilliSec = (udtMicroSeconds u) `div` 1000
+            = let secInMilliSec  = raw (udtSeconds u) * 1000
+                  uSecInMilliSec = udtMicroSeconds u `div` 1000
               in  fromIntegral $ secInMilliSec + fromIntegral uSecInMilliSec
           raw (CTime x) = x
 

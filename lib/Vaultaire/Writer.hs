@@ -112,7 +112,7 @@ processBatch bucket_size (Message reply origin payload)
             profileTime  WriterCephLatency origin
                        $ write External origin True s
             wt2 <- liftIO getCurrentTime
-            liftIO . (debugM "Writer.processBatch") $ concat [
+            liftIO . debugM "Writer.processBatch" $ concat [
                 "Wrote simple objects at ",
                 fmtWriteRate bytes wt2 wt1,
                 " kB/s"]
@@ -125,10 +125,10 @@ processBatch bucket_size (Message reply origin payload)
     return result
   where
     fmtWriteRate :: Int -> UTCTime -> UTCTime -> String
-    fmtWriteRate bytes end start = (printf "%9.1f") . (writeRate bytes) $ diffUTCTime end start
+    fmtWriteRate bytes end start = printf "%9.1f" . writeRate bytes $ diffUTCTime end start
 
     writeRate :: Int -> NominalDiffTime -> Float
-    writeRate bytes d = (((fromRational . toRational) bytes) / ((fromRational . toRational) d)) / 1000
+    writeRate bytes d = ((fromRational . toRational) bytes / (fromRational . toRational) d) / 1000
 
 -- | Given a message consisting of one or more simple or extended
 --   points, write them to the vault.

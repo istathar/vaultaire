@@ -159,7 +159,7 @@ handleMessages args@(DaemonArgs{..}) f = runDaemon args loop
 runDaemon :: DaemonArgs -- ^ With these arguments
           -> Daemon a   -- ^ Run this daemon
           -> IO a
-runDaemon DaemonArgs{..} (Daemon a) = do
+runDaemon DaemonArgs{..} (Daemon a) =
     bracket (setupSharedConnection broker)
             (\(ctx, conn) -> do
                 sock <- takeMVar conn
@@ -434,7 +434,7 @@ daemonArgs
 daemonArgs brokerd user pool end dname pargs = do
     (env, interface)  <- maybe (return noProfiler)
                                (\(pport, pperiod, pbound)
-                                   -> hasProfiler ( maybe mempty id dname
+                                   -> hasProfiler ( fromMaybe mempty dname
                                                   , modPort brokerd pport
                                                   , pperiod
                                                   , pbound
@@ -446,7 +446,7 @@ daemonArgs brokerd user pool end dname pargs = do
                         interface
            , env)
     where -- could probably lens this, if network.uri has lens support
-          modPort u i = u { uriAuthority = fmap (\x -> x { uriPort = ':':show i }) $ uriAuthority u }
+          modPort u i = u { uriAuthority = (\x -> x { uriPort = ':':show i }) <$> uriAuthority u }
 
 -- | Construct default daemon arguments, with no profiler, no name.
 daemonArgsDefault

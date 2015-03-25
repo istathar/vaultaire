@@ -33,7 +33,7 @@ singleEntry :: DayMap
 singleEntry = DayMap $ Map.fromList [(0, 100)]
 
 empty :: DayMap
-empty = DayMap $ Map.empty
+empty = DayMap Map.empty
 
 suite :: Spec
 suite = do
